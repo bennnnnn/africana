@@ -1,0 +1,23 @@
+node_modules/
+.expo/
+dist/
+web-build/
+.env
+*.local
+
+# macOS
+.DS_Store
+
+# Android
+*.keystore
+*.jks
+
+# iOS
+*.p8
+*.p12
+*.mobileprovision
+
+# Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
