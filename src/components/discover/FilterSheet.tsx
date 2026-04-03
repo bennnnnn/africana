@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,18 @@ import {
   ScrollView,
   Switch,
   Pressable,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { FilterOptions, Gender, LookingFor } from '@/types';
-import { COLORS, AFRICAN_COUNTRIES, GENDER_OPTIONS, LOOKING_FOR_OPTIONS } from '@/constants';
+import { FilterOptions, Religion, MaritalStatus } from '@/types';
+import { COLORS, RELIGION_OPTIONS, MARITAL_STATUS_OPTIONS } from '@/constants';
 import { Button } from '@/components/ui/Button';
+import { RangeSlider } from '@/components/ui/RangeSlider';
+import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
+import { SelectPicker } from '@/components/ui/SelectPicker';
+
+const { width } = Dimensions.get('window');
+const SLIDER_WIDTH = width - 80;
 
 interface FilterSheetProps {
   visible: boolean;
@@ -23,26 +30,41 @@ interface FilterSheetProps {
 
 export function FilterSheet({ visible, filters, onClose, onApply, onReset }: FilterSheetProps) {
   const [local, setLocal] = useState<FilterOptions>(filters);
+  const [locationFilter, setLocationFilter] = useState<Partial<LocationValue>>({
+    country: filters.country ?? undefined,
+  });
 
-  const update = (key: keyof FilterOptions, value: FilterOptions[typeof key]) => {
+  useEffect(() => {
+    if (visible) {
+      setLocal(filters);
+      setLocationFilter({
+        country: filters.country ?? undefined,
+        subdivision: filters.state ?? undefined,
+        city: filters.city ?? undefined,
+      });
+    }
+  }, [visible, filters]);
+
+  const update = <K extends keyof FilterOptions>(key: K, value: FilterOptions[K]) =>
     setLocal((prev) => ({ ...prev, [key]: value }));
+
+  const handleLocationChange = (val: Partial<LocationValue>) => {
+    setLocationFilter(val);
+    // Persist country, state (subdivision), and city together
+    setLocal((prev) => ({
+      ...prev,
+      country: val.country || null,
+      state: val.subdivision || null,
+      city: val.city || null,
+    }));
   };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
         {/* Header */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: 20,
-            borderBottomWidth: 1,
-            borderBottomColor: COLORS.border,
-          }}
-        >
-          <TouchableOpacity onPress={onReset}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => { onReset(); onClose(); }}>
             <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 15 }}>Reset</Text>
           </TouchableOpacity>
           <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>Filter Members</Text>
@@ -51,95 +73,87 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Online Only */}
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              paddingVertical: 14,
-              borderBottomWidth: 1,
-              borderBottomColor: COLORS.border,
-              marginBottom: 20,
-            }}
-          >
+          <View style={s.row}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.online }} />
-              <Text style={{ fontSize: 15, fontWeight: '600', color: COLORS.text }}>Online Only</Text>
+              <Text style={s.rowLabel}>Online Only</Text>
             </View>
             <Switch
               value={local.online_only}
               onValueChange={(v) => update('online_only', v)}
-              trackColor={{ true: COLORS.primary }}
+              trackColor={{ true: COLORS.primary, false: COLORS.border }}
               thumbColor="#FFFFFF"
             />
           </View>
 
-          {/* Gender */}
-          <SectionLabel label="Gender" />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-            {GENDER_OPTIONS.map((opt) => (
-              <ChipButton
-                key={opt.value}
-                label={opt.label}
-                selected={local.gender === opt.value}
-                onPress={() => update('gender', local.gender === opt.value ? null : opt.value as Gender)}
-              />
-            ))}
-          </View>
-
-          {/* Looking For */}
-          <SectionLabel label="Looking For" />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-            {LOOKING_FOR_OPTIONS.map((opt) => (
-              <ChipButton
-                key={opt.value}
-                label={opt.label}
-                selected={local.looking_for === opt.value}
-                onPress={() => update('looking_for', local.looking_for === opt.value ? null : opt.value as LookingFor)}
-              />
-            ))}
-          </View>
-
           {/* Age Range */}
           <SectionLabel label={`Age Range: ${local.min_age} – ${local.max_age}`} />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-            {[18, 25, 30, 35, 40, 45, 50].map((age) => (
+          <RangeSlider
+            min={18}
+            max={100}
+            low={local.min_age}
+            high={local.max_age}
+            trackWidth={SLIDER_WIDTH}
+            onChange={(lo, hi) => {
+              update('min_age', lo);
+              update('max_age', hi);
+            }}
+          />
+
+          {/* Religion */}
+          <SectionLabel label="Religion" />
+          <SelectPicker
+            placeholder="Any religion..."
+            options={RELIGION_OPTIONS}
+            value={local.religion ?? null}
+            onChange={(v) => update('religion', v as Religion | null)}
+          />
+
+          {/* Marital Status */}
+          <SectionLabel label="Marital Status" />
+          <View style={s.chips}>
+            <ChipButton label="Any" selected={local.marital_status === null} onPress={() => update('marital_status', null)} />
+            {MARITAL_STATUS_OPTIONS.map((opt) => (
               <ChipButton
-                key={`min-${age}`}
-                label={`${age}+`}
-                selected={local.min_age === age}
-                onPress={() => update('min_age', age)}
+                key={opt.value}
+                label={`${opt.emoji} ${opt.label}`}
+                selected={local.marital_status === opt.value}
+                onPress={() => update('marital_status', local.marital_status === opt.value ? null : opt.value as MaritalStatus)}
               />
             ))}
           </View>
 
-          {/* Country */}
-          <SectionLabel label="Country" />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-            {AFRICAN_COUNTRIES.slice(0, 20).map((c) => (
-              <ChipButton
-                key={c.code}
-                label={c.name}
-                selected={local.country === c.name}
-                onPress={() => {
-                  update('country', local.country === c.name ? null : c.name);
-                  update('state', null);
-                  update('city', null);
-                }}
-              />
-            ))}
-          </View>
+          {/* Location (country + optional state/city) */}
+          <SectionLabel label="Location" />
+          <LocationPicker
+            value={locationFilter}
+            onChange={handleLocationChange}
+            countryOnly={false}
+          />
+          {locationFilter.country && (
+            <TouchableOpacity
+              onPress={() => {
+                setLocationFilter({});
+                setLocal((prev) => ({ ...prev, country: null, state: null, city: null }));
+              }}
+              style={s.clearBtn}
+            >
+              <Ionicons name="close-circle-outline" size={16} color={COLORS.textSecondary} />
+              <Text style={s.clearBtnText}>Clear location filter</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
 
         <View style={{ padding: 20, borderTopWidth: 1, borderTopColor: COLORS.border }}>
           <Button
             title="Apply Filters"
-            onPress={() => {
-              onApply(local);
-              onClose();
-            }}
+            onPress={() => { onApply(local); onClose(); }}
             fullWidth
             size="lg"
           />
@@ -150,29 +164,64 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
 }
 
 function SectionLabel({ label }: { label: string }) {
-  return (
-    <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-      {label}
-    </Text>
-  );
+  return <Text style={s.sectionLabel}>{label}</Text>;
 }
 
 function ChipButton({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 20,
-        borderWidth: 1.5,
-        borderColor: selected ? COLORS.primary : COLORS.border,
-        backgroundColor: selected ? `${COLORS.primary}15` : '#FFFFFF',
-      }}
-    >
-      <Text style={{ fontSize: 13, color: selected ? COLORS.primary : COLORS.textSecondary, fontWeight: selected ? '600' : '400' }}>
-        {label}
-      </Text>
+    <Pressable onPress={onPress} style={[s.chip, selected && s.chipOn]}>
+      <Text style={[s.chipText, selected && s.chipTextOn]}>{label}</Text>
     </Pressable>
   );
 }
+
+const s = {
+  header: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: '#FFF',
+  },
+  row: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    marginBottom: 20,
+  },
+  rowLabel: { fontSize: 15, fontWeight: '600' as const, color: COLORS.text },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: COLORS.textSecondary,
+    marginBottom: 12,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.6,
+    marginTop: 20,
+  },
+  chips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8, marginBottom: 4 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: '#FFFFFF',
+  },
+  chipOn: { borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}15` as const },
+  chipText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '400' as const },
+  chipTextOn: { color: COLORS.primary, fontWeight: '600' as const },
+  clearBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 4,
+  },
+  clearBtnText: { fontSize: 13, color: COLORS.textSecondary },
+};

@@ -13,6 +13,7 @@ interface AuthState {
   setSettings: (settings: UserSettings | null) => void;
   fetchProfile: (userId: string) => Promise<void>;
   fetchSettings: (userId: string) => Promise<void>;
+  profileExists: (userId: string) => Promise<boolean>;
   updateProfile: (updates: Partial<User>) => Promise<void>;
   updateSettings: (updates: Partial<UserSettings>) => Promise<void>;
   signOut: () => Promise<void>;
@@ -36,10 +37,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .single();
 
     if (!error && data) {
-      const birthdate = new Date(data.birthdate);
       const today = new Date();
-      const age = today.getFullYear() - birthdate.getFullYear();
-      set({ user: { ...data, age } });
+      const bday  = data.birthdate ? new Date(data.birthdate) : null;
+      const age   = bday
+        ? today.getFullYear() - bday.getFullYear()
+          - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
+        : undefined;
+      set({ user: { ...data, age, profile_photos: data.profile_photos ?? [], languages: data.languages ?? [] } });
     }
   },
 
@@ -52,7 +56,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (!error && data) {
       set({ settings: data });
+    } else {
+      // No settings row yet — create defaults
+      const defaults = {
+        user_id: userId,
+        receive_messages: true,
+        show_online_status: true,
+        profile_visible: true,
+        email_notifications: true,
+        notify_messages: true,
+        notify_likes: true,
+        notify_matches: true,
+        notify_views: false,
+        push_token: null,
+      };
+      const { data: created } = await supabase
+        .from('user_settings')
+        .upsert(defaults, { onConflict: 'user_id' })
+        .select()
+        .single();
+      if (created) set({ settings: created });
     }
+  },
+
+  profileExists: async (userId) => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
+    return !!data;
   },
 
   updateProfile: async (updates) => {
@@ -66,19 +99,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .select()
       .single();
 
-    if (!error && data) {
-      set({ user: { ...user, ...data } });
+    if (error) throw new Error(error.message);
+    if (data) {
+      set({ user: { ...user, ...data, profile_photos: data.profile_photos ?? [], languages: data.languages ?? [] } });
     }
   },
 
   updateSettings: async (updates) => {
     const { user, settings } = get();
-    if (!user || !settings) return;
+    if (!user) return;
 
+    const merged = { ...(settings ?? {}), ...updates, user_id: user.id };
     const { data, error } = await supabase
       .from('user_settings')
-      .update(updates)
-      .eq('user_id', user.id)
+      .upsert(merged, { onConflict: 'user_id' })
       .select()
       .single();
 
@@ -88,6 +122,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    const { user } = get();
+    if (user) {
+      await supabase
+        .from('profiles')
+        .update({ online_status: 'offline', last_seen: new Date().toISOString() })
+        .eq('id', user.id);
+    }
     await supabase.auth.signOut();
     set({ session: null, user: null, settings: null });
   },

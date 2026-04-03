@@ -1,148 +1,238 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
-  SafeAreaView,
-  Dimensions,
+
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
   StyleSheet,
+  Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Button } from '@/components/ui/Button';
+import { Ionicons } from '@expo/vector-icons';
+import { signInWithGoogle } from '@/lib/google-auth';
+import { useAuthStore } from '@/store/auth.store';
 import { COLORS } from '@/constants';
 
 const { height } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
+  const { fetchProfile, fetchSettings, profileExists } = useAuthStore();
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const handleGoogle = async () => {
+    setGoogleLoading(true);
+    try {
+      const session = await signInWithGoogle();
+      if (session?.user) {
+        const hasProfile = await profileExists(session.user.id);
+        if (hasProfile) {
+          await fetchProfile(session.user.id);
+          await fetchSettings(session.user.id);
+          router.replace('/(tabs)/discover');
+        } else {
+          // New Google user — send to onboarding
+          router.replace({
+            pathname: '/(auth)/onboarding',
+            params: { userId: session.user.id, email: session.user.email ?? '' },
+          });
+        }
+      }
+    } catch (e: any) {
+      if (e?.message !== 'User cancelled') {
+        Alert.alert('Google Sign-In Failed', e?.message ?? 'Please try again.');
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#1A0A00' }}>
-      {/* Background */}
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#C84B31' }]} />
+    <View style={styles.container}>
+      {/* Top decorative circles */}
+      <View style={[styles.circle, { top: -120, right: -80, width: 280, height: 280, opacity: 0.15 }]} />
+      <View style={[styles.circle, { top: height * 0.15, left: -60, width: 160, height: 160, opacity: 0.1 }]} />
+      <View style={[styles.circle, { bottom: 80, right: -40, width: 200, height: 200, opacity: 0.1 }]} />
 
-      {/* Decorative circles */}
-      <View
-        style={{
-          position: 'absolute',
-          top: -100,
-          right: -80,
-          width: 300,
-          height: 300,
-          borderRadius: 150,
-          backgroundColor: 'rgba(212, 175, 55, 0.2)',
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          top: height * 0.1,
-          left: -60,
-          width: 200,
-          height: 200,
-          borderRadius: 100,
-          backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        }}
-      />
-
-      <SafeAreaView style={{ flex: 1, justifyContent: 'space-between', padding: 24 }}>
-        {/* Logo / Brand */}
-        <View style={{ alignItems: 'center', marginTop: 40 }}>
-          <View
-            style={{
-              width: 80,
-              height: 80,
-              borderRadius: 40,
-              backgroundColor: 'rgba(255,255,255,0.15)',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: 16,
-              borderWidth: 2,
-              borderColor: 'rgba(255,255,255,0.3)',
-            }}
-          >
-            <Text style={{ fontSize: 36 }}>🌍</Text>
+      <SafeAreaView style={styles.inner}>
+        {/* Brand */}
+        <View style={styles.brandSection}>
+          <View style={styles.logoWrap}>
+            <Text style={styles.logoEmoji}>🌍</Text>
           </View>
-          <Text
-            style={{
-              fontSize: 42,
-              fontWeight: '800',
-              color: '#FFFFFF',
-              letterSpacing: -1,
-            }}
-          >
-            Africana
-          </Text>
-          <Text
-            style={{
-              fontSize: 16,
-              color: 'rgba(255,255,255,0.8)',
-              textAlign: 'center',
-              marginTop: 8,
-              fontWeight: '400',
-              lineHeight: 22,
-            }}
-          >
-            Love knows no borders.{'\n'}Connect with Africans worldwide.
-          </Text>
+          <Text style={styles.appName}>Africana</Text>
+          <Text style={styles.tagline}>Where African hearts connect</Text>
         </View>
 
-        {/* Feature highlights */}
-        <View style={{ gap: 16 }}>
-          {[
-            { emoji: '💫', text: 'Browse authentic African profiles' },
-            { emoji: '📍', text: 'Find people from your hometown or anywhere in Africa' },
-            { emoji: '💬', text: 'Real conversations, real connections' },
-            { emoji: '🔒', text: 'Safe, private & secure' },
-          ].map((item, i) => (
-            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-              <View
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 22,
-                  backgroundColor: 'rgba(255,255,255,0.15)',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Text style={{ fontSize: 20 }}>{item.emoji}</Text>
-              </View>
-              <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.9)', flex: 1, fontWeight: '400' }}>
-                {item.text}
-              </Text>
-            </View>
-          ))}
-        </View>
+        {/* Actions */}
+        <View style={styles.actionsSection}>
+          {/* Google */}
+          <TouchableOpacity
+            style={styles.googleBtn}
+            onPress={handleGoogle}
+            disabled={googleLoading}
+            activeOpacity={0.9}
+          >
+            {googleLoading ? (
+              <ActivityIndicator size="small" color="#4285F4" />
+            ) : (
+              <>
+                <Text style={{ fontSize: 24, fontWeight: '900', color: '#4285F4' }}>G</Text>
+                <Text style={styles.googleBtnText}>Continue with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
 
-        {/* Action buttons */}
-        <View style={{ gap: 12, paddingBottom: 8 }}>
-          <Button
-            title="Create Account"
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Email */}
+          <TouchableOpacity
+            style={styles.emailBtn}
             onPress={() => router.push('/(auth)/register')}
-            size="lg"
-            fullWidth
-            style={{ backgroundColor: '#FFFFFF' }}
-            textStyle={{ color: COLORS.primary }}
-          />
-          <Button
-            title="Sign In"
-            onPress={() => router.push('/(auth)/login')}
-            variant="outline"
-            size="lg"
-            fullWidth
-            style={{ borderColor: 'rgba(255,255,255,0.5)' }}
-            textStyle={{ color: '#FFFFFF' }}
-          />
-          <Text
-            style={{
-              textAlign: 'center',
-              color: 'rgba(255,255,255,0.6)',
-              fontSize: 12,
-              marginTop: 4,
-            }}
+            activeOpacity={0.9}
           >
-            By continuing, you agree to our Terms & Privacy Policy
-          </Text>
+            <Ionicons name="mail-outline" size={20} color="#FFF" style={{ marginRight: 10 }} />
+            <Text style={styles.emailBtnText}>Continue with Email</Text>
+          </TouchableOpacity>
+
+          {/* Sign in */}
+          <View style={styles.signinRow}>
+            <Text style={styles.signinText}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+              <Text style={styles.signinLink}>Sign In</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
       </SafeAreaView>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.primary,
+  },
+  circle: {
+    position: 'absolute',
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+  },
+  inner: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: 28,
+    paddingBottom: 16,
+  },
+  brandSection: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 40,
+  },
+  logoWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  logoEmoji: {
+    fontSize: 50,
+  },
+  appName: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -1,
+  },
+  tagline: {
+    fontSize: 17,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 8,
+    fontWeight: '400',
+  },
+  actionsSection: {
+    gap: 12,
+    paddingBottom: 8,
+  },
+  googleBtn: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#DADCE0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  gLogo: {},
+  googleBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3C4043',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 4,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  dividerText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  emailBtn: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 14,
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  emailBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  signinRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  signinText: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 14,
+  },
+  signinLink: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});

@@ -14,10 +14,7 @@ interface AvatarProps {
 }
 
 export function Avatar({ uri, name = '?', size = 48, onlineStatus, showStatus = false, style }: AvatarProps) {
-  const statusColor =
-    onlineStatus === 'online' ? COLORS.online :
-    onlineStatus === 'away' ? COLORS.away :
-    COLORS.offline;
+  const statusColor = onlineStatus === 'online' ? COLORS.online : COLORS.offline;
 
   const avatarUri = uri || `${DEFAULT_AVATAR}${encodeURIComponent(name.charAt(0).toUpperCase())}`;
 

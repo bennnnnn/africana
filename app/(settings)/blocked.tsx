@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  SafeAreaView,
+
   FlatList,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,17 +30,34 @@ export default function BlockedUsersScreen() {
 
   const fetchBlockedUsers = async () => {
     if (!user) return;
-    const { data } = await supabase
+
+    // Step 1: get block records
+    const { data: blocks } = await supabase
       .from('blocks')
-      .select('id, blocked:profiles!blocked_id(*)')
+      .select('id, blocked_id')
       .eq('blocker_id', user.id)
       .order('created_at', { ascending: false });
 
-    if (data) {
-      setBlockedUsers(data.map((b: { id: string; blocked: unknown }) => ({
-        ...(b.blocked as User),
-        block_id: b.id,
-      })));
+    if (!blocks || blocks.length === 0) {
+      setBlockedUsers([]);
+      return;
+    }
+
+    // Step 2: fetch profiles for blocked users
+    const blockedIds = blocks.map((b) => b.blocked_id);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('*')
+      .in('id', blockedIds);
+
+    if (profiles) {
+      const merged: BlockedUser[] = blocks
+        .map((b) => {
+          const profile = profiles.find((p) => p.id === b.blocked_id);
+          return profile ? { ...(profile as User), block_id: b.id } : null;
+        })
+        .filter((u): u is BlockedUser => u !== null);
+      setBlockedUsers(merged);
     }
   };
 
@@ -102,7 +120,7 @@ export default function BlockedUsersScreen() {
           />
         }
         renderItem={({ item }) => {
-          const avatar = item.avatar_url || item.profile_photos[0] || `${DEFAULT_AVATAR}${encodeURIComponent(item.full_name.charAt(0))}`;
+          const avatar = item.avatar_url || (item.profile_photos ?? [])[0] || `${DEFAULT_AVATAR}${encodeURIComponent(item.full_name.charAt(0))}`;
           return (
             <View
               style={{

@@ -4,10 +4,11 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
+
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,7 +44,7 @@ export default function OnlineScreen() {
       .from('profiles')
       .select('*')
       .neq('id', user.id)
-      .in('online_status', ['online', 'away'])
+      .eq('online_status', 'online')
       .order('online_status', { ascending: true })
       .order('last_seen', { ascending: false });
 
@@ -107,8 +108,7 @@ export default function OnlineScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.online }} />
           <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>
-            {onlineUsers.filter((u) => u.online_status === 'online').length} online •{' '}
-            {onlineUsers.filter((u) => u.online_status === 'away').length} away
+            {onlineUsers.length} online now
           </Text>
         </View>
       </View>
@@ -130,7 +130,7 @@ export default function OnlineScreen() {
         }
         renderItem={({ item }) => {
           const avatar = item.avatar_url || item.profile_photos[0] || `${DEFAULT_AVATAR}${encodeURIComponent(item.full_name.charAt(0))}`;
-          const statusColor = item.online_status === 'online' ? COLORS.online : COLORS.away;
+          const statusColor = COLORS.online;
           const location = [item.city, item.country].filter(Boolean).join(', ');
 
           const today = new Date();
@@ -139,7 +139,7 @@ export default function OnlineScreen() {
 
           return (
             <TouchableOpacity
-              onPress={() => router.push(`/profile/${item.id}`)}
+              onPress={() => router.push(`/(profile)/${item.id}`)}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -183,8 +183,8 @@ export default function OnlineScreen() {
                   <Ionicons name="location-outline" size={12} color={COLORS.textSecondary} />
                   <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>{location}</Text>
                 </View>
-                <Text style={{ fontSize: 11, color: item.online_status === 'online' ? COLORS.online : COLORS.away, marginTop: 3, fontWeight: '600' }}>
-                  {item.online_status === 'online' ? 'Online now' : `Away • ${dayjs(item.last_seen).fromNow()}`}
+                <Text style={{ fontSize: 11, color: COLORS.online, marginTop: 3, fontWeight: '600' }}>
+                  Online now
                 </Text>
               </View>
 

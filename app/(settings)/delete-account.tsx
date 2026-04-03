@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  SafeAreaView,
+
   ScrollView,
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -20,12 +21,48 @@ export default function DeleteAccountScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleDelete = async () => {
-    if (!password) {
-      Alert.alert('Error', 'Please enter your password to confirm.');
+  // Detect OAuth-only users (Google) — they have no password to verify
+  const isOAuthUser = !user?.email || user.email.includes('@googlemail') ||
+    (user as any).app_metadata?.provider === 'google';
+
+  const doDelete = async () => {
+    if (!user) return;
+    setLoading(true);
+
+    // For email users: re-authenticate to verify identity
+    if (!isOAuthUser) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password,
+      });
+      if (signInError) {
+        setLoading(false);
+        Alert.alert('Incorrect Password', 'The password you entered is incorrect.');
+        return;
+      }
+    }
+
+    // Call delete_user() — a SECURITY DEFINER function that removes the
+    // caller's auth.users row, cascading to profiles and all related data.
+    const { error } = await supabase.rpc('delete_user');
+    if (error) {
+      setLoading(false);
+      Alert.alert('Error', 'Failed to delete account. Please contact support.');
       return;
     }
 
+    await supabase.auth.signOut();
+    setLoading(false);
+    Alert.alert('Account Deleted', 'Your account has been permanently deleted.', [
+      { text: 'OK', onPress: () => router.replace('/(auth)/welcome') },
+    ]);
+  };
+
+  const handleDelete = async () => {
+    if (!isOAuthUser && !password) {
+      Alert.alert('Error', 'Please enter your password to confirm.');
+      return;
+    }
     if (!user) return;
 
     Alert.alert(
@@ -33,39 +70,7 @@ export default function DeleteAccountScreen() {
       'This will permanently delete all your data including messages, likes, and your profile. This CANNOT be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Forever',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            // Verify password by re-authenticating
-            const { error: signInError } = await supabase.auth.signInWithPassword({
-              email: user.email,
-              password,
-            });
-
-            if (signInError) {
-              setLoading(false);
-              Alert.alert('Incorrect Password', 'The password you entered is incorrect.');
-              return;
-            }
-
-            // Delete profile (cascades to all related data via FK)
-            const { error } = await supabase.from('profiles').delete().eq('id', user.id);
-
-            if (error) {
-              setLoading(false);
-              Alert.alert('Error', 'Failed to delete account. Please contact support.');
-              return;
-            }
-
-            await supabase.auth.signOut();
-            setLoading(false);
-            Alert.alert('Account Deleted', 'Your account has been permanently deleted.', [
-              { text: 'OK', onPress: () => router.replace('/(auth)/welcome') },
-            ]);
-          },
-        },
+        { text: 'Delete Forever', style: 'destructive', onPress: doDelete },
       ]
     );
   };
@@ -137,18 +142,22 @@ export default function DeleteAccountScreen() {
           }}
         >
           <Text style={{ fontSize: 13, color: '#B91C1C', lineHeight: 18 }}>
-            ⚠️ Enter your password below to confirm account deletion.
+            {isOAuthUser
+              ? '⚠️ Tap "Delete Forever" below to permanently delete your account.'
+              : '⚠️ Enter your password below to confirm account deletion.'}
           </Text>
         </View>
 
-        <Input
-          label="Confirm Password"
-          value={password}
-          onChangeText={setPassword}
-          isPassword
-          leftIcon="lock-closed-outline"
-          placeholder="Enter your password"
-        />
+        {!isOAuthUser && (
+          <Input
+            label="Confirm Password"
+            value={password}
+            onChangeText={setPassword}
+            isPassword
+            leftIcon="lock-closed-outline"
+            placeholder="Enter your password"
+          />
+        )}
 
         <Button
           title="Delete My Account Forever"

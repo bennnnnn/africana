@@ -1,6 +1,16 @@
-export type Gender = 'male' | 'female' | 'non_binary' | 'prefer_not_to_say';
+export type Gender = 'male' | 'female';
+export type InterestedIn = 'men' | 'women' | 'everyone';
 export type LookingFor = 'relationship' | 'friendship' | 'marriage' | 'pen_pal';
-export type OnlineStatus = 'online' | 'away' | 'offline';
+export type OnlineStatus = 'online' | 'offline';
+export type MaritalStatus = 'single' | 'divorced' | 'widowed' | 'separated';
+export type Religion =
+  | 'christianity' | 'islam' | 'catholicism' | 'protestantism' | 'pentecostal'
+  | 'orthodox_christian' | 'traditional_african' | 'judaism' | 'buddhism'
+  | 'hinduism' | 'atheist' | 'agnostic' | 'spiritual' | 'other';
+export type Education =
+  | 'high_school' | 'some_college' | 'vocational' | 'bachelors'
+  | 'masters' | 'phd' | 'other';
+export type WantChildren = 'yes' | 'no' | 'open';
 
 export interface User {
   id: string;
@@ -10,10 +20,22 @@ export interface User {
   bio: string | null;
   birthdate: string;
   gender: Gender;
+  interested_in: InterestedIn;
   looking_for: LookingFor[];
   country: string;
   state: string | null;
   city: string | null;
+  // Extended profile
+  religion: Religion | null;
+  education: Education | null;
+  marital_status: MaritalStatus | null;
+  height_cm: number | null;          // e.g. 175
+  ethnicity: string | null;          // free text
+  occupation: string | null;         // free text
+  languages: string[];               // e.g. ['English','Amharic']
+  has_children: boolean | null;
+  want_children: WantChildren | null;
+  // Media & status
   profile_photos: string[];
   avatar_url: string | null;
   online_status: OnlineStatus;
@@ -24,12 +46,17 @@ export interface User {
 }
 
 export interface UserSettings {
-  id: string;
+  id?: string;
   user_id: string;
   receive_messages: boolean;
   show_online_status: boolean;
   profile_visible: boolean;
   email_notifications: boolean;
+  notify_messages: boolean;
+  notify_likes: boolean;
+  notify_matches: boolean;
+  notify_views: boolean;
+  push_token: string | null;
 }
 
 export interface Like {
@@ -72,9 +99,9 @@ export interface FilterOptions {
   country: string | null;
   state: string | null;
   city: string | null;
-  gender: Gender | null;
   min_age: number;
   max_age: number;
-  looking_for: LookingFor | null;
+  religion: Religion | null;
+  marital_status: MaritalStatus | null;
   online_only: boolean;
 }

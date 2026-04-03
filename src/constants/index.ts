@@ -17,7 +17,6 @@ export const COLORS = {
   success: '#10B981',
   warning: '#F59E0B',
   online: '#10B981',
-  away: '#F59E0B',
   offline: '#9CA3AF',
 } as const;
 
@@ -98,10 +97,8 @@ export const AFRICAN_COUNTRIES = [
 ];
 
 export const GENDER_OPTIONS = [
-  { value: 'male', label: 'Man' },
+  { value: 'male',   label: 'Man' },
   { value: 'female', label: 'Woman' },
-  { value: 'non_binary', label: 'Non-binary' },
-  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 
 export const LOOKING_FOR_OPTIONS = [
@@ -111,6 +108,46 @@ export const LOOKING_FOR_OPTIONS = [
   { value: 'pen_pal', label: 'Pen Pal' },
 ];
 
+export const RELIGION_OPTIONS = [
+  { value: 'christianity',       label: 'Christianity',        emoji: '✝️' },
+  { value: 'catholicism',        label: 'Catholic',            emoji: '✝️' },
+  { value: 'protestantism',      label: 'Protestant',          emoji: '✝️' },
+  { value: 'pentecostal',        label: 'Pentecostal',         emoji: '✝️' },
+  { value: 'orthodox_christian', label: 'Orthodox Christian',  emoji: '☦️' },
+  { value: 'islam',              label: 'Islam',               emoji: '☪️' },
+  { value: 'traditional_african',label: 'Traditional African', emoji: '🌿' },
+  { value: 'judaism',            label: 'Judaism',             emoji: '✡️' },
+  { value: 'buddhism',           label: 'Buddhism',            emoji: '☸️' },
+  { value: 'hinduism',           label: 'Hinduism',            emoji: '🕉️' },
+  { value: 'atheist',            label: 'Atheist',             emoji: '⚛️' },
+  { value: 'agnostic',           label: 'Agnostic',            emoji: '🤔' },
+  { value: 'spiritual',          label: 'Spiritual',           emoji: '🌟' },
+  { value: 'other',              label: 'Other',               emoji: '🙏' },
+];
+
+export const EDUCATION_OPTIONS = [
+  { value: 'high_school',    label: 'High School' },
+  { value: 'some_college',   label: 'Some College' },
+  { value: 'vocational',     label: 'Vocational / Trade' },
+  { value: 'bachelors',      label: "Bachelor's Degree" },
+  { value: 'masters',        label: "Master's Degree" },
+  { value: 'phd',            label: 'PhD / Doctorate' },
+  { value: 'other',          label: 'Other' },
+];
+
+export const MARITAL_STATUS_OPTIONS = [
+  { value: 'single',    label: 'Single',    emoji: '🙂' },
+  { value: 'divorced',  label: 'Divorced',  emoji: '💔' },
+  { value: 'widowed',   label: 'Widowed',   emoji: '🕊️' },
+  { value: 'separated', label: 'Separated', emoji: '↔️' },
+];
+
+export const WANT_CHILDREN_OPTIONS = [
+  { value: 'yes',  label: 'Yes, I want kids' },
+  { value: 'no',   label: "No, I don't" },
+  { value: 'open', label: 'Open to it' },
+];
+
 export const APP_NAME = 'Africana';
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -118,4 +155,4 @@ export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''
 export const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?background=C84B31&color=fff&size=200&name=';
 export const MAX_PROFILE_PHOTOS = 6;
 export const MIN_AGE = 18;
-export const MAX_AGE = 80;
+export const MAX_AGE = 100;

@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  SafeAreaView,
+
   ScrollView,
   TouchableOpacity,
   Switch,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/auth.store';
@@ -199,12 +200,68 @@ export default function SettingsScreen() {
         <SectionHeader label="Notifications" />
         <View style={{ backgroundColor: '#FFFFFF' }}>
           <SettingRow
-            icon="mail-outline"
+            icon="chatbubble-ellipses-outline"
+            iconColor="#3B82F6"
+            label="New Messages"
+            description="Notify when someone messages you"
+            value={settings?.notify_messages ?? true}
+            onToggle={(v) => updateSettings({ notify_messages: v })}
+          />
+          <SettingRow
+            icon="heart-outline"
+            iconColor="#EF4444"
+            label="New Likes"
+            description="Notify when someone likes your profile"
+            value={settings?.notify_likes ?? true}
+            onToggle={(v) => updateSettings({ notify_likes: v })}
+          />
+          <SettingRow
+            icon="flame-outline"
             iconColor={COLORS.primary}
+            label="Matches"
+            description="Notify when you get a mutual match"
+            value={settings?.notify_matches ?? true}
+            onToggle={(v) => updateSettings({ notify_matches: v })}
+          />
+          <SettingRow
+            icon="eye-outline"
+            iconColor={COLORS.earth}
+            label="Profile Views"
+            description="Notify when someone views your profile"
+            value={settings?.notify_views ?? false}
+            onToggle={(v) => updateSettings({ notify_views: v })}
+          />
+          <SettingRow
+            icon="mail-outline"
+            iconColor={COLORS.textSecondary}
             label="Email Notifications"
-            description="Receive updates via email"
+            description="Receive re-engagement emails"
             value={settings?.email_notifications ?? true}
             onToggle={(v) => updateSettings({ email_notifications: v })}
+          />
+        </View>
+
+        {/* Membership */}
+        <SectionHeader label="Membership" />
+        <View style={{ backgroundColor: '#FFFFFF' }}>
+          <SettingRow
+            icon="star-outline"
+            iconColor={COLORS.gold}
+            label="Upgrade to Gold / Platinum"
+            description="Unlock unlimited likes, boosts & more"
+            onPress={() => router.push('/(settings)/upgrade')}
+          />
+        </View>
+
+        {/* Legal */}
+        <SectionHeader label="Legal" />
+        <View style={{ backgroundColor: '#FFFFFF' }}>
+          <SettingRow
+            icon="document-text-outline"
+            iconColor={COLORS.earth}
+            label="Privacy Policy & Terms"
+            description="Read our privacy policy and terms of service"
+            onPress={() => router.push('/(settings)/legal')}
           />
         </View>
 
@@ -215,8 +272,12 @@ export default function SettingsScreen() {
             icon="information-circle-outline"
             iconColor={COLORS.earth}
             label="About Africana"
-            description={`Version 1.0.0`}
-            onPress={() => {}}
+            description="Version 1.0.0"
+            onPress={() => Alert.alert(
+              'Africana v1.0.0',
+              'Africana is a dating app built for Africans and the African diaspora — connecting hearts across the world.\n\nBuilt with ❤️ for the culture.',
+              [{ text: 'Close', style: 'cancel' }],
+            )}
           />
           <SettingRow
             icon="log-out-outline"

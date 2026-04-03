@@ -1,6 +1,15 @@
 import { create } from 'zustand';
-import { User, FilterOptions } from '@/types';
+import { User, FilterOptions, InterestedIn } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { notifyUser } from '@/lib/notifications';
+import { MOCK_USERS } from '@/lib/mock-data';
+
+// Map the user's "interested_in" preference → which genders to show
+const interestedInToGender = (v: InterestedIn | undefined): string | null => {
+  if (v === 'men')   return 'male';
+  if (v === 'women') return 'female';
+  return null; // 'everyone' → no filter
+};
 
 interface DiscoverState {
   users: User[];
@@ -11,8 +20,8 @@ interface DiscoverState {
   likedUserIds: Set<string>;
   setFilters: (filters: Partial<FilterOptions>) => void;
   resetFilters: () => void;
-  fetchUsers: (userId: string, reset?: boolean) => Promise<void>;
-  toggleLike: (fromUserId: string, toUserId: string) => Promise<void>;
+  fetchUsers: (userId: string, interestedIn?: InterestedIn, reset?: boolean) => Promise<void>;
+  toggleLike: (fromUserId: string, toUserId: string) => Promise<boolean>; // returns true if it's a mutual match
   fetchLikedUserIds: (userId: string) => Promise<void>;
 }
 
@@ -20,14 +29,14 @@ const DEFAULT_FILTERS: FilterOptions = {
   country: null,
   state: null,
   city: null,
-  gender: null,
   min_age: 18,
-  max_age: 80,
-  looking_for: null,
+  max_age: 100,
+  religion: null,
+  marital_status: null,
   online_only: false,
 };
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 export const useDiscoverStore = create<DiscoverState>((set, get) => ({
   users: [],
@@ -45,7 +54,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     set({ filters: DEFAULT_FILTERS, page: 0, users: [], hasMore: true });
   },
 
-  fetchUsers: async (userId, reset = false) => {
+  fetchUsers: async (userId, interestedIn, reset = false) => {
     const { filters, page, isLoading } = get();
     if (isLoading) return;
 
@@ -53,7 +62,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     set({ isLoading: true });
 
     try {
-      // Get blocked user ids
+      // Get blocked user ids (both directions)
       const { data: blocks } = await supabase
         .from('blocks')
         .select('blocked_id, blocker_id')
@@ -63,9 +72,10 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         b.blocker_id === userId ? b.blocked_id : b.blocker_id
       ) ?? [];
 
+      // Join user_settings to enforce profile_visible and show_online_status
       let query = supabase
         .from('profiles')
-        .select('*')
+        .select('*, user_settings(profile_visible, show_online_status)')
         .neq('id', userId)
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
@@ -73,31 +83,69 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         query = query.not('id', 'in', `(${blockedIds.join(',')})`);
       }
 
+      // Auto-apply gender based on the current user's "interested_in" preference
+      const genderFilter = interestedInToGender(interestedIn);
+      if (genderFilter) query = query.eq('gender', genderFilter);
+
       if (filters.country) query = query.eq('country', filters.country);
       if (filters.state) query = query.eq('state', filters.state);
       if (filters.city) query = query.eq('city', filters.city);
-      if (filters.gender) query = query.eq('gender', filters.gender);
+      if (filters.religion) query = query.eq('religion', filters.religion);
+      if (filters.marital_status) query = query.eq('marital_status', filters.marital_status);
       if (filters.online_only) query = query.eq('online_status', 'online');
 
-      const { data, error } = await query.order('online_status', { ascending: true }).order('last_seen', { ascending: false });
+      // Sort online users first; use last_seen desc for DB ordering
+      const { data, error } = await query.order('last_seen', { ascending: false });
 
       if (!error && data) {
         const today = new Date();
         const usersWithAge = data
           .map((u) => {
-            const birthdate = new Date(u.birthdate);
-            const age = today.getFullYear() - birthdate.getFullYear();
-            return { ...u, age };
+            const settings = (u as any).user_settings as { profile_visible?: boolean; show_online_status?: boolean } | null;
+            const bday = u.birthdate ? new Date(u.birthdate) : null;
+            const age = bday
+              ? today.getFullYear() - bday.getFullYear()
+                - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
+              : 0;
+            // Mask online status if user chose to hide it
+            const effectiveOnlineStatus =
+              settings?.show_online_status === false ? 'offline' : u.online_status;
+            return { ...u, age, online_status: effectiveOnlineStatus, user_settings: undefined, profile_photos: u.profile_photos ?? [], languages: u.languages ?? [] };
           })
           .filter((u) => {
+            // Exclude profiles hidden from discovery
+            const raw = data.find((d) => d.id === u.id);
+            const settings = (raw as any)?.user_settings as { profile_visible?: boolean } | null;
+            if (settings?.profile_visible === false) return false;
             if (filters.min_age && u.age < filters.min_age) return false;
             if (filters.max_age && u.age > filters.max_age) return false;
-            if (filters.looking_for && !u.looking_for.includes(filters.looking_for)) return false;
             return true;
           });
 
+        // Sort so online users appear first
+        usersWithAge.sort((a, b) => {
+          const aOnline = (a as any).online_status === 'online' ? 0 : 1;
+          const bOnline = (b as any).online_status === 'online' ? 0 : 1;
+          return aOnline - bOnline;
+        });
+
+        // In development only: pad first page with mock users so UI is never empty
+        let result = usersWithAge;
+        if (__DEV__ && currentPage === 0) {
+          const realIds = new Set(usersWithAge.map((u) => u.id));
+          const needed = Math.max(0, PAGE_SIZE - usersWithAge.length);
+          const mockFill = MOCK_USERS
+            .filter((u) => {
+              if (u.id === userId || realIds.has(u.id)) return false;
+              if (genderFilter && u.gender !== genderFilter) return false;
+              return true;
+            })
+            .slice(0, needed);
+          result = [...usersWithAge, ...mockFill];
+        }
+
         set((state) => ({
-          users: reset || currentPage === 0 ? usersWithAge : [...state.users, ...usersWithAge],
+          users: reset || currentPage === 0 ? result : [...state.users, ...result],
           page: currentPage + 1,
           hasMore: data.length === PAGE_SIZE,
         }));
@@ -129,6 +177,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         newSet.delete(toUserId);
         return { likedUserIds: newSet };
       });
+      return false;
     } else {
       await supabase.from('likes').insert({ from_user_id: fromUserId, to_user_id: toUserId });
       set((state) => {
@@ -136,6 +185,38 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         newSet.add(toUserId);
         return { likedUserIds: newSet };
       });
+
+      // Get sender's name for notifications
+      const { data: senderProfile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', fromUserId)
+        .single();
+      const senderName = senderProfile?.full_name ?? 'Someone';
+
+      // Check for mutual match
+      const { data: mutual } = await supabase
+        .from('likes')
+        .select('id')
+        .eq('from_user_id', toUserId)
+        .eq('to_user_id', fromUserId)
+        .single();
+
+      const isMatch = !!mutual;
+
+      if (isMatch) {
+        // Notify BOTH users of the match
+        notifyUser({ type: 'match', recipientId: toUserId,   senderId: fromUserId, senderName,                     extra: { userId: fromUserId } });
+        // Fetch the liked user's name to notify the liker too
+        const { data: likedProfile } = await supabase
+          .from('profiles').select('full_name').eq('id', toUserId).single();
+        const likedName = likedProfile?.full_name ?? 'Someone';
+        notifyUser({ type: 'match', recipientId: fromUserId, senderId: toUserId,   senderName: likedName, extra: { userId: toUserId } });
+      } else {
+        // Notify recipient of the like
+        notifyUser({ type: 'like', recipientId: toUserId, senderId: fromUserId, senderName, extra: { userId: fromUserId } });
+      }
+      return isMatch;
     }
   },
 }));
