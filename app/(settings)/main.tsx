@@ -241,18 +241,6 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* Membership */}
-        <SectionHeader label="Membership" />
-        <View style={{ backgroundColor: '#FFFFFF' }}>
-          <SettingRow
-            icon="star-outline"
-            iconColor={COLORS.gold}
-            label="Upgrade to Gold / Platinum"
-            description="Unlock unlimited likes, boosts & more"
-            onPress={() => router.push('/(settings)/upgrade')}
-          />
-        </View>
-
         {/* Legal */}
         <SectionHeader label="Legal" />
         <View style={{ backgroundColor: '#FFFFFF' }}>
