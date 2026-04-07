@@ -1008,6 +1008,13 @@ export const COUNTRY_GROUPS: CountryGroup[] = [
 
 // Flat list of all countries (useful for search)
 export const ALL_COUNTRIES: CountryData[] = COUNTRY_GROUPS.flatMap((g) => g.countries);
+export const AFRICAN_COUNTRY_CODES = new Set(
+  COUNTRY_GROUPS
+    .filter((group) =>
+      ['east_africa', 'west_africa', 'central_africa', 'north_africa', 'south_africa_region'].includes(group.id)
+    )
+    .flatMap((group) => group.countries.map((country) => country.code))
+);
 
 // Look up a country by code
 export const getCountry = (code: string) => ALL_COUNTRIES.find((c) => c.code === code);

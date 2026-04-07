@@ -63,8 +63,6 @@ export default function MessagesScreen() {
     );
   }, [conversations, search]);
 
-  const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count ?? 0), 0);
-
   if (isLoading && conversations.length === 0) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -77,12 +75,7 @@ export default function MessagesScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
       {/* Header */}
       <View style={s.header}>
-        <View>
-          <Text style={s.title}>Messages</Text>
-          {totalUnread > 0 && (
-            <Text style={s.subtitle}>{totalUnread} unread</Text>
-          )}
-        </View>
+        <Text style={s.title}>Messages</Text>
       </View>
 
       {/* Search */}
@@ -181,7 +174,6 @@ const s = StyleSheet.create({
     backgroundColor: '#FFF',
   },
   title: { fontSize: 24, fontWeight: '800', color: COLORS.text },
-  subtitle: { fontSize: 12, color: COLORS.primary, fontWeight: '600', marginTop: 1 },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',

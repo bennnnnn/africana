@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -51,24 +50,17 @@ export default function WelcomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Top decorative circles */}
       <View style={[styles.circle, { top: -120, right: -80, width: 280, height: 280, opacity: 0.15 }]} />
       <View style={[styles.circle, { top: height * 0.15, left: -60, width: 160, height: 160, opacity: 0.1 }]} />
       <View style={[styles.circle, { bottom: 80, right: -40, width: 200, height: 200, opacity: 0.1 }]} />
 
       <SafeAreaView style={styles.inner}>
-        {/* Brand */}
         <View style={styles.brandSection}>
-          <View style={styles.logoWrap}>
-            <Text style={styles.logoEmoji}>🌍</Text>
-          </View>
           <Text style={styles.appName}>Africana</Text>
           <Text style={styles.tagline}>Where African hearts connect</Text>
         </View>
 
-        {/* Actions */}
         <View style={styles.actionsSection}>
-          {/* Google */}
           <TouchableOpacity
             style={styles.googleBtn}
             onPress={handleGoogle}
@@ -85,14 +77,12 @@ export default function WelcomeScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>or</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Email */}
           <TouchableOpacity
             style={styles.emailBtn}
             onPress={() => router.push('/(auth)/register')}
@@ -110,7 +100,6 @@ export default function WelcomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
-
       </SafeAreaView>
     </View>
   );
@@ -137,20 +126,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 40,
-  },
-  logoWrap: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  logoEmoji: {
-    fontSize: 50,
   },
   appName: {
     fontSize: 48,

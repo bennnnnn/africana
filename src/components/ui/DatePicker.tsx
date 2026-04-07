@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { COLORS } from '@/constants';
 
+const ACTIVE_COLOR = COLORS.success;
+
 const { width } = Dimensions.get('window');
 const ITEM_HEIGHT = 48;
 const VISIBLE_ITEMS = 5;
@@ -114,11 +116,11 @@ export function DatePicker({ value, onChange, label, placeholder = 'Select date'
   return (
     <View style={{ marginBottom: 16 }}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <TouchableOpacity style={styles.trigger} onPress={() => setOpen(true)} activeOpacity={0.8}>
-        <Text style={[styles.triggerText, !displayDate && styles.placeholder]}>
+      <TouchableOpacity style={[styles.trigger, displayDate && styles.triggerOn]} onPress={() => setOpen(true)} activeOpacity={0.8}>
+        <Text style={[styles.triggerText, !displayDate && styles.placeholder, displayDate && styles.triggerTextOn]}>
           {displayDate ? `${displayDate}${age ? `  •  ${age} years old` : ''}` : placeholder}
         </Text>
-        <Text style={{ fontSize: 18 }}>📅</Text>
+        <Text style={{ fontSize: 18 }}>{displayDate ? '✅' : '📅'}</Text>
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
@@ -163,10 +165,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 50,
   },
+  triggerOn: {
+    borderColor: ACTIVE_COLOR,
+    backgroundColor: `${ACTIVE_COLOR}10`,
+  },
   triggerText: {
     fontSize: 15,
     color: COLORS.text,
     fontWeight: '500',
+  },
+  triggerTextOn: {
+    color: ACTIVE_COLOR,
+    fontWeight: '700',
   },
   placeholder: {
     color: COLORS.textMuted,
@@ -214,11 +224,11 @@ const styles = StyleSheet.create({
     left: 4,
     right: 4,
     height: ITEM_HEIGHT,
-    backgroundColor: `${COLORS.primary}12`,
+    backgroundColor: `${ACTIVE_COLOR}12`,
     borderRadius: 10,
     zIndex: 1,
     borderWidth: 1,
-    borderColor: `${COLORS.primary}25`,
+    borderColor: `${ACTIVE_COLOR}25`,
   },
   wheelItem: {
     height: ITEM_HEIGHT,
@@ -232,6 +242,6 @@ const styles = StyleSheet.create({
   wheelTextSelected: {
     fontSize: 17,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: ACTIVE_COLOR,
   },
 });

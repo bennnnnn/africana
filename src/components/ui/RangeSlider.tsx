@@ -3,6 +3,7 @@ import { View, Text, PanResponder, StyleSheet } from 'react-native';
 import { COLORS } from '@/constants';
 
 const THUMB = 28;
+const MIN_GAP_VALUE = 1;
 
 interface Props {
   min: number;
@@ -14,33 +15,52 @@ interface Props {
 }
 
 export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props) {
-  const toPos = (v: number) => ((v - min) / (max - min)) * trackWidth;
-  const toVal = (p: number) =>
-    Math.round(Math.max(min, Math.min(max, min + (p / trackWidth) * (max - min))));
+  const valueSpan = Math.max(1, max - min);
+  const usableWidth = Math.max(1, trackWidth - THUMB);
+  const minGapPos = (MIN_GAP_VALUE / valueSpan) * usableWidth;
+  const minCenter = THUMB / 2;
+  const maxCenter = trackWidth - THUMB / 2;
+  const toCenter = (v: number) => minCenter + ((v - min) / valueSpan) * usableWidth;
+  const toVal = (center: number) =>
+    Math.round(
+      Math.max(
+        min,
+        Math.min(max, min + ((center - minCenter) / usableWidth) * valueSpan)
+      )
+    );
 
-  const [positions, setPositions] = useState({ low: toPos(low), high: toPos(high) });
-  const posRef = useRef({ low: toPos(low), high: toPos(high) });
+  const [positions, setPositions] = useState({ low: toCenter(low), high: toCenter(high) });
+  const posRef = useRef({ low: toCenter(low), high: toCenter(high) });
   const startRef = useRef({ low: 0, high: 0 });
+  const draggingRef = useRef<'low' | 'high' | null>(null);
 
   // Sync when props change externally (e.g. reset)
   useEffect(() => {
-    const next = { low: toPos(low), high: toPos(high) };
+    if (draggingRef.current) return;
+    const next = { low: toCenter(low), high: toCenter(high) };
     posRef.current = next;
     setPositions(next);
-  }, [low, high]);
+  }, [low, high, trackWidth]);
 
   const lowPan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
+        draggingRef.current = 'low';
         startRef.current.low = posRef.current.low;
       },
       onPanResponderMove: (_, gs) => {
-        const newLow = Math.max(0, Math.min(startRef.current.low + gs.dx, posRef.current.high - THUMB));
+        const newLow = Math.max(minCenter, Math.min(startRef.current.low + gs.dx, posRef.current.high - minGapPos));
         posRef.current.low = newLow;
         setPositions({ low: newLow, high: posRef.current.high });
         onChange(toVal(newLow), toVal(posRef.current.high));
+      },
+      onPanResponderRelease: () => {
+        draggingRef.current = null;
+      },
+      onPanResponderTerminate: () => {
+        draggingRef.current = null;
       },
     })
   ).current;
@@ -50,13 +70,20 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
+        draggingRef.current = 'high';
         startRef.current.high = posRef.current.high;
       },
       onPanResponderMove: (_, gs) => {
-        const newHigh = Math.max(posRef.current.low + THUMB, Math.min(startRef.current.high + gs.dx, trackWidth));
+        const newHigh = Math.max(posRef.current.low + minGapPos, Math.min(startRef.current.high + gs.dx, maxCenter));
         posRef.current.high = newHigh;
         setPositions({ low: posRef.current.low, high: newHigh });
         onChange(toVal(posRef.current.low), toVal(newHigh));
+      },
+      onPanResponderRelease: () => {
+        draggingRef.current = null;
+      },
+      onPanResponderTerminate: () => {
+        draggingRef.current = null;
       },
     })
   ).current;
@@ -65,27 +92,27 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
   const highVal = toVal(positions.high);
 
   return (
-    <View style={{ paddingHorizontal: THUMB / 2, marginBottom: 4 }}>
+    <View style={{ marginBottom: 4 }}>
       {/* Track container */}
-      <View style={[s.trackWrap, { width: trackWidth + THUMB }]}>
+      <View style={[s.trackWrap, { width: trackWidth }]}>
         {/* Background track */}
-        <View style={[s.track, { left: THUMB / 2, right: THUMB / 2 }]} />
+        <View style={s.track} />
         {/* Active range */}
         <View
           style={[
             s.activeTrack,
             {
-              left: positions.low + THUMB / 2,
+              left: positions.low,
               width: positions.high - positions.low,
             },
           ]}
         />
         {/* Low thumb */}
-        <View {...lowPan.panHandlers} style={[s.thumb, { left: positions.low }]}>
+        <View {...lowPan.panHandlers} style={[s.thumb, { left: positions.low - THUMB / 2 }]}>
           <Text style={s.thumbLabel}>{lowVal}</Text>
         </View>
         {/* High thumb */}
-        <View {...highPan.panHandlers} style={[s.thumb, { left: positions.high }]}>
+        <View {...highPan.panHandlers} style={[s.thumb, { left: positions.high - THUMB / 2 }]}>
           <Text style={s.thumbLabel}>{highVal}</Text>
         </View>
       </View>
@@ -103,6 +130,8 @@ const s = StyleSheet.create({
   trackWrap: { height: 56, justifyContent: 'center', position: 'relative' },
   track: {
     position: 'absolute',
+    left: THUMB / 2,
+    right: THUMB / 2,
     height: 4,
     backgroundColor: COLORS.border,
     borderRadius: 2,

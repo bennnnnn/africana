@@ -11,6 +11,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@/constants';
 
+const ACTIVE_COLOR = COLORS.success;
+
 export interface SelectOption {
   value: string;
   label: string;
@@ -41,11 +43,11 @@ export function SelectPicker({
     <View style={s.wrapper}>
       {label && <Text style={s.label}>{label}</Text>}
 
-      <TouchableOpacity style={s.trigger} onPress={() => setOpen(true)} activeOpacity={0.8}>
-        <Text style={[s.triggerText, !selected && s.placeholder]}>
+      <TouchableOpacity style={[s.trigger, selected && s.triggerOn]} onPress={() => setOpen(true)} activeOpacity={0.8}>
+        <Text style={[s.triggerText, !selected && s.placeholder, selected && s.triggerTextOn]}>
           {selected ? `${selected.emoji ? selected.emoji + '  ' : ''}${selected.label}` : placeholder}
         </Text>
-        <Ionicons name="chevron-down" size={18} color={COLORS.textSecondary} />
+        <Ionicons name="chevron-down" size={18} color={selected ? ACTIVE_COLOR : COLORS.textSecondary} />
       </TouchableOpacity>
 
       <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setOpen(false)}>
@@ -90,7 +92,7 @@ export function SelectPicker({
                     {item.label}
                   </Text>
                   {isSelected && (
-                    <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} style={{ marginLeft: 'auto' }} />
+                    <Ionicons name="checkmark-circle" size={20} color={ACTIVE_COLOR} style={{ marginLeft: 'auto' }} />
                   )}
                 </TouchableOpacity>
               );
@@ -116,7 +118,12 @@ const s = StyleSheet.create({
     borderColor: COLORS.border,
     backgroundColor: '#FFF',
   },
+  triggerOn: {
+    borderColor: ACTIVE_COLOR,
+    backgroundColor: `${ACTIVE_COLOR}10`,
+  },
   triggerText: { fontSize: 15, color: COLORS.text, fontWeight: '500', flex: 1 },
+  triggerTextOn: { color: ACTIVE_COLOR, fontWeight: '700' },
   placeholder: { color: COLORS.textMuted },
   modal: { flex: 1, backgroundColor: COLORS.surface },
   modalHeader: {
@@ -148,8 +155,8 @@ const s = StyleSheet.create({
     borderBottomColor: COLORS.border,
     backgroundColor: '#FFF',
   },
-  optionOn: { backgroundColor: `${COLORS.primary}08` },
+  optionOn: { backgroundColor: `${ACTIVE_COLOR}10` },
   emoji: { fontSize: 20, marginRight: 12, width: 28 },
   optionText: { fontSize: 15, color: COLORS.text, fontWeight: '500' },
-  optionTextOn: { color: COLORS.primary, fontWeight: '700' },
+  optionTextOn: { color: ACTIVE_COLOR, fontWeight: '700' },
 });

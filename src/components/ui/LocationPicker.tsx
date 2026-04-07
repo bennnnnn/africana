@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, FlatList,
   TextInput, StyleSheet, Pressable, SectionList,
@@ -6,7 +6,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COUNTRY_GROUPS, ALL_COUNTRIES, CountryData } from '@/lib/country-data';
+import { loadAfricaCountryCities, AfricaCountryCityMap } from '@/lib/africa-city-data';
 import { COLORS } from '@/constants';
+
+const ACTIVE_COLOR = COLORS.success;
 
 export interface LocationValue {
   country: string;
@@ -20,18 +23,69 @@ interface LocationPickerProps {
   onChange: (val: Partial<LocationValue>) => void;
   /** If true, user picks only country (no state/city) */
   countryOnly?: boolean;
+  showCountryField?: boolean;
+  countryLabel?: string;
+  countryPlaceholder?: string;
 }
 
 type ModalType = 'country' | 'subdivision' | 'city' | null;
 
-export function LocationPicker({ value, onChange, countryOnly = false }: LocationPickerProps) {
+export function LocationPicker({
+  value,
+  onChange,
+  countryOnly = false,
+  showCountryField = true,
+  countryLabel = 'Country',
+  countryPlaceholder = 'Select your country',
+}: LocationPickerProps) {
   const [openModal, setOpenModal] = useState<ModalType>(null);
   const [search, setSearch] = useState('');
+  const [countryCityMap, setCountryCityMap] = useState<AfricaCountryCityMap | null>(null);
 
   const selectedCountry = value.country ? ALL_COUNTRIES.find((c) => c.name === value.country) : null;
   const selectedSubdivision = selectedCountry?.subdivisions.find((s) => s.name === value.subdivision);
 
   const subdivisionLabel = selectedCountry?.subdivisionLabel ?? 'Region';
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCityMap() {
+      if (!selectedCountry?.code) {
+        setCountryCityMap(null);
+        return;
+      }
+      const data = await loadAfricaCountryCities(selectedCountry.code);
+      if (!cancelled) {
+        setCountryCityMap(data);
+      }
+    }
+
+    loadCityMap();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCountry?.code]);
+
+  const normalized = (input: string | null | undefined) =>
+    (input ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[()'’.,/-]/g, ' ')
+      .replace(/\b(region|regional state|state|province|county|district|zone|governorate|wilaya|department|division)\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const generatedCitiesForSubdivision = useMemo(() => {
+    if (!countryCityMap || !value.subdivision) return null;
+    const exact = countryCityMap[value.subdivision];
+    if (exact) return exact;
+
+    const target = normalized(value.subdivision);
+    const matchedKey = Object.keys(countryCityMap).find((key) => normalized(key) === target);
+    return matchedKey ? countryCityMap[matchedKey] : null;
+  }, [countryCityMap, value.subdivision]);
 
   // Country picker sections
   const countrySections = useMemo(() => {
@@ -47,11 +101,12 @@ export function LocationPicker({ value, onChange, countryOnly = false }: Locatio
   }, [search]);
 
   const cityList = useMemo(() => {
-    if (!selectedSubdivision) return [];
-    if (!search.trim()) return selectedSubdivision.cities;
+    const source = generatedCitiesForSubdivision ?? selectedSubdivision?.cities ?? [];
+    if (source.length === 0) return [];
+    if (!search.trim()) return source;
     const q = search.toLowerCase();
-    return selectedSubdivision.cities.filter((c) => c.toLowerCase().includes(q));
-  }, [selectedSubdivision, search]);
+    return source.filter((c) => c.toLowerCase().includes(q));
+  }, [generatedCitiesForSubdivision, selectedSubdivision, search]);
 
   const subdivisionList = useMemo(() => {
     if (!selectedCountry) return [];
@@ -83,13 +138,15 @@ export function LocationPicker({ value, onChange, countryOnly = false }: Locatio
   return (
     <View>
       {/* Country button */}
-      <PickerButton
-        label="Country"
-        value={value.country ?? null}
-        placeholder="Select your country"
-        icon="globe-outline"
-        onPress={() => openPicker('country')}
-      />
+      {showCountryField && (
+        <PickerButton
+          label={countryLabel}
+          value={value.country ?? null}
+          placeholder={countryPlaceholder}
+          icon="globe-outline"
+          onPress={() => openPicker('country')}
+        />
+      )}
 
       {/* Subdivision button — only after country is selected and country has subdivisions */}
       {!countryOnly && value.country && selectedCountry && selectedCountry.subdivisions.length > 0 && (
@@ -237,9 +294,9 @@ function PickerButton({ label, value, placeholder, icon, onPress }: {
   return (
     <View style={{ marginBottom: 14 }}>
       <Text style={s.inputLabel}>{label}</Text>
-      <TouchableOpacity onPress={onPress} style={s.dropdownBtn} activeOpacity={0.8}>
-        <Ionicons name={icon} size={17} color={value ? COLORS.primary : COLORS.textSecondary} style={{ marginRight: 10 }} />
-        <Text style={[s.dropdownText, value ? { color: COLORS.text, fontWeight: '600' } : {}]} numberOfLines={1}>
+      <TouchableOpacity onPress={onPress} style={[s.dropdownBtn, value && s.dropdownBtnOn]} activeOpacity={0.8}>
+        <Ionicons name={icon} size={17} color={value ? ACTIVE_COLOR : COLORS.textSecondary} style={{ marginRight: 10 }} />
+        <Text style={[s.dropdownText, value && s.dropdownTextOn]} numberOfLines={1}>
           {value || placeholder}
         </Text>
         <Ionicons name="chevron-down" size={15} color={COLORS.textSecondary} />
@@ -289,7 +346,7 @@ function RowItem({ label, selected, onPress }: { label: string; selected: boolea
   return (
     <Pressable onPress={onPress} style={[s.row, selected && s.rowOn]}>
       <Text style={[s.rowText, selected && s.rowTextOn]} numberOfLines={1}>{label}</Text>
-      {selected && <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />}
+      {selected && <Ionicons name="checkmark-circle" size={20} color={ACTIVE_COLOR} />}
     </Pressable>
   );
 }
@@ -308,7 +365,12 @@ const s = StyleSheet.create({
     borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 14, backgroundColor: '#FFF',
   },
+  dropdownBtnOn: {
+    borderColor: ACTIVE_COLOR,
+    backgroundColor: `${ACTIVE_COLOR}10`,
+  },
   dropdownText: { flex: 1, fontSize: 15, color: COLORS.textSecondary },
+  dropdownTextOn: { color: COLORS.text, fontWeight: '700' },
   modalHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     padding: 18, borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: '#FFF',
@@ -328,7 +390,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 20, paddingVertical: 16,
     borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  rowOn: { backgroundColor: `${COLORS.primary}0D` },
+  rowOn: { backgroundColor: `${ACTIVE_COLOR}10` },
   rowText: { fontSize: 15, color: COLORS.text, flex: 1 },
-  rowTextOn: { color: COLORS.primary, fontWeight: '700' },
+  rowTextOn: { color: ACTIVE_COLOR, fontWeight: '700' },
 });

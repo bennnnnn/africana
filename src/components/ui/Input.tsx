@@ -13,6 +13,7 @@ import { COLORS } from '@/constants';
 interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
+  validationState?: 'default' | 'error' | 'success';
   leftIcon?: keyof typeof Ionicons.glyphMap;
   rightIcon?: keyof typeof Ionicons.glyphMap;
   onRightIconPress?: () => void;
@@ -23,6 +24,7 @@ interface InputProps extends TextInputProps {
 export function Input({
   label,
   error,
+  validationState = 'default',
   leftIcon,
   rightIcon,
   onRightIconPress,
@@ -32,6 +34,22 @@ export function Input({
 }: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const accentColor =
+    validationState === 'error'
+      ? COLORS.error
+      : validationState === 'success'
+        ? COLORS.success
+        : isFocused
+          ? COLORS.primary
+          : COLORS.border;
+  const iconColor =
+    validationState === 'error'
+      ? COLORS.error
+      : validationState === 'success'
+        ? COLORS.success
+        : isFocused
+          ? COLORS.primary
+          : COLORS.textSecondary;
 
   return (
     <View style={[{ marginBottom: 16 }, containerStyle]}>
@@ -45,7 +63,7 @@ export function Input({
           flexDirection: 'row',
           alignItems: 'center',
           borderWidth: 1.5,
-          borderColor: error ? COLORS.error : isFocused ? COLORS.primary : COLORS.border,
+          borderColor: accentColor,
           borderRadius: 12,
           backgroundColor: '#FFFFFF',
           paddingHorizontal: 14,
@@ -56,7 +74,7 @@ export function Input({
           <Ionicons
             name={leftIcon}
             size={20}
-            color={isFocused ? COLORS.primary : COLORS.textSecondary}
+            color={iconColor}
             style={{ marginRight: 10 }}
           />
         )}
@@ -87,13 +105,13 @@ export function Input({
             <Ionicons
               name={showPassword ? 'eye-off-outline' : 'eye-outline'}
               size={20}
-              color={COLORS.textSecondary}
+              color={iconColor}
             />
           </TouchableOpacity>
         )}
         {rightIcon && !isPassword && (
           <TouchableOpacity onPress={onRightIconPress}>
-            <Ionicons name={rightIcon} size={20} color={COLORS.textSecondary} />
+            <Ionicons name={rightIcon} size={20} color={iconColor} />
           </TouchableOpacity>
         )}
       </View>

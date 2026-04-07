@@ -4,8 +4,8 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-
   Alert,
+  Modal,
   ActivityIndicator,
   Dimensions,
   Share,
@@ -27,8 +27,19 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { MatchModal } from '@/components/ui/MatchModal';
+import { calculateAge, getEffectiveAgePreferenceRange } from '@/lib/utils';
 
 const { width } = Dimensions.get('window');
+
+const GENDER_LABEL: Record<string, string> = { male: 'Man', female: 'Woman' };
+const REPORT_REASONS = ['Fake profile', 'Scam', 'Harassment', 'Nudity', 'Underage', 'Other'] as const;
+
+type ProfileWithAgePrefs = User & { min_age_pref?: number | null; max_age_pref?: number | null };
+
+function isMeaningfulText(value: string | null | undefined): boolean {
+  const n = value?.trim();
+  return !!n && n !== '-' && n !== '—';
+}
 
 export default function ProfileViewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -41,6 +52,19 @@ export default function ProfileViewScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [matchUser, setMatchUser] = useState<User | null>(null);
+  const [compatibilityExpanded, setCompatibilityExpanded] = useState(false);
+  const [reportPromptVisible, setReportPromptVisible] = useState(false);
+  const [selectedReportReason, setSelectedReportReason] = useState<typeof REPORT_REASONS[number] | null>(null);
+  const [reportValidationVisible, setReportValidationVisible] = useState(false);
+  const [blockPromptVisible, setBlockPromptVisible] = useState(false);
+
+  useEffect(() => {
+    setCompatibilityExpanded(false);
+    setReportPromptVisible(false);
+    setSelectedReportReason(null);
+    setReportValidationVisible(false);
+    setBlockPromptVisible(false);
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -132,6 +156,125 @@ export default function ProfileViewScreen() {
   const isLiked = likedUserIds.has(profile.id);
   const isOwnProfile = currentUser?.id === profile.id;
 
+  const p = profile as ProfileWithAgePrefs;
+  const normalizeText = (value: string | null | undefined) => value?.trim().toLowerCase() ?? '';
+  const viewerLanguages = new Set((currentUser?.languages ?? []).map((lang) => normalizeText(lang)).filter(Boolean));
+  const effectiveTheirAgePref = getEffectiveAgePreferenceRange(p.min_age_pref, p.max_age_pref);
+  const viewerAge = calculateAge(currentUser?.birthdate) ?? null;
+  const profileFirstName = profile.full_name?.trim().split(/\s+/)[0] ?? 'Their';
+
+  type CompatibilityCriterion = {
+    key: string;
+    label: string;
+    viewerValue: string;
+    matched: boolean;
+  };
+  const compatibilityCriteria: CompatibilityCriterion[] = [];
+  const pushCompatibility = (
+    key: string,
+    label: string,
+    theirValue: string | null | undefined,
+    viewerValue: string | null | undefined,
+    matched: boolean,
+  ) => {
+    if (!theirValue || !viewerValue) return;
+    compatibilityCriteria.push({ key, label, viewerValue, matched });
+  };
+
+  const LOOKING_SINGLE: Record<string, string> = { men: 'Man', women: 'Woman' };
+  const theirLookingFor =
+    p.interested_in === 'men' || p.interested_in === 'women' ? LOOKING_SINGLE[p.interested_in] : null;
+  const genderPrefMatch =
+    !!p.interested_in &&
+    (p.interested_in === 'men' || p.interested_in === 'women') &&
+    !!currentUser?.gender &&
+    ((p.interested_in === 'men' && currentUser.gender === 'male') ||
+      (p.interested_in === 'women' && currentUser.gender === 'female'));
+  pushCompatibility(
+    'gender',
+    'Looking for',
+    theirLookingFor,
+    currentUser?.gender ? GENDER_LABEL[currentUser.gender] ?? currentUser.gender : null,
+    genderPrefMatch,
+  );
+
+  if (!effectiveTheirAgePref.isImplicit) {
+    pushCompatibility(
+      'age',
+      'Age they prefer',
+      `${effectiveTheirAgePref.min}–${effectiveTheirAgePref.max} yrs`,
+      typeof viewerAge === 'number' ? `${viewerAge} yrs` : null,
+      typeof viewerAge === 'number' &&
+        viewerAge >= effectiveTheirAgePref.min &&
+        viewerAge <= effectiveTheirAgePref.max,
+    );
+  }
+
+  const viewerGoalLabels = (currentUser?.looking_for ?? [])
+    .map((goal) => LOOKING_FOR_OPTIONS.find((option) => option.value === goal)?.label ?? goal.replace('_', ' '))
+    .filter(Boolean);
+  const profileGoalLabels = (p.looking_for ?? [])
+    .map((goal) => LOOKING_FOR_OPTIONS.find((option) => option.value === goal)?.label ?? goal.replace('_', ' '))
+    .filter(Boolean);
+  const hasGoalOverlap = (currentUser?.looking_for ?? []).some((goal) => (p.looking_for ?? []).includes(goal));
+  pushCompatibility(
+    'relation_type',
+    'Goals',
+    profileGoalLabels.join(', '),
+    viewerGoalLabels.join(', '),
+    hasGoalOverlap,
+  );
+
+  pushCompatibility(
+    'religion',
+    'Religion',
+    religionLabel,
+    currentUser?.religion
+      ? RELIGION_OPTIONS.find((option) => option.value === currentUser.religion)?.label ?? currentUser.religion
+      : null,
+    !!currentUser?.religion && !!p.religion && currentUser.religion === p.religion,
+  );
+
+  const viewerWantChildrenLabel = currentUser?.want_children
+    ? WANT_CHILDREN_OPTIONS.find((option) => option.value === currentUser.want_children)?.label ?? currentUser.want_children
+    : null;
+  const wantLabelRow = p.want_children
+    ? WANT_CHILDREN_OPTIONS.find((o) => o.value === p.want_children)?.label ?? p.want_children
+    : '';
+  pushCompatibility(
+    'want_children',
+    'Want children',
+    wantLabelRow || null,
+    viewerWantChildrenLabel,
+    !!currentUser?.want_children && !!p.want_children && currentUser.want_children === p.want_children,
+  );
+
+  const sharedLanguages = (p.languages ?? []).filter((lang) => viewerLanguages.has(normalizeText(lang)));
+  pushCompatibility(
+    'languages',
+    'Languages',
+    (p.languages ?? []).join(', '),
+    (currentUser?.languages ?? []).join(', '),
+    sharedLanguages.length > 0,
+  );
+
+  pushCompatibility(
+    'ethnicity',
+    'Ethnicity',
+    isMeaningfulText(p.ethnicity) ? (p.ethnicity ?? '').trim() : null,
+    isMeaningfulText(currentUser?.ethnicity) ? (currentUser?.ethnicity ?? '').trim() : null,
+    isMeaningfulText(currentUser?.ethnicity) &&
+      isMeaningfulText(p.ethnicity) &&
+      normalizeText(currentUser?.ethnicity) === normalizeText(p.ethnicity),
+  );
+
+  const matchedCriteriaCount = compatibilityCriteria.filter((c) => c.matched).length;
+  const compatibilityPercent =
+    compatibilityCriteria.length > 0
+      ? Math.round((matchedCriteriaCount / compatibilityCriteria.length) * 100)
+      : null;
+  const canShowCompatibility = !isOwnProfile && currentUser && compatibilityCriteria.length > 0;
+
   const handleLike = async () => {
     if (!currentUser) return;
     const wasLiked = likedUserIds.has(profile.id);
@@ -148,56 +291,39 @@ export default function ProfileViewScreen() {
   };
 
   const handleBlock = () => {
-    Alert.alert(
-      'Block User',
-      `Are you sure you want to block ${profile.full_name}? They won't be able to see your profile or contact you.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Block',
-          style: 'destructive',
-          onPress: async () => {
-            if (!currentUser) return;
-            await supabase.from('blocks').insert({
-              blocker_id: currentUser.id,
-              blocked_id: profile.id,
-            });
-            Alert.alert('Blocked', `${profile.full_name} has been blocked.`);
-            router.back();
-          },
-        },
-      ]
-    );
+    setBlockPromptVisible(true);
   };
 
   const handleReport = () => {
-    const reasons = [
-      'Fake profile / impersonation',
-      'Inappropriate photos',
-      'Harassment or abuse',
-      'Spam or scam',
-      'Underage user',
-      'Other',
-    ];
-    Alert.alert(
-      `Report ${profile.full_name}`,
-      'Select a reason for reporting:',
-      [
-        ...reasons.map((reason) => ({
-          text: reason,
-          onPress: async () => {
-            if (!currentUser) return;
-            await supabase.from('reports').insert({
-              reporter_id: currentUser.id,
-              reported_id: profile.id,
-              reason,
-            });
-            Alert.alert('Report Submitted', 'Thank you. Our team will review this within 24 hours.');
-          },
-        })),
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
+    setSelectedReportReason(null);
+    setReportValidationVisible(false);
+    setReportPromptVisible(true);
+  };
+
+  const confirmBlockUser = async () => {
+    if (!currentUser) return;
+    await supabase.from('blocks').insert({
+      blocker_id: currentUser.id,
+      blocked_id: profile.id,
+    });
+    setBlockPromptVisible(false);
+    router.back();
+  };
+
+  const submitReport = async () => {
+    if (!currentUser) return;
+    if (!selectedReportReason) {
+      setReportValidationVisible(true);
+      return;
+    }
+    await supabase.from('reports').insert({
+      reporter_id: currentUser.id,
+      reported_id: profile.id,
+      reason: selectedReportReason,
+    });
+    setReportPromptVisible(false);
+    setSelectedReportReason(null);
+    setReportValidationVisible(false);
   };
 
   return (
@@ -377,6 +503,103 @@ export default function ProfileViewScreen() {
           </View>
         )}
 
+        {canShowCompatibility && compatibilityPercent !== null && (
+          <View style={{ backgroundColor: '#FFFFFF', padding: 20, marginBottom: 8 }}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setCompatibilityExpanded((prev) => !prev)}
+              style={{ paddingVertical: 2 }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <View
+                  style={{
+                    width: 54,
+                    height: 54,
+                    borderRadius: 27,
+                    backgroundColor: `${COLORS.success}12`,
+                    borderWidth: 1,
+                    borderColor: `${COLORS.success}24`,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.success }}>
+                    {compatibilityPercent}%
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 4 }}>
+                    COMPATIBILITY
+                  </Text>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.text }}>
+                    {matchedCriteriaCount} of {compatibilityCriteria.length} match
+                  </Text>
+                  <Text style={{ marginTop: 4, fontSize: 13, color: COLORS.textSecondary, lineHeight: 20 }}>
+                    Their preferences compared with yours.
+                  </Text>
+                </View>
+                <Ionicons
+                  name={compatibilityExpanded ? 'chevron-up' : 'chevron-down'}
+                  size={20}
+                  color={COLORS.textSecondary}
+                />
+              </View>
+            </TouchableOpacity>
+
+            {compatibilityExpanded && (
+              <View style={{ marginTop: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingBottom: 10 }}>
+                  <Text style={{ width: 88, fontSize: 11, fontWeight: '700', color: COLORS.textMuted }}>
+                    {profileFirstName}
+                  </Text>
+                  <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: COLORS.textMuted, textAlign: 'right' }}>
+                    You
+                  </Text>
+                </View>
+                {compatibilityCriteria.map((criterion, index) => (
+                  <View key={criterion.key}>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingBottom: 14 }}>
+                      <View style={{ width: 88, paddingRight: 4 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.text }}>
+                          {criterion.label}:
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 6 }}>
+                          <Text
+                            style={{
+                              flex: 1,
+                              fontSize: 14,
+                              fontWeight: criterion.matched ? '700' : '600',
+                              color: criterion.matched ? COLORS.text : '#C45A5A',
+                              fontStyle: criterion.matched ? 'normal' : 'italic',
+                              textDecorationLine: criterion.matched ? 'none' : 'line-through',
+                            }}
+                            numberOfLines={5}
+                          >
+                            {criterion.viewerValue}
+                          </Text>
+                          {criterion.matched ? (
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={18}
+                              color={COLORS.success}
+                              style={{ marginTop: 1 }}
+                            />
+                          ) : null}
+                        </View>
+                      </View>
+                    </View>
+                    {index < compatibilityCriteria.length - 1 ? (
+                      <View style={{ height: 1, backgroundColor: `${COLORS.border}88`, marginBottom: 14, marginLeft: 98 }} />
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         <View style={{ height: 120 }} />
       </ScrollView>
 
@@ -426,6 +649,150 @@ export default function ProfileViewScreen() {
         matchedUser={matchUser}
         onClose={() => setMatchUser(null)}
       />
+
+      <Modal
+        visible={reportPromptVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setReportPromptVisible(false);
+          setReportValidationVisible(false);
+        }}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(17,17,17,0.34)', justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22 }}>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', lineHeight: 27 }}>
+              Reason reporting {profile.full_name}
+            </Text>
+            <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 22, color: '#555555' }}>
+              Select one reason before submitting your report.
+            </Text>
+            <View style={{ marginTop: 18, gap: 10 }}>
+              {REPORT_REASONS.map((reason) => {
+                const selected = selectedReportReason === reason;
+                return (
+                  <TouchableOpacity
+                    key={reason}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setSelectedReportReason(reason);
+                      setReportValidationVisible(false);
+                    }}
+                    style={{
+                      minHeight: 50,
+                      borderRadius: 16,
+                      paddingHorizontal: 14,
+                      paddingVertical: 13,
+                      backgroundColor: selected ? '#FFF5F1' : '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: selected ? COLORS.primary : '#E7E1DC',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>{reason}</Text>
+                    {selected ? <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {reportValidationVisible ? (
+              <View style={{ marginTop: 12, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#FFF7E8' }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#A06A00' }}>Select a reason</Text>
+              </View>
+            ) : null}
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => {
+                  setReportPromptVisible(false);
+                  setReportValidationVisible(false);
+                }}
+                style={{
+                  flex: 1,
+                  minHeight: 50,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: '#E7E1DC',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => void submitReport()}
+                style={{
+                  flex: 1,
+                  minHeight: 50,
+                  borderRadius: 16,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#111111',
+                  flexDirection: 'row',
+                  gap: 8,
+                }}
+              >
+                <Ionicons name="flag-outline" size={17} color="#FFFFFF" />
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Report</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={blockPromptVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBlockPromptVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(17,17,17,0.34)', justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22 }}>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', lineHeight: 27 }}>
+              Block user
+            </Text>
+            <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 22, color: '#555555' }}>
+              Block {profile.full_name}?
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setBlockPromptVisible(false)}
+                style={{
+                  flex: 1,
+                  minHeight: 50,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: '#E7E1DC',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => void confirmBlockUser()}
+                style={{
+                  flex: 1,
+                  minHeight: 50,
+                  borderRadius: 16,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#111111',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Block</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -443,7 +810,6 @@ function formatLastSeen(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-const GENDER_LABEL: Record<string, string> = { male: 'Man', female: 'Woman' };
 const INTERESTED_IN_LABEL: Record<string, string> = { men: 'Men', women: 'Women', everyone: 'Everyone' };
 
 function buildDetailRows(

@@ -11,8 +11,20 @@ export type Education =
   | 'high_school' | 'some_college' | 'vocational' | 'bachelors'
   | 'masters' | 'phd' | 'other';
 export type WantChildren = 'yes' | 'no' | 'open';
+export type PhysicalCondition =
+  | 'slim'
+  | 'athletic'
+  | 'average'
+  | 'curvy'
+  | 'plus_size'
+  | 'prefer_not_to_say';
+export type OriginLocationFields = {
+  origin_country?: string | null;
+  origin_state?: string | null;
+  origin_city?: string | null;
+};
 
-export interface User {
+export interface User extends OriginLocationFields {
   id: string;
   email: string;
   full_name: string;
@@ -30,6 +42,8 @@ export interface User {
   education: Education | null;
   marital_status: MaritalStatus | null;
   height_cm: number | null;          // e.g. 175
+  weight_kg?: number | null;
+  body_type?: PhysicalCondition | null;
   ethnicity: string | null;          // free text
   occupation: string | null;         // free text
   languages: string[];               // e.g. ['English','Amharic']

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -21,48 +21,62 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
-import { SelectPicker } from '@/components/ui/SelectPicker';
+import { SelectOption, SelectPicker } from '@/components/ui/SelectPicker';
+import { RangeSlider as AgeRangeSlider, SliderPicker } from '@/components/ui/SliderPicker';
 import {
   COLORS,
   GENDER_OPTIONS,
   RELIGION_OPTIONS,
   EDUCATION_OPTIONS,
+  OCCUPATION_OPTIONS,
+  PHYSICAL_CONDITION_OPTIONS,
   MARITAL_STATUS_OPTIONS,
   WANT_CHILDREN_OPTIONS,
 } from '@/constants';
 import { Gender, InterestedIn, LookingFor, Religion, Education, MaritalStatus, WantChildren } from '@/types';
+import { ALL_COUNTRIES, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
+import {
+  getValidationState,
+  validateFirstName,
+  validateOptionalHeight,
+  validateOptionalText,
+} from '@/lib/validation';
+import { DEFAULT_MAX_AGE_PREFERENCE, DEFAULT_MIN_AGE_PREFERENCE } from '@/lib/utils';
+import { CultureOptionSet, getEthnicityOptions, getLanguageOptions } from '@/lib/cultural-data';
 
 const { width } = Dimensions.get('window');
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 9;
+const ACTIVE_COLOR = COLORS.success;
 
 const STEPS = [
-  { emoji: '👤', title: "What's your name?",         subtitle: 'This is how others will know you',                    bg: '#FFF3E0' },
-  { emoji: '🎂', title: 'Tell us about yourself',    subtitle: 'Help others understand who you are',                  bg: '#E8F5E9' },
-  { emoji: '💞', title: 'What are you looking for?', subtitle: 'Be honest — the right match is out there',            bg: '#FCE4EC' },
-  { emoji: '🌿', title: 'Your background',           subtitle: 'Helps us find truly compatible matches',              bg: '#E3F2FD' },
-  { emoji: '👨‍👩‍👧', title: 'Family & lifestyle',      subtitle: 'A little about your life outside work',             bg: '#F3E5F5' },
-  { emoji: '📍', title: 'Where do you live?',        subtitle: 'Your location helps people near you find you',        bg: '#E0F7FA' },
-  { emoji: '📸', title: 'Add your best photo',       subtitle: 'Profiles with a photo get 6× more attention',         bg: '#FFF8E1' },
+  { title: "What's your name?",         subtitle: 'This is how others will know you',                    bg: '#FFF3E0' },
+  { title: 'Tell us about yourself',    subtitle: 'Help others understand who you are',                  bg: '#E8F5E9' },
+  { title: 'What are you looking for?', subtitle: 'Choose your relationship goals.',                      bg: '#FCE4EC' },
+  { title: 'Work & study',              subtitle: 'Share your education and occupation.',                bg: '#E3F2FD' },
+  { title: 'Your preferences',          subtitle: 'Age range and marital status help guide matching.',   bg: '#F3E5F5' },
+  { title: 'Your background',           subtitle: 'Helps us find truly compatible matches.',             bg: '#EDE7F6' },
+  { title: 'Physical',                  subtitle: 'Share your physical details.',                         bg: '#F8EAF0' },
+  { title: 'Where do you live?',        subtitle: 'Your location helps people near you find you.',       bg: '#E0F7FA' },
+  { title: 'Add your best photo',       subtitle: 'Profiles with a photo get 6× more attention.',        bg: '#FFF8E1' },
 ];
 
-const INTEREST_OPTIONS: { value: InterestedIn; label: string; emoji: string }[] = [
-  { value: 'women',    label: 'Women',    emoji: '👩' },
-  { value: 'men',      label: 'Men',      emoji: '👨' },
-  { value: 'everyone', label: 'Everyone', emoji: '💫' },
+const INTEREST_OPTIONS: { value: InterestedIn; label: string }[] = [
+  { value: 'women',    label: 'Women' },
+  { value: 'men',      label: 'Men' },
 ];
 
 const LOOKING_FOR_OPTS = [
-  { value: 'relationship', emoji: '💑', label: 'Relationship',  desc: 'A deep, meaningful connection' },
-  { value: 'marriage',     emoji: '💍', label: 'Marriage',      desc: 'Serious, long-term commitment' },
-  { value: 'friendship',   emoji: '🤝', label: 'Friendship',    desc: 'Friends first, see what happens' },
-  { value: 'pen_pal',      emoji: '✉️', label: 'Pen Pal',       desc: 'Chat, share stories, connect' },
+  { value: 'relationship', label: 'Relationship',  desc: 'A deep, meaningful connection' },
+  { value: 'marriage',     label: 'Marriage',      desc: 'Serious, long-term commitment' },
+  { value: 'friendship',   label: 'Friendship',    desc: 'Friends first, see what happens' },
+  { value: 'pen_pal',      label: 'Pen Pal',       desc: 'Chat, share stories, connect' },
 ];
 
 function ChipSelect({
   label, options, value, onSelect,
 }: {
   label: string;
-  options: { value: string; label: string; emoji?: string }[];
+  options: { value: string; label: string }[];
   value: string | null;
   onSelect: (v: string | null) => void;
 }) {
@@ -78,9 +92,41 @@ function ChipSelect({
               onPress={() => onSelect(on ? null : opt.value)}
               style={[s.chip, on && s.chipOn]}
             >
-              <Text style={[s.chipTxt, on && s.chipTxtOn]}>
-                {opt.emoji ? `${opt.emoji} ` : ''}{opt.label}
-              </Text>
+              <Text style={[s.chipTxt, on && s.chipTxtOn]}>{opt.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function MultiChipSelect({
+  label,
+  options,
+  values,
+  onToggle,
+}: {
+  label: string;
+  options: string[];
+  values: string[];
+  onToggle: (value: string) => void;
+}) {
+  if (options.length === 0) return null;
+
+  return (
+    <View style={{ marginBottom: 20 }}>
+      <Text style={s.label}>{label}</Text>
+      <View style={s.row}>
+        {options.map((option) => {
+          const on = values.includes(option);
+          return (
+            <Pressable
+              key={option}
+              onPress={() => onToggle(option)}
+              style={[s.chip, on && s.chipOn]}
+            >
+              <Text style={[s.chipTxt, on && s.chipTxtOn]}>{option}</Text>
             </Pressable>
           );
         })}
@@ -96,6 +142,7 @@ export default function OnboardingScreen() {
 
   // Step 1
   const [fullName, setFullName] = useState('');
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   // Step 2
   const [birthdate, setBirthdate]       = useState<Date | null>(null);
@@ -104,28 +151,133 @@ export default function OnboardingScreen() {
 
   // Step 3
   const [lookingFor, setLookingFor] = useState<LookingFor[]>([]);
+  const [minAgePref, setMinAgePref] = useState(DEFAULT_MIN_AGE_PREFERENCE);
+  const [maxAgePref, setMaxAgePref] = useState(DEFAULT_MAX_AGE_PREFERENCE);
   const toggleLookingFor = (val: LookingFor) =>
     setLookingFor((p) => p.includes(val) ? p.filter((v) => v !== val) : [...p, val]);
 
-  // Step 4 — background
-  const [religion, setReligion]           = useState<Religion | null>(null);
+  // Step 4 — work & study
   const [education, setEducation]         = useState<Education | null>(null);
-  const [maritalStatus, setMaritalStatus] = useState<MaritalStatus | null>(null);
-  const [ethnicity, setEthnicity]         = useState('');
   const [occupation, setOccupation]       = useState('');
 
-  // Step 5 — lifestyle
+  // Step 5 — preferences
+  const [maritalStatus, setMaritalStatus] = useState<MaritalStatus | null>(null);
+
+  // Step 6 — background
+  const [religion, setReligion]           = useState<Religion | null>(null);
+  const [ethnicity, setEthnicity]         = useState('');
+
+  // Step 7 — lifestyle
   const [heightCm, setHeightCm]         = useState('');
-  const [languages, setLanguages]       = useState('');
+  const [weightKg, setWeightKg]         = useState(70);
+  const [physicalCondition, setPhysicalCondition] = useState<string | null>(null);
+  const [languages, setLanguages]       = useState<string[]>([]);
   const [hasChildren, setHasChildren]   = useState<boolean | null>(null);
   const [wantChildren, setWantChildren] = useState<WantChildren | null>(null);
 
-  // Step 6
+  // Step 8
   const [location, setLocation] = useState<Partial<LocationValue>>({});
+  const [originLocation, setOriginLocation] = useState<Partial<LocationValue>>({});
 
-  // Step 7
+  // Step 9
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [loading, setLoading]   = useState(false);
+  const [cultureEthnicityOptions, setCultureEthnicityOptions] = useState<CultureOptionSet | null>(null);
+  const [cultureLanguageOptions, setCultureLanguageOptions] = useState<CultureOptionSet | null>(null);
+  const [cultureOptionsLoading, setCultureOptionsLoading] = useState(false);
+  const firstNameValidation = validateFirstName(fullName);
+  const heightValidation = validateOptionalHeight(heightCm);
+  const ethnicityValidation = validateOptionalText(ethnicity, 'Ethnicity');
+  const livesInAfrica = location.countryCode ? AFRICAN_COUNTRY_CODES.has(location.countryCode) : false;
+  const needsOriginCountry = Boolean(location.countryCode) && !livesInAfrica;
+  const originMatchesLivingCountry =
+    Boolean(originLocation.countryCode) && originLocation.countryCode === location.countryCode;
+  const culturalLocation = livesInAfrica
+    ? location
+    : needsOriginCountry && originLocation.countryCode && AFRICAN_COUNTRY_CODES.has(originLocation.countryCode) && !originMatchesLivingCountry
+      ? originLocation
+      : null;
+  const suggestedLanguages = cultureLanguageOptions?.suggested ?? [];
+  const allLanguages = cultureLanguageOptions?.all ?? [];
+  const originCountryOptions: SelectOption[] = ALL_COUNTRIES.map((country) => ({
+    value: country.code,
+    label: country.name,
+  }));
+  const locationPathComplete = Boolean(culturalLocation?.country && culturalLocation?.subdivision && culturalLocation?.city);
+
+  const markTouched = (field: string) =>
+    setTouched((current) => ({ ...current, [field]: true }));
+
+  const toggleLanguage = (value: string) => {
+    setLanguages((current) =>
+      current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value]
+    );
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCultureOptions() {
+      if (!locationPathComplete || !culturalLocation?.countryCode) {
+        setCultureEthnicityOptions(null);
+        setCultureLanguageOptions(null);
+        setCultureOptionsLoading(false);
+        return;
+      }
+
+      setCultureOptionsLoading(true);
+      const [ethnicityOptions, languageOptions] = await Promise.all([
+        getEthnicityOptions(culturalLocation.countryCode, culturalLocation.subdivision, culturalLocation.city),
+        getLanguageOptions(culturalLocation.countryCode, ethnicity || null, culturalLocation.subdivision, culturalLocation.city),
+      ]);
+
+      if (cancelled) return;
+      setCultureEthnicityOptions(ethnicityOptions);
+      setCultureLanguageOptions(languageOptions);
+      setCultureOptionsLoading(false);
+    }
+
+    loadCultureOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    culturalLocation?.countryCode,
+    culturalLocation?.subdivision,
+    culturalLocation?.city,
+    ethnicity,
+    locationPathComplete,
+  ]);
+
+  const handleLivingLocationChange = (value: Partial<LocationValue>) => {
+    setLocation((current) => {
+      const next = { ...current, ...value };
+      if (value.countryCode && value.countryCode !== current.countryCode) {
+        setOriginLocation({});
+        setEthnicity('');
+        setLanguages([]);
+      } else if (value.subdivision !== undefined || value.city !== undefined) {
+        setEthnicity('');
+        setLanguages([]);
+      }
+      return next;
+    });
+  };
+
+  const handleOriginLocationChange = (value: Partial<LocationValue>) => {
+    setOriginLocation((current) => {
+      const next = { ...current, ...value };
+      if (value.countryCode && value.countryCode !== current.countryCode) {
+        setEthnicity('');
+        setLanguages([]);
+      } else if (value.subdivision !== undefined || value.city !== undefined) {
+        setEthnicity('');
+        setLanguages([]);
+      }
+      return next;
+    });
+  };
 
   const pickPhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -154,9 +306,17 @@ export default function OnboardingScreen() {
       Alert.alert('Session error', 'Please go back and try again.');
       return;
     }
-    if (!fullName.trim()) { Alert.alert('Missing name', 'Please enter your full name.'); return; }
+    if (!firstNameValidation.valid) { setStep(1); markTouched('fullName'); return; }
     if (!birthdate || !gender || !interestedIn) { Alert.alert('Incomplete', 'Please complete step 2.'); return; }
     if (!location.country) { Alert.alert('Missing location', 'Please select your country.'); return; }
+    if (needsOriginCountry && !originLocation.country) { Alert.alert('Missing origin', 'Please select your origin country.'); return; }
+    if (!heightValidation.valid || !ethnicityValidation.valid) {
+      if (!heightValidation.valid) setStep(7);
+      else setStep(6);
+      markTouched('heightCm');
+      markTouched('ethnicity');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -183,16 +343,23 @@ export default function OnboardingScreen() {
         gender,
         interested_in: interestedIn,
         looking_for: lookingFor,
+        min_age_pref: minAgePref,
+        max_age_pref: maxAgePref,
         country: location.country || '',
         state: location.subdivision || null,
         city: location.city || null,
+        origin_country: originLocation.country || null,
+        origin_state: originLocation.subdivision || null,
+        origin_city: originLocation.city || null,
         religion: religion ?? null,
         education: education ?? null,
         marital_status: maritalStatus ?? null,
         ethnicity: ethnicity.trim() || null,
         occupation: occupation.trim() || null,
         height_cm: heightCm ? parseInt(heightCm, 10) : null,
-        languages: languages ? languages.split(',').map((l) => l.trim()).filter(Boolean) : [],
+        weight_kg: weightKg,
+        body_type: physicalCondition,
+        languages,
         has_children: hasChildren,
         want_children: wantChildren ?? null,
         avatar_url: avatarUrl,
@@ -214,12 +381,14 @@ export default function OnboardingScreen() {
   };
 
   const canProceed = () => {
-    if (step === 1) return fullName.trim().length >= 2;
+    if (step === 1) return firstNameValidation.valid;
     if (step === 2) return birthdate !== null && gender !== null && interestedIn !== null;
     if (step === 3) return lookingFor.length > 0;
     if (step === 4) return true;
     if (step === 5) return true;
-    if (step === 6) return !!location.country;
+    if (step === 6) return true;
+    if (step === 7) return heightValidation.valid;
+    if (step === 8) return !!location.country && (!needsOriginCountry || !!originLocation.country);
     return true;
   };
 
@@ -252,9 +421,6 @@ export default function OnboardingScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* ── Step hero ── */}
-          <View style={[s.stepHero, { backgroundColor: cur.bg }]}>
-            <Text style={{ fontSize: 40 }}>{cur.emoji}</Text>
-          </View>
           <Text style={s.stepTitle}>{cur.title}</Text>
           <Text style={s.stepSub}>{cur.subtitle}</Text>
 
@@ -264,10 +430,16 @@ export default function OnboardingScreen() {
           {step === 1 && (
             <Input
               value={fullName}
-              onChangeText={setFullName}
-              placeholder="e.g. Amara Osei"
+              onChangeText={(value) => {
+                setFullName(value);
+                if (!touched.fullName) markTouched('fullName');
+              }}
+              onBlur={() => markTouched('fullName')}
+              placeholder="e.g. Amara"
               autoCapitalize="words"
               leftIcon="person-outline"
+              validationState={getValidationState(Boolean(touched.fullName), firstNameValidation, Boolean(fullName.trim()))}
+              error={touched.fullName ? firstNameValidation.message : undefined}
               autoFocus
             />
           )}
@@ -292,7 +464,6 @@ export default function OnboardingScreen() {
               <View style={s.row}>
                 {INTEREST_OPTIONS.map((opt) => (
                   <Pressable key={opt.value} onPress={() => setInterestedIn(opt.value)} style={[s.bigChip, interestedIn === opt.value && s.chipOn]}>
-                    <Text style={{ fontSize: 26, marginBottom: 6 }}>{opt.emoji}</Text>
                     <Text style={[s.chipTxt, interestedIn === opt.value && s.chipTxtOn]}>{opt.label}</Text>
                   </Pressable>
                 ))}
@@ -309,7 +480,6 @@ export default function OnboardingScreen() {
                 const on = lookingFor.includes(opt.value as LookingFor);
                 return (
                   <Pressable key={opt.value} onPress={() => toggleLookingFor(opt.value as LookingFor)} style={[s.card, on && s.cardOn]}>
-                    <Text style={{ fontSize: 28 }}>{opt.emoji}</Text>
                     <View style={{ flex: 1 }}>
                       <Text style={[s.cardLabel, on && { color: COLORS.primary }]}>{opt.label}</Text>
                       <Text style={s.cardDesc}>{opt.desc}</Text>
@@ -320,14 +490,64 @@ export default function OnboardingScreen() {
                   </Pressable>
                 );
               })}
-              <Text style={s.hint}>You can pick more than one</Text>
             </View>
           )}
 
           {/* ════════════════════════════════════════
-              STEP 4 — Background (optional)
+              STEP 4 — Work & study
           ════════════════════════════════════════ */}
           {step === 4 && (
+            <View>
+              <SelectPicker
+                label="Highest Education"
+                placeholder="Select education level..."
+                options={EDUCATION_OPTIONS}
+                value={education}
+                onChange={(v) => setEducation(v as Education | null)}
+              />
+              <SelectPicker
+                label="Occupation"
+                placeholder="Select your occupation..."
+                options={OCCUPATION_OPTIONS as unknown as SelectOption[]}
+                value={occupation || null}
+                onChange={(value) => setOccupation(value ?? '')}
+              />
+            </View>
+          )}
+
+          {/* ════════════════════════════════════════
+              STEP 5 — Preferences
+          ════════════════════════════════════════ */}
+          {step === 5 && (
+            <View>
+              <AgeRangeSlider
+                label="Age range preference"
+                minValue={minAgePref}
+                maxValue={maxAgePref}
+                min={DEFAULT_MIN_AGE_PREFERENCE}
+                max={DEFAULT_MAX_AGE_PREFERENCE}
+                unit=""
+                horizontalPadding={32}
+                onChangeMin={setMinAgePref}
+                onChangeMax={setMaxAgePref}
+                onChangeRange={(min, max) => {
+                  setMinAgePref(min);
+                  setMaxAgePref(max);
+                }}
+              />
+              <ChipSelect
+                label="Marital Status"
+                options={MARITAL_STATUS_OPTIONS}
+                value={maritalStatus}
+                onSelect={(v) => setMaritalStatus(v as MaritalStatus | null)}
+              />
+            </View>
+          )}
+
+          {/* ════════════════════════════════════════
+              STEP 6 — Background (optional)
+          ════════════════════════════════════════ */}
+          {step === 6 && (
             <View>
               <SelectPicker
                 label="Religion"
@@ -336,91 +556,162 @@ export default function OnboardingScreen() {
                 value={religion}
                 onChange={(v) => setReligion(v as Religion | null)}
               />
-              <SelectPicker
-                label="Education"
-                placeholder="Highest level of education..."
-                options={EDUCATION_OPTIONS}
-                value={education}
-                onChange={(v) => setEducation(v as Education | null)}
-              />
-              <ChipSelect
-                label="Marital Status"
-                options={MARITAL_STATUS_OPTIONS}
-                value={maritalStatus}
-                onSelect={(v) => setMaritalStatus(v as MaritalStatus | null)}
-              />
-              <Input
-                label="Ethnicity"
-                value={ethnicity}
-                onChangeText={setEthnicity}
-                placeholder="e.g. Yoruba, Amhara, Zulu..."
-                leftIcon="people-outline"
-              />
-              <Input
-                label="Occupation"
-                value={occupation}
-                onChangeText={setOccupation}
-                placeholder="e.g. Engineer, Teacher, Doctor..."
-                leftIcon="briefcase-outline"
-              />
-              <Text style={[s.hint, { marginTop: 4 }]}>All fields on this step are optional</Text>
-            </View>
-          )}
-
-          {/* ════════════════════════════════════════
-              STEP 5 — Lifestyle (optional)
-          ════════════════════════════════════════ */}
-          {step === 5 && (
-            <View>
-              <Input
-                label="Height (cm)"
-                value={heightCm}
-                onChangeText={setHeightCm}
-                placeholder="e.g. 175"
-                keyboardType="numeric"
-                leftIcon="resize-outline"
-              />
-              <Input
-                label="Languages spoken"
-                value={languages}
-                onChangeText={setLanguages}
-                placeholder="e.g. English, Amharic, French"
-                leftIcon="chatbubbles-outline"
-              />
-              <Text style={s.hint}>Separate with commas</Text>
-
               <ChipSelect
                 label="Do you have children?"
                 options={[
-                  { value: 'true',  label: 'Yes', emoji: '👧' },
-                  { value: 'false', label: 'No',  emoji: '🚫' },
+                  { value: 'true',  label: 'Yes' },
+                  { value: 'false', label: 'No' },
                 ]}
                 value={hasChildren === null ? null : String(hasChildren)}
                 onSelect={(v) => setHasChildren(v === null ? null : v === 'true')}
               />
-
               <ChipSelect
                 label="Do you want children?"
-                options={WANT_CHILDREN_OPTIONS}
+                options={[
+                  { value: 'yes', label: 'Yes' },
+                  { value: 'no', label: 'No' },
+                ]}
                 value={wantChildren}
                 onSelect={(v) => setWantChildren(v as WantChildren | null)}
               />
-
-              <Text style={[s.hint, { marginTop: 4 }]}>All fields on this step are optional</Text>
             </View>
           )}
 
           {/* ════════════════════════════════════════
-              STEP 6 — Location
+              STEP 7 — Lifestyle (optional)
           ════════════════════════════════════════ */}
-          {step === 6 && (
-            <LocationPicker value={location} onChange={setLocation} />
+          {step === 7 && (
+            <View>
+              <SliderPicker
+                label="Height"
+                value={heightCm ? Number(heightCm) : 170}
+                min={120}
+                max={220}
+                unit="cm"
+                onChange={(value) => {
+                  setHeightCm(String(value));
+                  if (!touched.heightCm) markTouched('heightCm');
+                }}
+              />
+              {touched.heightCm && heightValidation.message ? (
+                <Text style={{ fontSize: 12, color: COLORS.error, marginTop: -10, marginBottom: 14 }}>
+                  {heightValidation.message}
+                </Text>
+              ) : null}
+              <SliderPicker
+                label="Weight"
+                value={weightKg}
+                min={35}
+                max={180}
+                unit="kg"
+                onChange={setWeightKg}
+              />
+              <SelectPicker
+                label="Body"
+                placeholder="Select body type..."
+                options={PHYSICAL_CONDITION_OPTIONS as unknown as SelectOption[]}
+                value={physicalCondition}
+                onChange={setPhysicalCondition}
+              />
+            </View>
           )}
 
           {/* ════════════════════════════════════════
-              STEP 7 — Photo
+              STEP 8 — Location
           ════════════════════════════════════════ */}
-          {step === 7 && (
+          {step === 8 && (
+            <View>
+              <LocationPicker value={location} onChange={handleLivingLocationChange} />
+
+
+              {needsOriginCountry && (
+                <>
+                  <SelectPicker
+                    label="Origin country"
+                    placeholder="Select your origin country"
+                    options={originCountryOptions}
+                    value={originLocation.countryCode ?? null}
+                    onChange={(countryCode) => {
+                      const selected = ALL_COUNTRIES.find((country) => country.code === countryCode);
+                      setOriginLocation(
+                        selected
+                          ? { country: selected.name, countryCode: selected.code, subdivision: '', city: '' }
+                          : {}
+                      );
+                      setEthnicity('');
+                      setLanguages([]);
+                    }}
+                    clearable
+                  />
+
+                  {originLocation.countryCode && AFRICAN_COUNTRY_CODES.has(originLocation.countryCode) && !originMatchesLivingCountry && (
+                    <LocationPicker
+                      value={originLocation}
+                      onChange={handleOriginLocationChange}
+                      showCountryField={false}
+                    />
+                  )}
+                </>
+              )}
+
+              {locationPathComplete && culturalLocation?.country && cultureEthnicityOptions ? (
+                <SelectPicker
+                  label="Ethnicity"
+                  placeholder={`Select your ethnicity in ${culturalLocation.country}`}
+                  options={cultureEthnicityOptions.all.map((option) => ({ value: option, label: option }))}
+                  value={ethnicity || null}
+                  onChange={(value) => setEthnicity(value ?? '')}
+                  clearable
+                />
+              ) : locationPathComplete && !cultureOptionsLoading ? (
+                <Input
+                  label="Ethnicity"
+                  value={ethnicity}
+                  onChangeText={(value) => {
+                    setEthnicity(value);
+                    if (!touched.ethnicity) markTouched('ethnicity');
+                  }}
+                  onBlur={() => markTouched('ethnicity')}
+                  placeholder="Enter your ethnicity"
+                  leftIcon="people-outline"
+                  validationState={getValidationState(Boolean(touched.ethnicity), ethnicityValidation, Boolean(ethnicity.trim()))}
+                  error={touched.ethnicity ? ethnicityValidation.message : undefined}
+                />
+              ) : null}
+
+              {locationPathComplete && culturalLocation?.country && cultureLanguageOptions ? (
+                <View style={{ marginBottom: 8 }}>
+                  <MultiChipSelect
+                    label="Suggested languages"
+                    options={suggestedLanguages}
+                    values={languages}
+                    onToggle={toggleLanguage}
+                  />
+                  <MultiChipSelect
+                    label={`All languages in ${culturalLocation.country}`}
+                    options={allLanguages.filter((language) => !suggestedLanguages.includes(language))}
+                    values={languages}
+                    onToggle={toggleLanguage}
+                  />
+                </View>
+              ) : locationPathComplete && !cultureOptionsLoading ? (
+                <Input
+                  label="Languages spoken"
+                  value={languages.join(', ')}
+                  onChangeText={(value) => {
+                    setLanguages(value.split(',').map((entry) => entry.trim()).filter(Boolean));
+                  }}
+                  placeholder="e.g. English, Amharic, French"
+                  leftIcon="chatbubbles-outline"
+                />
+              ) : null}
+            </View>
+          )}
+
+          {/* ════════════════════════════════════════
+              STEP 9 — Photo
+          ════════════════════════════════════════ */}
+          {step === 9 && (
             <View style={{ alignItems: 'center' }}>
               <TouchableOpacity onPress={pickPhoto} activeOpacity={0.9} style={s.photoBox}>
                 {photoUri ? (
@@ -457,7 +748,7 @@ export default function OnboardingScreen() {
               loading={loading}
               disabled={!canProceed()}
             />
-            {(step === 4 || step === 5) && (
+            {(step === 6 || step === 7) && (
               <Button title="Skip for now" variant="ghost" onPress={() => setStep(step + 1)} fullWidth />
             )}
             {step === TOTAL_STEPS && !photoUri && (
@@ -476,22 +767,21 @@ const s = StyleSheet.create({
   counter:    { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
   track:      { height: 5, backgroundColor: COLORS.border, marginHorizontal: 20, borderRadius: 3, marginBottom: 8 },
   fill:       { height: 5, backgroundColor: COLORS.primary, borderRadius: 3 },
-  stepHero:   { width: 72, height: 72, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 16, alignSelf: 'center' },
   stepTitle:  { fontSize: 24, fontWeight: '800', color: COLORS.text, textAlign: 'center', marginBottom: 6 },
   stepSub:    { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 28 },
   label:      { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 10 },
   row:        { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   chip:       { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF' },
   bigChip:    { flex: 1, paddingVertical: 16, borderRadius: 14, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF', alignItems: 'center' },
-  chipOn:     { borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}12` },
+  chipOn:     { borderColor: ACTIVE_COLOR, backgroundColor: `${ACTIVE_COLOR}12` },
   chipTxt:    { fontSize: 14, color: COLORS.textSecondary, fontWeight: '500' },
-  chipTxtOn:  { color: COLORS.primary, fontWeight: '700' },
-  card:       { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF', gap: 14 },
-  cardOn:     { borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08` },
-  cardLabel:  { fontSize: 16, fontWeight: '700', color: COLORS.text },
-  cardDesc:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  checkCircle:  { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
-  checkCircleOn:{ borderColor: COLORS.primary, backgroundColor: COLORS.primary },
+  chipTxtOn:  { color: ACTIVE_COLOR, fontWeight: '700' },
+  card:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF', gap: 12 },
+  cardOn:     { borderColor: ACTIVE_COLOR, backgroundColor: `${ACTIVE_COLOR}10` },
+  cardLabel:  { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  cardDesc:   { fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 16 },
+  checkCircle:  { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
+  checkCircleOn:{ borderColor: ACTIVE_COLOR, backgroundColor: ACTIVE_COLOR },
   hint:       { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
   photoBox:   { width: width * 0.6, height: width * 0.75, borderRadius: 28, backgroundColor: COLORS.savanna, borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.earthLight, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
 });

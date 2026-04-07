@@ -19,21 +19,35 @@ import { useAuthStore } from '@/store/auth.store';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { COLORS } from '@/constants';
+import { getValidationState, validateEmail } from '@/lib/validation';
 
 export default function LoginScreen() {
   const { fetchProfile, fetchSettings, profileExists } = useAuthStore();
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  const [touched, setTouched] = useState<{ email: boolean; password: boolean }>({
+    email: false,
+    password: false,
+  });
   const [loading, setLoading]   = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const emailValidation = validateEmail(email);
+  const passwordValidation = password
+    ? { valid: true as const }
+    : { valid: false as const, message: 'Password is required.' };
+  const normalizedEmail = email.trim().toLowerCase();
+  const showEmailState = touched.email || attemptedSubmit;
+  const showPasswordState = touched.password || attemptedSubmit;
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Missing fields', 'Please enter your email and password.');
+    setAttemptedSubmit(true);
+    setTouched({ email: true, password: true });
+    if (!emailValidation.valid || !passwordValidation.valid) {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     setLoading(false);
     if (error) {
       Alert.alert('Sign In Failed', error.message);
@@ -73,82 +87,98 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F3EE' }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24 }} keyboardShouldPersistTaps="handled">
-
-          <TouchableOpacity onPress={() => router.back()} style={{ marginBottom: 32 }}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, paddingBottom: 36 }} keyboardShouldPersistTaps="handled">
+          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+            <Ionicons name="arrow-back" size={20} color={COLORS.text} />
           </TouchableOpacity>
 
-          <Text style={s.title}>Welcome back 👋</Text>
-          <Text style={s.subtitle}>Sign in to continue your journey</Text>
-
-          {/* ── Google ── */}
-          <TouchableOpacity style={s.googleBtn} onPress={handleGoogle} disabled={googleLoading} activeOpacity={0.85}>
-            {googleLoading ? (
-              <ActivityIndicator size="small" color="#4285F4" />
-            ) : (
-              <>
-                <Text style={{ fontSize: 22, fontWeight: '900', color: '#4285F4' }}>G</Text>
-                <Text style={s.googleBtnText}>Continue with Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          {/* ── OR divider ── */}
-          <View style={s.divider}>
-            <View style={s.dividerLine} />
-            <Text style={s.dividerText}>or</Text>
-            <View style={s.dividerLine} />
-          </View>
-
-          {/* ── Email toggle ── */}
-          {!showEmailForm ? (
-            <TouchableOpacity style={s.emailBtn} onPress={() => setShowEmailForm(true)} activeOpacity={0.85}>
-              <Ionicons name="mail-outline" size={20} color="#FFF" />
-              <Text style={s.emailBtnText}>Continue with Email</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={s.emailForm}>
-              <Input
-                label="Email"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                leftIcon="mail-outline"
-                placeholder="your@email.com"
-                autoFocus
-              />
-              <Input
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                isPassword
-                leftIcon="lock-closed-outline"
-                placeholder="Your password"
-              />
-              <TouchableOpacity
-                style={{ alignSelf: 'flex-end', marginTop: -8, marginBottom: 20 }}
-                onPress={handleForgotPassword}
-              >
-                <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 14 }}>
-                  Forgot password?
-                </Text>
-              </TouchableOpacity>
-              <Button title="Sign In" onPress={handleLogin} loading={loading} fullWidth size="lg" />
+          <View style={s.hero}>
+            <View style={s.heroBadge}>
+              <Text style={s.heroBadgeText}>Africana</Text>
             </View>
-          )}
-
-          {/* ── Sign up link ── */}
-          <View style={s.signupRow}>
-            <Text style={{ color: COLORS.textSecondary, fontSize: 14 }}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('/(auth)/welcome')}>
-              <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 14 }}>Sign Up</Text>
-            </TouchableOpacity>
+            <Text style={s.title}>Welcome back</Text>
+            <Text style={s.subtitle}>Sign in to continue where you left off.</Text>
           </View>
 
+          <View style={s.panel}>
+            <Text style={s.panelTitle}>Sign in</Text>
+            <Text style={s.panelSub}>Choose the fastest way back into your account.</Text>
+
+            <TouchableOpacity style={s.googleBtn} onPress={handleGoogle} disabled={googleLoading} activeOpacity={0.85}>
+              {googleLoading ? (
+                <ActivityIndicator size="small" color="#4285F4" />
+              ) : (
+                <>
+                  <Text style={{ fontSize: 22, fontWeight: '900', color: '#4285F4' }}>G</Text>
+                  <Text style={s.googleBtnText}>Continue with Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <View style={s.divider}>
+              <View style={s.dividerLine} />
+              <Text style={s.dividerText}>or</Text>
+              <View style={s.dividerLine} />
+            </View>
+
+            {!showEmailForm ? (
+              <TouchableOpacity style={s.emailBtn} onPress={() => setShowEmailForm(true)} activeOpacity={0.85}>
+                <Ionicons name="mail-outline" size={20} color="#FFF" />
+                <Text style={s.emailBtnText}>Continue with Email</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={s.emailForm}>
+                <Input
+                  label="Email"
+                  value={email}
+                  onChangeText={(value) => {
+                    setEmail(value);
+                    if (!touched.email) setTouched((current) => ({ ...current, email: true }));
+                  }}
+                  onBlur={() => setTouched((current) => ({ ...current, email: true }))}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  leftIcon="mail-outline"
+                  placeholder="your@email.com"
+                  validationState={getValidationState(showEmailState, emailValidation, Boolean(normalizedEmail))}
+                  error={showEmailState ? emailValidation.message : undefined}
+                  autoFocus
+                />
+                <Input
+                  label="Password"
+                  value={password}
+                  onChangeText={(value) => {
+                    setPassword(value);
+                    if (!touched.password) setTouched((current) => ({ ...current, password: true }));
+                  }}
+                  onBlur={() => setTouched((current) => ({ ...current, password: true }))}
+                  isPassword
+                  leftIcon="lock-closed-outline"
+                  placeholder="Your password"
+                  validationState={getValidationState(showPasswordState, passwordValidation, Boolean(password))}
+                  error={showPasswordState ? passwordValidation.message : undefined}
+                />
+                <TouchableOpacity
+                  style={{ alignSelf: 'flex-end', marginTop: -8, marginBottom: 20 }}
+                  onPress={handleForgotPassword}
+                >
+                  <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 14 }}>
+                    Forgot password?
+                  </Text>
+                </TouchableOpacity>
+                <Button title="Sign In" onPress={handleLogin} loading={loading} fullWidth size="lg" />
+              </View>
+            )}
+
+            <View style={s.signupRow}>
+              <Text style={{ color: COLORS.textSecondary, fontSize: 14 }}>Don't have an account? </Text>
+              <TouchableOpacity onPress={() => router.push('/(auth)/welcome')}>
+                <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 14 }}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -156,8 +186,40 @@ export default function LoginScreen() {
 }
 
 const s = StyleSheet.create({
-  title:    { fontSize: 32, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
-  subtitle: { fontSize: 15, color: COLORS.textSecondary, marginBottom: 32 },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 22,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  hero: { marginBottom: 20 },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: '#FFF1E8',
+    borderWidth: 1,
+    borderColor: '#F2D9C8',
+    marginBottom: 14,
+  },
+  heroBadgeText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
+  title: { fontSize: 32, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
+  subtitle: { fontSize: 15, color: COLORS.textSecondary, lineHeight: 22 },
+  panel: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  panelTitle: { fontSize: 20, fontWeight: '800', color: COLORS.text },
+  panelSub: { fontSize: 14, color: COLORS.textSecondary, marginTop: 4, marginBottom: 20, lineHeight: 21 },
   googleBtn: {
     flexDirection: 'row',
     alignItems: 'center',

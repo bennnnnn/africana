@@ -14,7 +14,6 @@ import {
   StyleSheet,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +21,6 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { useDiscoverStore } from '@/store/discover.store';
-import { Avatar } from '@/components/ui/Avatar';
 import { User } from '@/types';
 import { COLORS } from '@/constants';
 import { MOCK_USERS } from '@/lib/mock-data';
@@ -32,6 +30,8 @@ import isYesterday from 'dayjs/plugin/isYesterday';
 
 dayjs.extend(isToday);
 dayjs.extend(isYesterday);
+
+const REPORT_REASONS = ['Fake profile', 'Scam', 'Harassment', 'Nudity', 'Underage', 'Other'] as const;
 
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
@@ -46,6 +46,10 @@ export default function ChatScreen() {
   const [messagingDisabled, setMessagingDisabled] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [isFavourite, setIsFavourite] = useState(false);
+  const [reportPromptVisible, setReportPromptVisible] = useState(false);
+  const [selectedReportReason, setSelectedReportReason] = useState<typeof REPORT_REASONS[number] | null>(null);
+  const [reportValidationVisible, setReportValidationVisible] = useState(false);
+  const [blockPromptVisible, setBlockPromptVisible] = useState(false);
   const menuAnim = useRef(new Animated.Value(0)).current;
   const [ctxMessage, setCtxMessage] = useState<{ id: string; content: string; isOwn: boolean } | null>(null);
   const ctxAnim = useRef(new Animated.Value(0)).current;
@@ -200,61 +204,41 @@ export default function ChatScreen() {
   const handleReport = () => {
     closeMenu();
     if (!user || !otherUser) return;
-    const reasons = [
-      'Fake profile / impersonation',
-      'Inappropriate content',
-      'Harassment or abuse',
-      'Spam or scam',
-      'Underage user',
-      'Other',
-    ];
-    setTimeout(() => {
-      Alert.alert(
-        `Report ${otherUser.full_name}`,
-        'Why are you reporting this conversation?',
-        [
-          ...reasons.map((reason) => ({
-            text: reason,
-            onPress: async () => {
-              await supabase.from('reports').insert({
-                reporter_id: user.id,
-                reported_id: otherUser.id,
-                reason,
-              });
-              Alert.alert('Report submitted', 'Thank you. Our team will review this within 24 hours.');
-            },
-          })),
-          { text: 'Cancel', style: 'cancel' },
-        ],
-      );
-    }, 200);
+    setSelectedReportReason(null);
+    setReportValidationVisible(false);
+    setTimeout(() => setReportPromptVisible(true), 120);
   };
 
   const handleBlock = () => {
     closeMenu();
     if (!user || !otherUser) return;
-    setTimeout(() => {
-      Alert.alert(
-        'Block User',
-        `Block ${otherUser.full_name}? They won't be able to message or see your profile.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Block',
-            style: 'destructive',
-            onPress: async () => {
-              await supabase.from('blocks').insert({
-                blocker_id: user.id,
-                blocked_id: otherUser.id,
-              });
-              Alert.alert('Blocked', `${otherUser.full_name} has been blocked.`, [
-                { text: 'OK', onPress: () => router.back() },
-              ]);
-            },
-          },
-        ],
-      );
-    }, 200);
+    setTimeout(() => setBlockPromptVisible(true), 120);
+  };
+
+  const submitReport = async () => {
+    if (!user || !otherUser) return;
+    if (!selectedReportReason) {
+      setReportValidationVisible(true);
+      return;
+    }
+    await supabase.from('reports').insert({
+      reporter_id: user.id,
+      reported_id: otherUser.id,
+      reason: selectedReportReason,
+    });
+    setReportPromptVisible(false);
+    setSelectedReportReason(null);
+    setReportValidationVisible(false);
+  };
+
+  const confirmBlockUser = async () => {
+    if (!user || !otherUser) return;
+    await supabase.from('blocks').insert({
+      blocker_id: user.id,
+      blocked_id: otherUser.id,
+    });
+    setBlockPromptVisible(false);
+    router.back();
   };
 
   const openCtx = (id: string, content: string, isOwn: boolean) => {
@@ -326,13 +310,6 @@ export default function ChatScreen() {
             onPress={() => router.push(`/(profile)/${otherUser.id}`)}
             style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
           >
-            <Avatar
-              uri={otherUser.avatar_url}
-              name={otherUser.full_name}
-              size={42}
-              onlineStatus={otherUser.online_status}
-              showStatus
-            />
             <View>
               <Text style={{ fontSize: 16, fontWeight: '700', color: COLORS.text }}>
                 {otherUser.full_name}
@@ -372,40 +349,34 @@ export default function ChatScreen() {
           >
             {/* Like */}
             <TouchableOpacity style={s.menuItem} onPress={handleLike}>
-              <View style={[s.menuIcon, { backgroundColor: isLiked ? `${COLORS.primary}18` : '#FFF0F0' }]}>
-                <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={17} color={COLORS.primary} />
+              <View style={s.menuIcon}>
+                <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={17} color="#111111" />
               </View>
               <Text style={s.menuLabel}>{isLiked ? 'Unlike' : 'Like'}</Text>
             </TouchableOpacity>
 
-            <View style={s.menuDivider} />
-
             {/* Favourite */}
             <TouchableOpacity style={s.menuItem} onPress={handleFavourite}>
-              <View style={[s.menuIcon, { backgroundColor: isFavourite ? '#FFF8E1' : '#FFFDE7' }]}>
-                <Ionicons name={isFavourite ? 'star' : 'star-outline'} size={17} color={COLORS.gold} />
+              <View style={s.menuIcon}>
+                <Ionicons name={isFavourite ? 'star' : 'star-outline'} size={17} color="#111111" />
               </View>
               <Text style={s.menuLabel}>{isFavourite ? 'Unfavourite' : 'Favourite'}</Text>
             </TouchableOpacity>
 
-            <View style={s.menuDivider} />
-
             {/* Report */}
             <TouchableOpacity style={s.menuItem} onPress={handleReport}>
-              <View style={[s.menuIcon, { backgroundColor: '#FFF3E0' }]}>
-                <Ionicons name="flag-outline" size={17} color={COLORS.warning} />
+              <View style={s.menuIcon}>
+                <Ionicons name="flag-outline" size={17} color="#111111" />
               </View>
               <Text style={s.menuLabel}>Report</Text>
             </TouchableOpacity>
 
-            <View style={s.menuDivider} />
-
             {/* Block */}
             <TouchableOpacity style={s.menuItem} onPress={handleBlock}>
-              <View style={[s.menuIcon, { backgroundColor: '#FEE2E2' }]}>
-                <Ionicons name="ban-outline" size={17} color={COLORS.error} />
+              <View style={s.menuIcon}>
+                <Ionicons name="ban-outline" size={17} color="#111111" />
               </View>
-              <Text style={[s.menuLabel, { color: COLORS.error }]}>Block</Text>
+              <Text style={s.menuLabel}>Block</Text>
             </TouchableOpacity>
           </Animated.View>
         </Modal>
@@ -502,31 +473,11 @@ export default function ChatScreen() {
                   </View>
                 )}
                 {isOwn ? (
-                  <Swipeable
-                    renderLeftActions={() => (
-                      <TouchableOpacity
-                        onPress={() => handleDeleteMessage(item.id)}
-                        style={s.swipeDelete}
-                      >
-                        <Ionicons name="trash" size={20} color="#FFF" />
-                        <Text style={{ color: '#FFF', fontSize: 11, marginTop: 2 }}>Delete</Text>
-                      </TouchableOpacity>
-                    )}
-                    leftThreshold={60}
-                    overshootLeft={false}
-                  >
-                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 6 }}>
-                      {bubble}
-                    </View>
-                  </Swipeable>
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 6 }}>
+                    {bubble}
+                  </View>
                 ) : (
                   <View style={{ flexDirection: 'row', justifyContent: 'flex-start', marginBottom: 6 }}>
-                    <Avatar
-                      uri={otherUser?.avatar_url}
-                      name={otherUser?.full_name ?? '?'}
-                      size={28}
-                      style={{ marginRight: 8, marginTop: 4 }}
-                    />
                     {bubble}
                   </View>
                 )}
@@ -607,6 +558,150 @@ export default function ChatScreen() {
       </KeyboardAvoidingView>
 
       {/* Long-press context sheet */}
+      <Modal
+        visible={reportPromptVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setReportPromptVisible(false);
+          setReportValidationVisible(false);
+        }}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(17,17,17,0.34)', justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22 }}>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', lineHeight: 27 }}>
+              Reason reporting {otherUser?.full_name}
+            </Text>
+            <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 22, color: '#555555' }}>
+              Select one reason before submitting your report.
+            </Text>
+            <View style={{ marginTop: 18, gap: 10 }}>
+              {REPORT_REASONS.map((reason) => {
+                const selected = selectedReportReason === reason;
+                return (
+                  <TouchableOpacity
+                    key={reason}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setSelectedReportReason(reason);
+                      setReportValidationVisible(false);
+                    }}
+                    style={{
+                      minHeight: 50,
+                      borderRadius: 16,
+                      paddingHorizontal: 14,
+                      paddingVertical: 13,
+                      backgroundColor: selected ? '#FFF5F1' : '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: selected ? COLORS.primary : '#E7E1DC',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>{reason}</Text>
+                    {selected ? <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {reportValidationVisible ? (
+              <View style={{ marginTop: 12, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#FFF7E8' }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#A06A00' }}>Select a reason</Text>
+              </View>
+            ) : null}
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => {
+                  setReportPromptVisible(false);
+                  setReportValidationVisible(false);
+                }}
+                style={{
+                  flex: 1,
+                  minHeight: 50,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: '#E7E1DC',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => void submitReport()}
+                style={{
+                  flex: 1,
+                  minHeight: 50,
+                  borderRadius: 16,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#111111',
+                  flexDirection: 'row',
+                  gap: 8,
+                }}
+              >
+                <Ionicons name="flag-outline" size={17} color="#FFFFFF" />
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Report</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={blockPromptVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBlockPromptVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(17,17,17,0.34)', justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22 }}>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', lineHeight: 27 }}>
+              Block user
+            </Text>
+            <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 22, color: '#555555' }}>
+              Block {otherUser?.full_name}?
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setBlockPromptVisible(false)}
+                style={{
+                  flex: 1,
+                  minHeight: 50,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: '#E7E1DC',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => void confirmBlockUser()}
+                style={{
+                  flex: 1,
+                  minHeight: 50,
+                  borderRadius: 16,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#111111',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Block</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {ctxMessage && (
         <Modal transparent animationType="none" onRequestClose={closeCtx}>
           <TouchableOpacity style={s.ctxBackdrop} activeOpacity={1} onPress={closeCtx} />
@@ -697,6 +792,7 @@ const s = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -704,20 +800,6 @@ const s = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: COLORS.text,
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginHorizontal: 14,
-  },
-  swipeDelete: {
-    backgroundColor: '#E53E3E',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 72,
-    marginBottom: 6,
-    borderRadius: 12,
-    marginLeft: 6,
   },
   ctxBackdrop: {
     position: 'absolute',
