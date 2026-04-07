@@ -26,7 +26,7 @@ async function setOnlineStatus(userId: string, status: 'online' | 'offline') {
 }
 
 export default function RootLayout() {
-  const { setSession, fetchProfile, fetchSettings, profileExists } = useAuthStore();
+  const { setSession, fetchProfile, fetchSettings, profileExists, setInitialized } = useAuthStore();
   const router = useRouter();
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const notifResponseSub = useRef<any>(null);
@@ -41,10 +41,11 @@ export default function RootLayout() {
           if (settings?.show_online_status !== false) {
             setOnlineStatus(session.user.id, 'online');
           }
-          // Register for push notifications
           registerForPushNotifications(session.user.id);
         });
       }
+      // Mark auth as resolved — index.tsx waits for this before routing
+      setInitialized();
       SplashScreen.hideAsync();
     });
 

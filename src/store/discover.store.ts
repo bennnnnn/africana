@@ -21,8 +21,10 @@ interface DiscoverState {
   setFilters: (filters: Partial<FilterOptions>) => void;
   resetFilters: () => void;
   fetchUsers: (userId: string, interestedIn?: InterestedIn, reset?: boolean) => Promise<void>;
-  toggleLike: (fromUserId: string, toUserId: string) => Promise<boolean>; // returns true if it's a mutual match
+  toggleLike: (fromUserId: string, toUserId: string) => Promise<boolean>;
   fetchLikedUserIds: (userId: string) => Promise<void>;
+  subscribeToOnlineStatus: () => void;
+  unsubscribeFromOnlineStatus: () => void;
 }
 
 const DEFAULT_FILTERS: FilterOptions = {
@@ -37,6 +39,10 @@ const DEFAULT_FILTERS: FilterOptions = {
 };
 
 const PAGE_SIZE = 10;
+
+// Channel ref lives outside Zustand (not serialisable)
+let _realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+let _subscribed = false;
 
 export const useDiscoverStore = create<DiscoverState>((set, get) => ({
   users: [],
@@ -166,6 +172,37 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     }
   },
 
+  subscribeToOnlineStatus: () => {
+    if (_subscribed) return;
+    _subscribed = true;
+    _realtimeChannel = supabase
+      .channel('discover-online-status')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        (payload) => {
+          const updated = payload.new as { id?: string; online_status?: string; last_seen?: string };
+          if (!updated?.id) return;
+          set((state) => ({
+            users: state.users.map((u) =>
+              u.id === updated.id
+                ? { ...u, online_status: (updated.online_status ?? u.online_status) as any, last_seen: updated.last_seen ?? u.last_seen }
+                : u
+            ),
+          }));
+        },
+      )
+      .subscribe();
+  },
+
+  unsubscribeFromOnlineStatus: () => {
+    if (_realtimeChannel) {
+      supabase.removeChannel(_realtimeChannel);
+      _realtimeChannel = null;
+    }
+    _subscribed = false;
+  },
+
   toggleLike: async (fromUserId, toUserId) => {
     const { likedUserIds } = get();
     const isLiked = likedUserIds.has(toUserId);
@@ -200,7 +237,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         .select('id')
         .eq('from_user_id', toUserId)
         .eq('to_user_id', fromUserId)
-        .single();
+        .maybeSingle();
 
       const isMatch = !!mutual;
 

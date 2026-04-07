@@ -8,9 +8,12 @@ interface AuthState {
   user: User | null;
   settings: UserSettings | null;
   isLoading: boolean;
+  /** true once the initial getSession() call has resolved — prevents premature logout on restart */
+  isInitialized: boolean;
   setSession: (session: Session | null) => void;
   setUser: (user: User | null) => void;
   setSettings: (settings: UserSettings | null) => void;
+  setInitialized: () => void;
   fetchProfile: (userId: string) => Promise<void>;
   fetchSettings: (userId: string) => Promise<void>;
   profileExists: (userId: string) => Promise<boolean>;
@@ -24,10 +27,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   settings: null,
   isLoading: false,
+  isInitialized: false,
 
   setSession: (session) => set({ session }),
   setUser: (user) => set({ user }),
   setSettings: (settings) => set({ settings }),
+  setInitialized: () => set({ isInitialized: true }),
 
   fetchProfile: async (userId) => {
     const { data, error } = await supabase
@@ -43,7 +48,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         ? today.getFullYear() - bday.getFullYear()
           - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
         : undefined;
-      set({ user: { ...data, age, profile_photos: data.profile_photos ?? [], languages: data.languages ?? [] } });
+      set({ user: { ...data, age, profile_photos: data.profile_photos ?? [], languages: data.languages ?? [], hobbies: data.hobbies ?? [] } });
     }
   },
 
@@ -101,7 +106,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (error) throw new Error(error.message);
     if (data) {
-      set({ user: { ...user, ...data, profile_photos: data.profile_photos ?? [], languages: data.languages ?? [] } });
+      set({ user: { ...user, ...data, profile_photos: data.profile_photos ?? [], languages: data.languages ?? [], hobbies: data.hobbies ?? [] } });
     }
   },
 

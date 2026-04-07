@@ -29,6 +29,11 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
       )
     );
 
+  // Keep a ref that always holds the latest computed values so PanResponder
+  // callbacks (created once) never operate on stale closure values.
+  const cv = useRef({ minCenter, maxCenter, minGapPos, toVal, onChange });
+  cv.current = { minCenter, maxCenter, minGapPos, toVal, onChange };
+
   const [positions, setPositions] = useState({ low: toCenter(low), high: toCenter(high) });
   const posRef = useRef({ low: toCenter(low), high: toCenter(high) });
   const startRef = useRef({ low: 0, high: 0 });
@@ -51,10 +56,11 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
         startRef.current.low = posRef.current.low;
       },
       onPanResponderMove: (_, gs) => {
-        const newLow = Math.max(minCenter, Math.min(startRef.current.low + gs.dx, posRef.current.high - minGapPos));
+        const { minCenter: mc, minGapPos: mgp, toVal: tv, onChange: oc } = cv.current;
+        const newLow = Math.max(mc, Math.min(startRef.current.low + gs.dx, posRef.current.high - mgp));
         posRef.current.low = newLow;
         setPositions({ low: newLow, high: posRef.current.high });
-        onChange(toVal(newLow), toVal(posRef.current.high));
+        oc(tv(newLow), tv(posRef.current.high));
       },
       onPanResponderRelease: () => {
         draggingRef.current = null;
@@ -74,10 +80,11 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
         startRef.current.high = posRef.current.high;
       },
       onPanResponderMove: (_, gs) => {
-        const newHigh = Math.max(posRef.current.low + minGapPos, Math.min(startRef.current.high + gs.dx, maxCenter));
+        const { maxCenter: xc, minGapPos: mgp, toVal: tv, onChange: oc } = cv.current;
+        const newHigh = Math.max(posRef.current.low + mgp, Math.min(startRef.current.high + gs.dx, xc));
         posRef.current.high = newHigh;
         setPositions({ low: posRef.current.low, high: newHigh });
-        onChange(toVal(posRef.current.low), toVal(newHigh));
+        oc(tv(posRef.current.low), tv(newHigh));
       },
       onPanResponderRelease: () => {
         draggingRef.current = null;

@@ -8,6 +8,7 @@ import {
   Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { User } from '@/types';
@@ -18,13 +19,14 @@ interface UserCardProps {
   isLiked: boolean;
   onLike: (userId: string) => void;
   onMessage: (userId: string) => void;
+  onOptions?: (userId: string) => void;
 }
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
 const CARD_HEIGHT = CARD_WIDTH * 1.45;
 
-export function UserCard({ user, isLiked, onLike, onMessage }: UserCardProps) {
+export function UserCard({ user, isLiked, onLike, onMessage, onOptions }: UserCardProps) {
   const avatar =
     user.profile_photos?.[0] ||
     user.avatar_url ||
@@ -93,7 +95,11 @@ export function UserCard({ user, isLiked, onLike, onMessage }: UserCardProps) {
       </TouchableOpacity>
 
       {/* Bottom gradient overlay */}
-      <View style={s.overlay}>
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.18)', 'rgba(0,0,0,0.76)']}
+        locations={[0, 0.42, 1]}
+        style={s.overlay}
+      >
         <Text style={s.name} numberOfLines={1}>
           {user.full_name}{user.age ? `, ${user.age}` : ''}
         </Text>
@@ -103,7 +109,18 @@ export function UserCard({ user, isLiked, onLike, onMessage }: UserCardProps) {
             <Text style={s.locationText} numberOfLines={1}>{shortLocation}</Text>
           </View>
         ) : null}
-      </View>
+      </LinearGradient>
+
+      {/* ⋮ Options button — bottom-right */}
+      {onOptions && (
+        <TouchableOpacity
+          onPress={(e) => { e.stopPropagation(); onOptions(user.id); }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={s.optionsBtn}
+        >
+          <Ionicons name="ellipsis-horizontal" size={14} color="rgba(255,255,255,0.9)" />
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
   );
 }
@@ -112,14 +129,14 @@ const s = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: 'hidden',
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 7,
     backgroundColor: COLORS.savanna,
   },
   onlineDotWrap: {
@@ -168,15 +185,17 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingBottom: 12,
     paddingTop: 44,
-    backgroundColor: 'rgba(0,0,0,0.44)',
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   name: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.1,
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   locationRow: {
     flexDirection: 'row',
@@ -187,5 +206,16 @@ const s = StyleSheet.create({
   locationText: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.82)',
+  },
+  optionsBtn: {
+    position: 'absolute',
+    bottom: 10,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(0,0,0,0.38)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

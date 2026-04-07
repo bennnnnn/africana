@@ -12,6 +12,7 @@ ALTER TABLE public.profiles
 -- ── New profile fields (added in latest update) ──────────────────────────────
 
 ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS bio             TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS religion        TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS education       TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS marital_status  TEXT DEFAULT NULL,
@@ -25,7 +26,8 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS occupation      TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS languages       TEXT[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS has_children    BOOLEAN DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS want_children   TEXT DEFAULT NULL;
+  ADD COLUMN IF NOT EXISTS want_children   TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS hobbies         TEXT[] DEFAULT '{}';
 
 -- ── Gender: only male/female ──────────────────────────────────────────────────
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_gender_check;

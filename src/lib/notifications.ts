@@ -4,6 +4,7 @@
  */
 
 import { Platform } from 'react-native';
+import * as Constants from 'expo-constants';
 import { supabase } from './supabase';
 
 // Lazy-load expo-notifications so Expo Go doesn't crash on import
@@ -71,7 +72,12 @@ export async function registerForPushNotifications(userId: string): Promise<void
 
     if (Platform.OS === 'android') await setupAndroidChannels();
 
-    const { data: token } = await Notifications.getExpoPushTokenAsync();
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      (Constants as any).easConfig?.projectId;
+    const { data: token } = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
 
     await supabase
       .from('user_settings')

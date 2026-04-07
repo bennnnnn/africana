@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,13 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  Animated,
+  StyleSheet,
   Dimensions,
   Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +25,7 @@ import { useChatStore } from '@/store/chat.store';
 import { useDiscoverStore } from '@/store/discover.store';
 import { User } from '@/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, DEFAULT_AVATAR, RELIGION_OPTIONS, EDUCATION_OPTIONS, MARITAL_STATUS_OPTIONS, LOOKING_FOR_OPTIONS, WANT_CHILDREN_OPTIONS } from '@/constants';
+import { COLORS, DEFAULT_AVATAR, GENDER_OPTIONS, INTERESTED_IN_OPTIONS, RELIGION_OPTIONS, EDUCATION_OPTIONS, MARITAL_STATUS_OPTIONS, LOOKING_FOR_OPTIONS, WANT_CHILDREN_YES_NO, OCCUPATION_OPTIONS, PHYSICAL_CONDITION_OPTIONS } from '@/constants';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
@@ -31,8 +34,27 @@ import { calculateAge, getEffectiveAgePreferenceRange } from '@/lib/utils';
 
 const { width } = Dimensions.get('window');
 
-const GENDER_LABEL: Record<string, string> = { male: 'Man', female: 'Woman' };
+const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female' };
 const REPORT_REASONS = ['Fake profile', 'Scam', 'Harassment', 'Nudity', 'Underage', 'Other'] as const;
+
+function ReadOnlyRow({ icon, label, value }: {
+  icon: keyof typeof Ionicons.glyphMap; label: string; value: string | null | undefined;
+}) {
+  const filled = !!value;
+  return (
+    <View style={pr.fieldRow}>
+      <View style={[pr.fieldIcon, !filled && pr.fieldIconEmpty]}>
+        <Ionicons name={icon} size={15} color={filled ? '#111' : '#CCC'} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={pr.fieldLabel}>{label}</Text>
+        <Text style={[pr.fieldValue, !filled && pr.fieldValueEmpty]}>
+          {value ?? '—'}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 type ProfileWithAgePrefs = User & { min_age_pref?: number | null; max_age_pref?: number | null };
 
@@ -52,14 +74,29 @@ export default function ProfileViewScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [matchUser, setMatchUser] = useState<User | null>(null);
+  const [isFavourite, setIsFavourite] = useState(false);
   const [compatibilityExpanded, setCompatibilityExpanded] = useState(false);
   const [reportPromptVisible, setReportPromptVisible] = useState(false);
   const [selectedReportReason, setSelectedReportReason] = useState<typeof REPORT_REASONS[number] | null>(null);
   const [reportValidationVisible, setReportValidationVisible] = useState(false);
   const [blockPromptVisible, setBlockPromptVisible] = useState(false);
 
+  // Toast
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const [toast, setToast] = useState<{ icon: string; msg: string } | null>(null);
+  const showToast = (icon: string, msg: string) => {
+    setToast({ icon, msg });
+    toastAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(toastAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.delay(1500),
+      Animated.timing(toastAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+    ]).start(() => setToast(null));
+  };
+
   useEffect(() => {
     setCompatibilityExpanded(false);
+    setIsFavourite(false);
     setReportPromptVisible(false);
     setSelectedReportReason(null);
     setReportValidationVisible(false);
@@ -120,6 +157,17 @@ export default function ProfileViewScreen() {
       });
   }, [id]);
 
+  useEffect(() => {
+    if (!currentUser || !profile || currentUser.id === profile.id) return;
+    supabase
+      .from('favourites')
+      .select('id')
+      .eq('user_id', currentUser.id)
+      .eq('favourited_id', profile.id)
+      .maybeSingle()
+      .then(({ data }) => setIsFavourite(!!data));
+  }, [currentUser?.id, profile?.id]);
+
   if (isLoading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -137,15 +185,13 @@ export default function ProfileViewScreen() {
     );
   }
 
-  const religionLabel = profile.religion
-    ? RELIGION_OPTIONS.find(r => r.value === profile.religion)?.label ?? profile.religion
-    : null;
-  const educationLabel = profile.education
-    ? EDUCATION_OPTIONS.find(e => e.value === profile.education)?.label ?? profile.education
-    : null;
-  const maritalLabel = profile.marital_status
-    ? MARITAL_STATUS_OPTIONS.find(m => m.value === profile.marital_status)?.label ?? profile.marital_status
-    : null;
+  const religionLabel    = profile.religion       ? RELIGION_OPTIONS.find(r => r.value === profile.religion)?.label            ?? profile.religion       : null;
+  const educationLabel   = profile.education      ? EDUCATION_OPTIONS.find(e => e.value === profile.education)?.label           ?? profile.education      : null;
+  const maritalLabel     = profile.marital_status ? MARITAL_STATUS_OPTIONS.find(m => m.value === profile.marital_status)?.label ?? profile.marital_status : null;
+  const wantChildLabel    = profile.want_children  ? WANT_CHILDREN_YES_NO.find(o => o.value === profile.want_children)?.label   ?? profile.want_children  : null;
+  const bodyTypeLabel    = profile.body_type      ? (PHYSICAL_CONDITION_OPTIONS as any[]).find(o => o.value === profile.body_type)?.label ?? profile.body_type : null;
+  const occupationLabel   = profile.occupation     ? (OCCUPATION_OPTIONS as any[]).find(o => o.value === profile.occupation)?.label ?? profile.occupation    : null;
+  const interestedInLabel = INTERESTED_IN_OPTIONS.find(o => o.value === profile.interested_in)?.label ?? null;
 
   const safePhotos = profile.profile_photos ?? [];
   const photos = safePhotos.length > 0
@@ -181,7 +227,7 @@ export default function ProfileViewScreen() {
     compatibilityCriteria.push({ key, label, viewerValue, matched });
   };
 
-  const LOOKING_SINGLE: Record<string, string> = { men: 'Man', women: 'Woman' };
+  const LOOKING_SINGLE: Record<string, string> = { men: 'Male', women: 'Female' };
   const theirLookingFor =
     p.interested_in === 'men' || p.interested_in === 'women' ? LOOKING_SINGLE[p.interested_in] : null;
   const genderPrefMatch =
@@ -236,10 +282,10 @@ export default function ProfileViewScreen() {
   );
 
   const viewerWantChildrenLabel = currentUser?.want_children
-    ? WANT_CHILDREN_OPTIONS.find((option) => option.value === currentUser.want_children)?.label ?? currentUser.want_children
+    ? WANT_CHILDREN_YES_NO.find((option) => option.value === currentUser.want_children)?.label ?? currentUser.want_children
     : null;
   const wantLabelRow = p.want_children
-    ? WANT_CHILDREN_OPTIONS.find((o) => o.value === p.want_children)?.label ?? p.want_children
+    ? WANT_CHILDREN_YES_NO.find((o) => o.value === p.want_children)?.label ?? p.want_children
     : '';
   pushCompatibility(
     'want_children',
@@ -281,6 +327,9 @@ export default function ProfileViewScreen() {
     const isMatch = await toggleLike(currentUser.id, profile.id);
     if (isMatch && !wasLiked) {
       setMatchUser(profile);
+      showToast('🔥', 'It’s a match!');
+    } else {
+      showToast(wasLiked ? '💔' : '❤️', wasLiked ? 'Unliked' : 'Liked!');
     }
   };
 
@@ -288,6 +337,25 @@ export default function ProfileViewScreen() {
     if (!currentUser) return;
     const convId = await getOrCreateConversation(currentUser.id, profile.id);
     if (convId) router.push(`/(chat)/${convId}`);
+  };
+
+  const handleFavourite = async () => {
+    if (!currentUser) return;
+    if (isFavourite) {
+      await supabase
+        .from('favourites')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('favourited_id', profile.id);
+      setIsFavourite(false);
+      showToast('⭐', 'Removed from favourites');
+    } else {
+      await supabase
+        .from('favourites')
+        .insert({ user_id: currentUser.id, favourited_id: profile.id });
+      setIsFavourite(true);
+      showToast('⭐', 'Added to favourites');
+    }
   };
 
   const handleBlock = () => {
@@ -307,7 +375,8 @@ export default function ProfileViewScreen() {
       blocked_id: profile.id,
     });
     setBlockPromptVisible(false);
-    router.back();
+    showToast('🚫', `${profile.full_name} blocked`);
+    setTimeout(() => router.back(), 1300);
   };
 
   const submitReport = async () => {
@@ -324,11 +393,30 @@ export default function ProfileViewScreen() {
     setReportPromptVisible(false);
     setSelectedReportReason(null);
     setReportValidationVisible(false);
+    showToast('🚩', 'Report submitted. Thank you.');
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      {/* Toast */}
+      {toast && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute', zIndex: 999,
+            top: 80, alignSelf: 'center',
+            flexDirection: 'row', alignItems: 'center', gap: 8,
+            backgroundColor: 'rgba(17,17,17,0.88)',
+            paddingHorizontal: 18, paddingVertical: 11, borderRadius: 30,
+            opacity: toastAnim,
+            transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }],
+          }}
+        >
+          <Text style={{ fontSize: 18 }}>{toast.icon}</Text>
+          <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600' }}>{toast.msg}</Text>
+        </Animated.View>
+      )}
+      <ScrollView showsVerticalScrollIndicator={false} bounces>
         {/* Photo Carousel */}
         <View style={{ position: 'relative', backgroundColor: '#000' }}>
           <ScrollView
@@ -348,6 +436,10 @@ export default function ProfileViewScreen() {
               />
             ))}
           </ScrollView>
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.60)']}
+            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%' }}
+          />
 
           {/* Photo dots */}
           {photos.length > 1 && (
@@ -418,86 +510,89 @@ export default function ProfileViewScreen() {
           </SafeAreaView>
         </View>
 
-        {/* Profile Info */}
-        <View style={{ padding: 20, backgroundColor: '#FFFFFF', marginBottom: 8 }}>
-          {/* Name + status inline */}
+        {/* Info card */}
+        <View style={pr.section}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <Text style={{ fontSize: 26, fontWeight: '800', color: COLORS.text }}>
+            <Text style={{ fontSize: 26, fontWeight: '800', color: '#111' }}>
               {profile.full_name}{profile.age ? `, ${profile.age}` : ''}
             </Text>
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 5,
-              backgroundColor:
-                profile.online_status === 'online' ? `${COLORS.online}20` : `${COLORS.offline}18`,
-              paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
-            }}>
-              <View style={{
-                width: 7, height: 7, borderRadius: 4,
-                backgroundColor:
-                  profile.online_status === 'online' ? COLORS.online : COLORS.offline,
-              }} />
-              <Text style={{
-                fontSize: 11, fontWeight: '600', textTransform: 'capitalize',
-                color: profile.online_status === 'online' ? COLORS.online : COLORS.textSecondary,
-              }}>
-                {profile.online_status === 'online'
-                  ? 'Online'
-                  : `Last seen ${formatLastSeen(profile.last_seen)}`}
+            <View style={[
+              pr.onlineBadge,
+              { backgroundColor: profile.online_status === 'online' ? `${COLORS.online}18` : `${COLORS.border}` },
+            ]}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: profile.online_status === 'online' ? COLORS.online : COLORS.textMuted }} />
+              <Text style={{ fontSize: 11, fontWeight: '600', color: profile.online_status === 'online' ? COLORS.online : COLORS.textSecondary }}>
+                {profile.online_status === 'online' ? 'Online' : `Last seen ${formatLastSeen(profile.last_seen)}`}
               </Text>
             </View>
           </View>
 
           {location ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }}>
-              <Ionicons name="location-outline" size={14} color={COLORS.primary} />
+              <Ionicons name="location-outline" size={14} color="#111" />
               <Text style={{ fontSize: 14, color: COLORS.textSecondary }}>{location}</Text>
             </View>
           ) : null}
 
           {profile.looking_for.length > 0 && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
-              {profile.looking_for.map((lf) => {
-                const label = LOOKING_FOR_OPTIONS.find((o) => o.value === lf)?.label ?? lf.replace('_', ' ');
-                return <Badge key={lf} label={label} variant="secondary" />;
-              })}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+              {profile.looking_for.map((lf) => (
+                <View key={lf} style={pr.badge}>
+                  <Text style={pr.badgeText}>{LOOKING_FOR_OPTIONS.find(o => o.value === lf)?.label ?? lf.replace('_', ' ')}</Text>
+                </View>
+              ))}
             </View>
           )}
 
-          {profile.bio && (
-            <View style={{ marginTop: 16 }}>
-              <Text style={detailSectionLabel}>About</Text>
-              <Text style={{ fontSize: 15, color: COLORS.text, lineHeight: 23 }}>{profile.bio}</Text>
+          {profile.bio ? (
+            <View style={{ marginTop: 14 }}>
+              <Text style={pr.sectionTitle}>About</Text>
+              <Text style={{ fontSize: 15, color: '#111', lineHeight: 23 }}>{profile.bio}</Text>
             </View>
-          )}
+          ) : null}
         </View>
 
-        {/* Details grid */}
-        <View style={{ backgroundColor: '#FFFFFF', padding: 20, marginBottom: 8 }}>
-          <Text style={detailSectionLabel}>Profile Details</Text>
-          <View style={{ gap: 2 }}>
-            {buildDetailRows(profile, religionLabel, educationLabel, maritalLabel).map((item, i) => (
-              <View key={i} style={detailRow}>
-                <View style={detailIconBox}>
-                  <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={16} color={COLORS.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={detailLabel}>{item.label}</Text>
-                  <Text style={detailValue}>{item.value}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
+        {/* Personal — ReadOnlyRow auto-hides null fields */}
+        <View style={pr.section}>
+          <Text style={pr.sectionTitle}>Personal</Text>
+          <ReadOnlyRow icon="person-outline"      label="Gender"         value={GENDER_LABEL[profile.gender] ?? profile.gender} />
+          <ReadOnlyRow icon="calendar-outline"    label="Age"            value={profile.age ? `${profile.age} years old` : null} />
+          <ReadOnlyRow icon="search-outline"      label="Interested in"  value={interestedInLabel} />
+          <ReadOnlyRow icon="location-outline"    label="Lives in"       value={location || null} />
+          <ReadOnlyRow icon="heart-outline"       label="Marital status" value={maritalLabel} />
+          <ReadOnlyRow icon="sunny-outline"       label="Religion"       value={religionLabel} />
+          <ReadOnlyRow icon="globe-outline"       label="Ethnicity"      value={profile.ethnicity ?? null} />
+          <ReadOnlyRow icon="chatbubbles-outline" label="Languages"      value={(profile.languages ?? []).join(', ') || null} />
         </View>
 
-        {/* Languages */}
-        {profile.languages && profile.languages.length > 0 && (
-          <View style={{ backgroundColor: '#FFFFFF', padding: 20, marginBottom: 8 }}>
-            <Text style={detailSectionLabel}>Languages</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {profile.languages.map((lang) => (
-                <View key={lang} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: COLORS.savanna }}>
-                  <Text style={{ fontSize: 13, color: COLORS.earth, fontWeight: '600' }}>{lang}</Text>
-                </View>
+        {/* Physical */}
+        <View style={pr.section}>
+          <Text style={pr.sectionTitle}>Physical</Text>
+          <ReadOnlyRow icon="resize-outline" label="Height"    value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null} />
+          <ReadOnlyRow icon="body-outline"   label="Body type" value={bodyTypeLabel} />
+        </View>
+
+        {/* Work & Education */}
+        <View style={pr.section}>
+          <Text style={pr.sectionTitle}>Work & Education</Text>
+          <ReadOnlyRow icon="briefcase-outline" label="Occupation" value={occupationLabel} />
+          <ReadOnlyRow icon="school-outline"    label="Education"  value={educationLabel} />
+        </View>
+
+        {/* Family */}
+        <View style={pr.section}>
+          <Text style={pr.sectionTitle}>Family</Text>
+          <ReadOnlyRow icon="people-outline" label="Children"      value={profile.has_children == null ? null : profile.has_children ? 'Has children' : 'No children'} />
+          <ReadOnlyRow icon="happy-outline"  label="Wants children" value={wantChildLabel} />
+        </View>
+
+        {/* Hobbies */}
+        {(profile.hobbies ?? []).length > 0 && (
+          <View style={pr.section}>
+            <Text style={pr.sectionTitle}>Hobbies & Interests</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4 }}>
+              {(profile.hobbies ?? []).map(h => (
+                <View key={h} style={pr.badge}><Text style={pr.badgeText}>{h}</Text></View>
               ))}
             </View>
           </View>
@@ -620,6 +715,21 @@ export default function ProfileViewScreen() {
             paddingBottom: Math.max(insets.bottom + 8, 20),
           }}
         >
+          <TouchableOpacity
+            onPress={handleFavourite}
+            style={{
+              width: 54,
+              height: 54,
+              borderRadius: 27,
+              borderWidth: 1.5,
+              borderColor: isFavourite ? COLORS.primary : COLORS.border,
+              backgroundColor: isFavourite ? `${COLORS.primary}12` : '#FFF',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name={isFavourite ? 'star' : 'star-outline'} size={24} color={isFavourite ? COLORS.primary : COLORS.textSecondary} />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={handleLike}
             style={{
@@ -810,50 +920,16 @@ function formatLastSeen(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-const INTERESTED_IN_LABEL: Record<string, string> = { men: 'Men', women: 'Women', everyone: 'Everyone' };
-
-function buildDetailRows(
-  p: User,
-  religionLabel: string | null,
-  educationLabel: string | null,
-  maritalLabel: string | null,
-) {
-  const rows: { icon: string; label: string; value: string }[] = [];
-  rows.push({ icon: 'person-outline',    label: 'Gender',       value: GENDER_LABEL[p.gender] ?? p.gender });
-  if (p.age)          rows.push({ icon: 'calendar-outline',  label: 'Age',          value: `${p.age} years old` });
-  if (maritalLabel)   rows.push({ icon: 'heart-outline',     label: 'Status',       value: maritalLabel });
-  if (p.height_cm)    rows.push({ icon: 'resize-outline',    label: 'Height',       value: `${p.height_cm} cm` });
-  if (religionLabel)  rows.push({ icon: 'sunny-outline',     label: 'Religion',     value: religionLabel });
-  if (educationLabel) rows.push({ icon: 'school-outline',    label: 'Education',    value: educationLabel });
-  if (p.occupation)   rows.push({ icon: 'briefcase-outline', label: 'Work',         value: p.occupation });
-  if (p.ethnicity)    rows.push({ icon: 'globe-outline',     label: 'Ethnicity',    value: p.ethnicity });
-  if (p.has_children != null)
-    rows.push({ icon: 'people-outline',  label: 'Children',    value: p.has_children ? 'Has children' : 'No children' });
-  if (p.want_children) {
-    const wantLabel = WANT_CHILDREN_OPTIONS.find((o) => o.value === p.want_children)?.label ?? p.want_children;
-    rows.push({ icon: 'happy-outline',   label: 'Wants children', value: wantLabel });
-  }
-  if (p.interested_in)
-    rows.push({ icon: 'search-outline',  label: 'Interested in', value: INTERESTED_IN_LABEL[p.interested_in] ?? p.interested_in });
-  return rows;
-}
-
-const detailSectionLabel: import('react-native').TextStyle = {
-  fontSize: 12, fontWeight: '700', color: COLORS.textSecondary,
-  textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 14,
-};
-const detailRow: import('react-native').ViewStyle = {
-  flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8,
-  borderBottomWidth: 1, borderBottomColor: COLORS.border,
-};
-const detailIconBox: import('react-native').ViewStyle = {
-  width: 34, height: 34, borderRadius: 10,
-  backgroundColor: `${COLORS.primary}12`,
-  alignItems: 'center', justifyContent: 'center',
-};
-const detailLabel: import('react-native').TextStyle = {
-  fontSize: 11, color: COLORS.textMuted, textTransform: 'capitalize',
-};
-const detailValue: import('react-native').TextStyle = {
-  fontSize: 14, color: COLORS.text, fontWeight: '600', textTransform: 'capitalize', marginTop: 1,
-};
+const pr = StyleSheet.create({
+  section:        { backgroundColor: '#FFF', marginBottom: 8, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12 },
+  sectionTitle:   { fontSize: 11, fontWeight: '800', color: COLORS.textSecondary, letterSpacing: 0.8, marginBottom: 10, textTransform: 'uppercase' },
+  onlineBadge:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  badge:          { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#F0F0F0', borderWidth: 1, borderColor: '#DDD' },
+  badgeText:      { fontSize: 13, color: '#111', fontWeight: '600' },
+  fieldRow:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  fieldIcon:      { width: 32, height: 32, borderRadius: 9, backgroundColor: '#F0F0F0', alignItems: 'center', justifyContent: 'center' },
+  fieldIconEmpty: { backgroundColor: '#FAFAFA' },
+  fieldLabel:     { fontSize: 11, color: COLORS.textSecondary, fontWeight: '500', marginBottom: 1 },
+  fieldValue:     { fontSize: 14, color: '#111', fontWeight: '600' },
+  fieldValueEmpty:{ fontSize: 14, color: '#CCC', fontWeight: '400', fontStyle: 'italic' },
+});

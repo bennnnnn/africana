@@ -1,13 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  StyleSheet,
+  View, Text, FlatList, TouchableOpacity,
+  ActivityIndicator, RefreshControl, StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -21,56 +15,242 @@ import { COLORS, DEFAULT_AVATAR } from '@/constants';
 import { MOCK_USERS } from '@/lib/mock-data';
 import { EmptyState } from '@/components/ui/EmptyState';
 
-type Tab = 'received' | 'sent';
+type Tab = 'matches' | 'received' | 'sent' | 'viewers' | 'favourites';
+
+const PAGE_SIZE = 20;
+
+const TABS: { key: Tab; icon: string; activeIcon: string }[] = [
+  { key: 'matches',    icon: 'flame-outline',       activeIcon: 'flame'        },
+  { key: 'received',   icon: 'heart-outline',        activeIcon: 'heart'        },
+  { key: 'sent',       icon: 'paper-plane-outline',  activeIcon: 'paper-plane'  },
+  { key: 'viewers',    icon: 'eye-outline',           activeIcon: 'eye'          },
+  { key: 'favourites', icon: 'star-outline',          activeIcon: 'star'         },
+];
 
 export default function LikesScreen() {
   const { user } = useAuthStore();
   const { getOrCreateConversation } = useChatStore();
-  const [tab, setTab] = useState<Tab>('received');
-  const [receivedLikes, setReceivedLikes] = useState<User[]>([]);
-  const [sentLikes, setSentLikes] = useState<User[]>([]);
-  const [matches, setMatches] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>('matches');
+  const [lists, setLists] = useState<Record<Tab, User[]>>({
+    matches: [],
+    received: [],
+    sent: [],
+    viewers: [],
+    favourites: [],
+  });
+  const [loadedTabs, setLoadedTabs] = useState<Record<Tab, boolean>>({
+    matches: false,
+    received: false,
+    sent: false,
+    viewers: false,
+    favourites: false,
+  });
+  const [counts, setCounts] = useState<Record<Tab, number>>({
+    matches: 0,
+    received: 0,
+    sent: 0,
+    viewers: 0,
+    favourites: 0,
+  });
+  const [loadingTabs, setLoadingTabs] = useState<Record<Tab, boolean>>({
+    matches: false,
+    received: false,
+    sent: false,
+    viewers: false,
+    favourites: false,
+  });
   const [refreshing, setRefreshing] = useState(false);
+  const [pages, setPages] = useState<Record<Tab, number>>({
+    matches: 0, received: 0, sent: 0, viewers: 0, favourites: 0,
+  });
+  const [hasMoreByTab, setHasMoreByTab] = useState<Record<Tab, boolean>>({
+    matches: true, received: true, sent: true, viewers: true, favourites: true,
+  });
+  const blockedIdsRef = useRef<Set<string> | null>(null);
 
-  const fetchLikes = useCallback(async () => {
-    if (!user) return;
+  const profileSelect = 'id, full_name, birthdate, city, country, avatar_url, profile_photos, online_status';
 
-    const [{ data: received }, { data: sent }] = await Promise.all([
-      supabase
-        .from('likes')
-        .select('from_user:profiles!from_user_id(*)')
-        .eq('to_user_id', user.id)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('likes')
-        .select('to_user:profiles!to_user_id(*)')
-        .eq('from_user_id', user.id)
-        .order('created_at', { ascending: false }),
-    ]);
+  const fetchBlockedSet = useCallback(async (force = false) => {
+    if (!user) return new Set<string>();
+    if (!force && blockedIdsRef.current) return blockedIdsRef.current;
+    const { data: blocksData } = await supabase
+      .from('blocks')
+      .select('blocked_id, blocker_id')
+      .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
 
-    const receivedList: User[] = received
-      ? received.map((r: any) => r.from_user as User).filter(Boolean)
-      : [];
-    const sentList: User[] = sent
-      ? sent.map((s: any) => s.to_user as User).filter(Boolean)
-      : [];
-
-    const sentIds = new Set(sentList.map((u) => u.id));
-    const mutualMatches = receivedList.filter((u) => sentIds.has(u.id));
-
-    setReceivedLikes(receivedList.length > 0 ? receivedList : __DEV__ ? MOCK_USERS.slice(0, 5) : []);
-    setSentLikes(sentList.length > 0 ? sentList : __DEV__ ? MOCK_USERS.slice(4, 7) : []);
-    setMatches(mutualMatches.length > 0 ? mutualMatches : __DEV__ ? MOCK_USERS.slice(0, 3) : []);
+    const blockedIds = new Set<string>(
+      (blocksData ?? []).map((b) => b.blocker_id === user.id ? b.blocked_id : b.blocker_id)
+    );
+    blockedIdsRef.current = blockedIds;
+    return blockedIds;
   }, [user]);
 
-  useEffect(() => { fetchLikes().finally(() => setIsLoading(false)); }, [fetchLikes]);
+  const loadTab = useCallback(async (targetTab: Tab, force = false, loadMore = false) => {
+    if (!user || (!force && !loadMore && loadedTabs[targetTab])) return;
+
+    setLoadingTabs((state) => ({ ...state, [targetTab]: true }));
+
+    try {
+      const blockedSetPromise = fetchBlockedSet(force);
+      let nextList: User[] = [];
+      const currentPage = force ? 0 : (loadMore ? pages[targetTab] : 0);
+      const from = currentPage * PAGE_SIZE;
+      const to   = from + PAGE_SIZE - 1;
+
+      if (targetTab === 'received') {
+        const { data } = await supabase
+          .from('likes')
+          .select(`from_user:profiles!from_user_id(${profileSelect})`)
+          .eq('to_user_id', user.id)
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        const blockedSet = await blockedSetPromise;
+        nextList = (data ?? []).map((row: any) => row.from_user as User).filter(Boolean).filter((u) => !blockedSet.has(u.id));
+        setHasMoreByTab((s) => ({ ...s, [targetTab]: (data ?? []).length === PAGE_SIZE }));
+      } else if (targetTab === 'sent') {
+        const { data } = await supabase
+          .from('likes')
+          .select(`to_user:profiles!to_user_id(${profileSelect})`)
+          .eq('from_user_id', user.id)
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        const blockedSet = await blockedSetPromise;
+        nextList = (data ?? []).map((row: any) => row.to_user as User).filter(Boolean).filter((u) => !blockedSet.has(u.id));
+        setHasMoreByTab((s) => ({ ...s, [targetTab]: (data ?? []).length === PAGE_SIZE }));
+      } else if (targetTab === 'viewers') {
+        const { data } = await supabase
+          .from('profile_views')
+          .select(`viewer:profiles!viewer_id(${profileSelect})`)
+          .eq('viewed_id', user.id)
+          .order('viewed_at', { ascending: false })
+          .range(from, to);
+        const blockedSet = await blockedSetPromise;
+        nextList = (data ?? []).map((row: any) => row.viewer as User).filter(Boolean).filter((u) => !blockedSet.has(u.id));
+        setHasMoreByTab((s) => ({ ...s, [targetTab]: (data ?? []).length === PAGE_SIZE }));
+      } else if (targetTab === 'favourites') {
+        const { data } = await supabase
+          .from('favourites')
+          .select(`user:profiles!user_id(${profileSelect})`)
+          .eq('favourited_id', user.id)
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        const blockedSet = await blockedSetPromise;
+        nextList = (data ?? []).map((row: any) => row.user as User).filter(Boolean).filter((u) => !blockedSet.has(u.id));
+        setHasMoreByTab((s) => ({ ...s, [targetTab]: (data ?? []).length === PAGE_SIZE }));
+      } else {
+        // matches tab: cross-reference received+sent (cap at 100 each for performance)
+        const [{ data: received }, { data: sent }] = await Promise.all([
+          supabase
+            .from('likes')
+            .select(`from_user:profiles!from_user_id(${profileSelect})`)
+            .eq('to_user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(100),
+          supabase
+            .from('likes')
+            .select(`to_user:profiles!to_user_id(${profileSelect})`)
+            .eq('from_user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(100),
+        ]);
+
+        const blockedSet = await blockedSetPromise;
+        const receivedList = (received ?? []).map((row: any) => row.from_user as User).filter(Boolean).filter((u) => !blockedSet.has(u.id));
+        const sentList = (sent ?? []).map((row: any) => row.to_user as User).filter(Boolean).filter((u) => !blockedSet.has(u.id));
+        const sentIds = new Set(sentList.map((u) => u.id));
+        nextList = receivedList.filter((u) => sentIds.has(u.id));
+        setHasMoreByTab((s) => ({ ...s, matches: false }));
+      }
+
+      const fallback =
+        __DEV__ && nextList.length === 0 && currentPage === 0
+          ? targetTab === 'matches'
+            ? MOCK_USERS.slice(0, 3)
+            : targetTab === 'received'
+              ? MOCK_USERS.slice(0, 5)
+              : targetTab === 'sent'
+                ? MOCK_USERS.slice(4, 7)
+                : targetTab === 'viewers'
+                  ? MOCK_USERS.slice(1, 4)
+                  : MOCK_USERS.slice(0, 2)
+          : [];
+
+      const resolved = nextList.length > 0 ? nextList : fallback;
+      setLists((state) => ({
+        ...state,
+        [targetTab]: loadMore && currentPage > 0
+          ? [...(state[targetTab] ?? []), ...resolved]
+          : resolved,
+      }));
+      setCounts((state) => ({ ...state, [targetTab]: nextList.length > 0 ? nextList.length : fallback.length }));
+      setLoadedTabs((state) => ({ ...state, [targetTab]: true }));
+      if (loadMore || force) {
+        setPages((s) => ({ ...s, [targetTab]: currentPage + 1 }));
+      }
+    } finally {
+      setLoadingTabs((state) => ({ ...state, [targetTab]: false }));
+    }
+  }, [fetchBlockedSet, loadedTabs, profileSelect, tab, user]);
+
+  const refreshCounts = useCallback(async () => {
+    if (!user) return;
+    const [{ count: received }, { count: sent }, { count: viewers }, { count: favourites }] = await Promise.all([
+      supabase.from('likes').select('*', { count: 'exact', head: true }).eq('to_user_id', user.id),
+      supabase.from('likes').select('*', { count: 'exact', head: true }).eq('from_user_id', user.id),
+      supabase.from('profile_views').select('*', { count: 'exact', head: true }).eq('viewed_id', user.id),
+      supabase.from('favourites').select('*', { count: 'exact', head: true }).eq('favourited_id', user.id),
+    ]);
+
+    setCounts((state) => ({
+      ...state,
+      received: received ?? state.received,
+      sent: sent ?? state.sent,
+      viewers: viewers ?? state.viewers,
+      favourites: favourites ?? state.favourites,
+      matches: state.matches,
+    }) as Record<Tab, number>);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    blockedIdsRef.current = null;
+    loadTab(tab, true).finally(() => {
+      refreshCounts();
+    });
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) return;
+    loadTab(tab);
+  }, [tab, user?.id]);
+
+  useEffect(() => {
+    if (!user || !loadedTabs[tab] || loadingTabs[tab]) return;
+
+    const warmTabs = TABS.map(({ key }) => key).filter((key) => key !== tab && !loadedTabs[key]);
+    if (warmTabs.length === 0) return;
+
+    const timer = setTimeout(() => {
+      warmTabs.forEach((targetTab) => {
+        loadTab(targetTab);
+      });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [loadedTabs, loadingTabs, loadTab, tab, user?.id]);
 
   const handleRefresh = async () => {
+    if (!user) return;
     setRefreshing(true);
-    await fetchLikes();
+    setPages((s) => ({ ...s, [tab]: 0 }));
+    await Promise.all([loadTab(tab, true), refreshCounts()]);
     setRefreshing(false);
   };
+
+  const handleLoadMore = useCallback(() => {
+    if (!user || !hasMoreByTab[tab] || loadingTabs[tab]) return;
+    loadTab(tab, false, true);
+  }, [user, hasMoreByTab, tab, loadingTabs, loadTab]);
 
   const handleMessage = async (toUserId: string) => {
     if (!user) return;
@@ -78,266 +258,129 @@ export default function LikesScreen() {
     if (convId) router.push(`/(chat)/${convId}`);
   };
 
-  const list = tab === 'received' ? receivedLikes : sentLikes;
+  const list: User[] = useMemo(() => lists[tab] ?? [], [lists, tab]);
+  const matchIds = useMemo(() => new Set((lists.matches ?? []).map((item) => item.id)), [lists.matches]);
+  const isCurrentTabLoading = loadingTabs[tab] && list.length === 0;
 
-  if (isLoading) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const emptyMap: Record<Tab, { icon: string; title: string; desc: string }> = {
+    matches:    { icon: 'flame-outline',     title: 'No matches yet',            desc: 'Like someone who already liked you to get a match.'      },
+    received:   { icon: 'heart-outline',     title: 'No likes yet',              desc: 'Complete your profile to attract more attention.'        },
+    sent:       { icon: 'heart-outline',     title: "You haven't liked anyone",  desc: 'Browse Discover to find someone you like.'              },
+    viewers:    { icon: 'eye-outline',       title: 'No profile views yet',      desc: 'A complete profile with a photo gets more views.'        },
+    favourites: { icon: 'star-outline',      title: 'No favourites yet',         desc: 'When someone stars your profile, they appear here.'      },
+  };
+
+  const e = emptyMap[tab];
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <View style={s.header}>
-        <Text style={s.title}>Likes</Text>
-        <View style={s.tabs}>
-          {(['received', 'sent'] as Tab[]).map((t) => (
-            <TouchableOpacity key={t} onPress={() => setTab(t)} style={[s.tab, tab === t && s.tabOn]}>
-              <Text style={[s.tabText, tab === t && s.tabTextOn]}>
-                {t === 'received' ? '❤️ Received' : '💌 Sent'}
-              </Text>
-              <View style={[s.tabBadge, tab === t && s.tabBadgeOn]}>
-                <Text style={[s.tabBadgeText, tab === t && s.tabBadgeTextOn]}>
-                  {t === 'received' ? receivedLikes.length : sentLikes.length}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+        <Text style={s.title}>{{
+          matches:    'Matches',
+          received:   'Received',
+          sent:       'Sent',
+          viewers:    'Viewers',
+          favourites: 'Favourites',
+        }[tab]}</Text>
+        <View style={s.tabBar}>
+          {TABS.map(({ key, icon, activeIcon }) => {
+            const active = tab === key;
+            return (
+              <TouchableOpacity key={key} onPress={() => setTab(key)} style={[s.tabBtn, active && s.tabBtnOn]}>
+                <Ionicons name={(active ? activeIcon : icon) as any} size={22} color={active ? COLORS.primary : COLORS.textSecondary} />
+                {counts[key] > 0 && (
+                  <View style={[s.badge, active && s.badgeOn]}>
+                    <Text style={[s.badgeTxt, active && s.badgeTxtOn]}>{counts[key]}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
       <FlatList
-        data={list}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingVertical: 8, paddingBottom: 24 }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
-        }
-
-        ListHeaderComponent={
-          matches.length > 0 ? (
-            <View style={s.matchesSection}>
-              <View style={s.matchesHeaderRow}>
-                <Text style={s.matchesTitle}>🔥 Matches</Text>
-                <Text style={s.matchesCount}>{matches.length} mutual</Text>
+          data={list}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingVertical: 8, paddingBottom: 24 }}
+          showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.4}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
+          ItemSeparatorComponent={() => <View style={s.sep} />}
+          ListEmptyComponent={
+            isCurrentTabLoading ? (
+              <View style={s.inlineLoading}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
               </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 14, paddingHorizontal: 2, paddingBottom: 2 }}
-              >
-                {matches.map((m) => {
-                  const avatar = m.avatar_url || (m.profile_photos ?? [])[0]
-                    || `${DEFAULT_AVATAR}${encodeURIComponent((m.full_name ?? '?').charAt(0))}`;
-                  return (
-                    <TouchableOpacity
-                      key={m.id}
-                      onPress={() => router.push(`/(profile)/${m.id}`)}
-                      style={s.matchItem}
-                      activeOpacity={0.85}
-                    >
-                      <View style={s.matchRing}>
-                        <Image source={{ uri: avatar }} style={s.matchImg} contentFit="cover" />
-                      </View>
-                      {/* Quick message button */}
-                      <TouchableOpacity onPress={() => handleMessage(m.id)} style={s.matchMsgBtn}>
-                        <Ionicons name="chatbubble" size={10} color="#FFF" />
-                      </TouchableOpacity>
-                      <Text style={s.matchName} numberOfLines={1}>
-                        {m.full_name?.split(' ')[0]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          ) : null
-        }
-
-        ListEmptyComponent={
-          <EmptyState
-            icon="heart-outline"
-            title={tab === 'received' ? 'No likes yet' : "You haven't liked anyone yet"}
-            description={
-              tab === 'received'
-                ? 'Complete your profile to attract more attention.'
-                : 'Browse Discover to find someone you like.'
-            }
-          />
-        }
-
-        renderItem={({ item }) => {
-          const avatar = item.avatar_url || (item.profile_photos ?? [])[0]
-            || `${DEFAULT_AVATAR}${encodeURIComponent((item.full_name ?? '?').charAt(0))}`;
-          const today = new Date();
-          const bday = item.birthdate ? new Date(item.birthdate) : null;
-          const age = bday
-            ? today.getFullYear() - bday.getFullYear()
-              - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
-            : null;
-          const location = [item.city, item.country].filter(Boolean).join(', ');
-          const isOnline = item.online_status === 'online';
-          const isMutual = matches.some((m) => m.id === item.id);
-
-          return (
-            <TouchableOpacity
-              onPress={() => router.push(`/(profile)/${item.id}`)}
-              style={s.row}
-              activeOpacity={0.82}
-            >
-              {/* Avatar */}
-              <View style={s.avatarWrap}>
-                <Image source={{ uri: avatar }} style={s.avatar} contentFit="cover" />
-                <View style={[s.onlineDot, { backgroundColor: isOnline ? COLORS.online : COLORS.offline }]} />
+            ) : (
+              <EmptyState icon={e.icon as any} title={e.title} description={e.desc} />
+            )
+          }
+          ListFooterComponent={
+            hasMoreByTab[tab] && list.length > 0 && loadingTabs[tab] ? (
+              <View style={s.footerLoading}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
               </View>
-
-              {/* Name + location */}
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={s.rowName} numberOfLines={1}>
-                    {item.full_name}{age ? `, ${age}` : ''}
-                  </Text>
-                  {isMutual && (
-                    <View style={s.mutualBadge}>
-                      <Text style={{ fontSize: 10 }}>🔥</Text>
-                    </View>
-                  )}
+            ) : null
+          }
+          renderItem={({ item }) => {
+            const isMutual = tab !== 'matches' && matchIds.has(item.id);
+            const avatar = item.avatar_url || (item.profile_photos ?? [])[0]
+              || `${DEFAULT_AVATAR}${encodeURIComponent((item.full_name ?? '?').charAt(0))}`;
+            const today = new Date();
+            const bday  = item.birthdate ? new Date(item.birthdate) : null;
+            const age   = bday ? today.getFullYear() - bday.getFullYear()
+              - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0) : null;
+            const location = [item.city, item.country].filter(Boolean).join(', ');
+            const isOnline = item.online_status === 'online';
+            return (
+              <TouchableOpacity onPress={() => router.push(`/(profile)/${item.id}`)} style={s.row} activeOpacity={0.82}>
+                <View style={s.avatarWrap}>
+                  <Image source={{ uri: avatar }} style={s.avatar} contentFit="cover" />
+                  <View style={[s.onlineDot, { backgroundColor: isOnline ? COLORS.online : COLORS.offline }]} />
                 </View>
-                {location ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
-                    <Ionicons name="location-outline" size={11} color={COLORS.textSecondary} />
-                    <Text style={s.rowLocation} numberOfLines={1}>{location}</Text>
+              <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={s.rowName} numberOfLines={1}>{item.full_name}{age ? `, ${age}` : ''}</Text>
+                    {isMutual && <Text style={{ fontSize: 12 }}>🔥</Text>}
                   </View>
-                ) : null}
-              </View>
-
-              {/* Message shortcut */}
-              <TouchableOpacity
-                onPress={() => handleMessage(item.id)}
-                style={s.msgBtn}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name="chatbubble-outline" size={18} color={COLORS.primary} />
+                  {location ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                      <Ionicons name="location-outline" size={11} color={COLORS.textSecondary} />
+                      <Text style={s.rowLoc} numberOfLines={1}>{location}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
               </TouchableOpacity>
-
-              {/* Chevron */}
-              <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
-            </TouchableOpacity>
-          );
-        }}
-
-        ItemSeparatorComponent={() => <View style={s.separator} />}
-      />
+            );
+          }}
+        />
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 0,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  title: { fontSize: 24, fontWeight: '800', color: COLORS.text, marginBottom: 12 },
-  tabs: { flexDirection: 'row', gap: 8 },
-  tab: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 2, borderBottomColor: 'transparent',
-  },
-  tabOn: { borderBottomColor: COLORS.primary },
-  tabText: { fontSize: 14, fontWeight: '500', color: COLORS.textSecondary },
-  tabTextOn: { color: COLORS.primary, fontWeight: '700' },
-  tabBadge: {
-    minWidth: 20, height: 20, borderRadius: 10,
-    backgroundColor: COLORS.border,
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
-  },
-  tabBadgeOn: { backgroundColor: COLORS.primary },
-  tabBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.textSecondary },
-  tabBadgeTextOn: { color: '#FFF' },
-
-  /* Matches strip */
-  matchesSection: {
-    backgroundColor: '#FFF',
-    marginHorizontal: 12,
-    marginTop: 12,
-    marginBottom: 4,
-    borderRadius: 16,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  matchesHeaderRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 14,
-  },
-  matchesTitle: { fontSize: 15, fontWeight: '800', color: COLORS.text },
-  matchesCount: { fontSize: 12, color: COLORS.primary, fontWeight: '600' },
-  matchItem: { alignItems: 'center', width: 64 },
-  matchRing: {
-    width: 56, height: 56, borderRadius: 28,
-    borderWidth: 2.5, borderColor: COLORS.primary,
-    padding: 2, position: 'relative',
-  },
-  matchImg: { width: '100%', height: '100%', borderRadius: 24 },
-  matchMsgBtn: {
-    position: 'absolute', bottom: 14, right: -2,
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: '#FFF',
-  },
-  matchName: {
-    fontSize: 11, fontWeight: '600', color: COLORS.text,
-    marginTop: 5, textAlign: 'center',
-  },
-
-  /* List rows */
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFF',
-    gap: 12,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginLeft: 76, // align with text, past avatar
-  },
-  avatarWrap: { position: 'relative' },
-  avatar: {
-    width: 48, height: 48, borderRadius: 24,
-  },
-  onlineDot: {
-    position: 'absolute', bottom: 1, right: 1,
-    width: 11, height: 11, borderRadius: 6,
-    borderWidth: 2, borderColor: '#FFF',
-  },
-  rowName: { fontSize: 15, fontWeight: '700', color: COLORS.text, flex: 1 },
-  rowLocation: { fontSize: 12, color: COLORS.textSecondary, flex: 1 },
-  mutualBadge: {
-    paddingHorizontal: 6, paddingVertical: 2,
-    borderRadius: 8, backgroundColor: `${COLORS.primary}15`,
-  },
-  msgBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: `${COLORS.primary}12`,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  header:   { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 0, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  title:    { fontSize: 24, fontWeight: '800', color: COLORS.text, marginBottom: 10 },
+  tabBar:   { flexDirection: 'row' },
+  tabBtn:   { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderBottomWidth: 2.5, borderBottomColor: 'transparent' },
+  tabBtnOn: { borderBottomColor: COLORS.primary },
+  badge:    { position: 'absolute', top: 4, right: '20%', minWidth: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  badgeOn:  { backgroundColor: COLORS.primary },
+  badgeTxt:    { fontSize: 9, fontWeight: '800', color: COLORS.textSecondary },
+  badgeTxtOn:  { color: '#FFF' },
+  // List rows
+  row:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', gap: 12 },
+  sep:      { height: 1, backgroundColor: COLORS.border, marginLeft: 76 },
+  avatarWrap:{ position: 'relative' },
+  avatar:   { width: 48, height: 48, borderRadius: 24 },
+  onlineDot:{ position: 'absolute', bottom: 1, right: 1, width: 11, height: 11, borderRadius: 6, borderWidth: 2, borderColor: '#FFF' },
+  rowName:  { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  rowLoc:   { fontSize: 12, color: COLORS.textSecondary, flex: 1 },
+  inlineLoading: { paddingVertical: 48, alignItems: 'center', justifyContent: 'center' },
+  footerLoading: { paddingVertical: 20, alignItems: 'center', justifyContent: 'center' },
 });

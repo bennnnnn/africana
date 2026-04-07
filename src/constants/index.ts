@@ -97,8 +97,23 @@ export const AFRICAN_COUNTRIES = [
 ];
 
 export const GENDER_OPTIONS = [
-  { value: 'male',   label: 'Man' },
-  { value: 'female', label: 'Woman' },
+  { value: 'male',   label: 'Male' },
+  { value: 'female', label: 'Female' },
+];
+
+export const INTERESTED_IN_OPTIONS = [
+  { value: 'women', label: 'Women' },
+  { value: 'men',   label: 'Men' },
+];
+
+export const HAS_CHILDREN_OPTIONS = [
+  { value: 'true',  label: 'Yes' },
+  { value: 'false', label: 'No' },
+];
+
+export const WANT_CHILDREN_YES_NO = [
+  { value: 'yes', label: 'Yes' },
+  { value: 'no',  label: 'No' },
 ];
 
 export const LOOKING_FOR_OPTIONS = [

@@ -47,6 +47,7 @@ export interface User extends OriginLocationFields {
   ethnicity: string | null;          // free text
   occupation: string | null;         // free text
   languages: string[];               // e.g. ['English','Amharic']
+  hobbies: string[];                  // e.g. ['Music','Travel']
   has_children: boolean | null;
   want_children: WantChildren | null;
   // Media & status

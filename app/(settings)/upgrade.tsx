@@ -12,17 +12,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@/constants';
-import { PLANS } from '@/lib/payments';
+import { PAYMENTS_ENABLED, PLANS } from '@/lib/payments';
 
 const { width } = Dimensions.get('window');
 
 export default function UpgradeScreen() {
   const handlePurchase = (plan: 'gold' | 'platinum') => {
-    Alert.alert(
-      'Coming Soon',
-      `${PLANS[plan].name} subscription will be available soon. We'll notify you when it launches!`,
-      [{ text: 'OK' }],
-    );
+    if (!PAYMENTS_ENABLED) {
+      Alert.alert(
+        'Coming Soon 🚀',
+        "Premium features are launching soon. You'll be notified when they're available!",
+        [{ text: 'Got it' }],
+      );
+      return;
+    }
+    // TODO: call purchasePlan(userId, plan) when PAYMENTS_ENABLED = true
+    Alert.alert('Purchase', `Starting purchase for ${PLANS[plan].name}...`);
   };
 
   return (
@@ -61,7 +66,7 @@ export default function UpgradeScreen() {
                 <Text style={{ fontSize: 28 }}>{plan.emoji}</Text>
                 <Text style={[s.planName, isPopular && { color: COLORS.primary }]}>{plan.name}</Text>
                 <View style={{ flex: 1 }} />
-                <Text style={[s.planPrice, isPopular && { color: COLORS.primary }]}>{plan.price}</Text>
+                <Text style={[s.planPrice, isPopular && { color: COLORS.primary }]}>{plan.monthlyPrice}/mo</Text>
               </View>
               <View style={s.divider} />
               {plan.features.map((feat) => (
@@ -76,7 +81,9 @@ export default function UpgradeScreen() {
                 activeOpacity={0.85}
               >
                 <Text style={[s.buyBtnText, isPopular && { color: '#FFF' }]}>
-                  {isPopular ? `Get ${plan.name} →` : `Try ${plan.name}`}
+                  {PAYMENTS_ENABLED
+                    ? (isPopular ? `Get ${plan.name} →` : `Try ${plan.name}`)
+                    : 'Notify Me 🔔'}
                 </Text>
               </TouchableOpacity>
             </View>

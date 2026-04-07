@@ -5,6 +5,7 @@ import { View, Text, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
+import { useChatStore } from '@/store/chat.store';
 import { COLORS } from '@/constants';
 
 function TabIcon({
@@ -50,35 +51,41 @@ function TabIcon({
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
+  const { conversations, fetchConversations } = useChatStore();
   const [unreadMessages, setUnreadMessages] = useState(0);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchUnreadCount = async (userId: string) => {
-    // Count messages unread by the current user (not sent by them, no read_at)
-    const { count } = await supabase
-      .from('messages')
-      .select('*', { count: 'exact', head: true })
-      .is('read_at', null)
-      .neq('sender_id', userId);
-    setUnreadMessages(count ?? 0);
-  };
+  useEffect(() => {
+    setUnreadMessages(
+      conversations.reduce((sum, conversation) => sum + (conversation.unread_count ?? 0), 0)
+    );
+  }, [conversations]);
 
   useEffect(() => {
     if (!user) return;
 
-    fetchUnreadCount(user.id);
+    fetchConversations(user.id);
 
-    // Real-time: re-count whenever any message is inserted or updated
     channelRef.current = supabase
       .channel(`unread-badge-${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchUnreadCount(user.id))
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => fetchUnreadCount(user.id))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const message = payload.new as { sender_id?: string };
+        if (message.sender_id === user.id) return;
+        if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = setTimeout(() => fetchConversations(user.id), 120);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, () => {
+        if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = setTimeout(() => fetchConversations(user.id), 120);
+      })
       .subscribe();
 
     return () => {
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
-  }, [user?.id]);
+  }, [fetchConversations, user?.id]);
   // On Android with edgeToEdgeEnabled, insets.bottom is the system nav bar height
   const tabBarHeight = 56 + insets.bottom;
   const tabBarPaddingBottom = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 20 : 8);

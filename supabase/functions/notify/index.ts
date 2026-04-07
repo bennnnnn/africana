@@ -19,6 +19,11 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const RESEND_API_URL = 'https://api.resend.com/emails';
 
@@ -63,8 +68,11 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: CORS_HEADERS });
+  }
   if (req.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 });
+    return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
   }
 
   try {
@@ -84,15 +92,14 @@ Deno.serve(async (req) => {
       .eq('id', recipientId)
       .single();
 
-    // Check per-type push preference
-    const prefMap: Record<NotifyType, keyof typeof settings> = {
-      message: 'notify_messages',
-      like:    'notify_likes',
-      match:   'notify_matches',
-      view:    'notify_views',
-    };
-    const pref = settings?.[prefMap[type]];
-    const pushEnabled = pref !== false && !!settings?.push_token;
+    // Check per-type push preference (explicit conditionals avoid TS index issues)
+    const pushPrefEnabled =
+      type === 'message' ? settings?.notify_messages !== false :
+      type === 'like'    ? settings?.notify_likes    !== false :
+      type === 'match'   ? settings?.notify_matches  !== false :
+      type === 'view'    ? settings?.notify_views    !== false :
+      true;
+    const pushEnabled = pushPrefEnabled && !!settings?.push_token;
     const emailEnabled = settings?.email_notifications === true && !!profile?.email;
 
     const template = PUSH_TEMPLATES[type](senderName);
@@ -137,11 +144,11 @@ Deno.serve(async (req) => {
     }
 
     if (!pushEnabled && !emailEnabled) {
-      return new Response(JSON.stringify({ ok: false, reason: 'disabled_or_no_token' }), { status: 200 });
+      return new Response(JSON.stringify({ ok: false, reason: 'disabled_or_no_token' }), { status: 200, headers: CORS_HEADERS });
     }
 
-    return new Response(JSON.stringify({ ok: true, results }), { status: 200 });
+    return new Response(JSON.stringify({ ok: true, results }), { status: 200, headers: CORS_HEADERS });
   } catch (err) {
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500 });
+    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: CORS_HEADERS });
   }
 });

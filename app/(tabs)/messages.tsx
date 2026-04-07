@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   TextInput,
+  Alert,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,28 +26,57 @@ dayjs.extend(relativeTime);
 
 export default function MessagesScreen() {
   const { user } = useAuthStore();
-  const { conversations, isLoading, fetchConversations } = useChatStore();
+  const { conversations, isLoading, fetchConversations, deleteConversation } = useChatStore();
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const conversationIdsRef = useRef<Set<string>>(new Set());
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    conversationIdsRef.current = new Set(conversations.map((conversation) => conversation.id));
+  }, [conversations]);
+
+  const scheduleRefresh = useCallback(() => {
+    if (!user) return;
+    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    refreshTimeoutRef.current = setTimeout(() => {
+      fetchConversations(user.id);
+    }, 120);
+  }, [fetchConversations, user?.id]);
 
   useEffect(() => {
     if (!user) return;
     fetchConversations(user.id);
 
-    // Re-fetch conversation list whenever a message is inserted
     channelRef.current = supabase
       .channel(`conv-list-${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' },
-        () => fetchConversations(user.id))
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' },
-        () => fetchConversations(user.id))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const message = payload.new as { conversation_id?: string; sender_id?: string };
+        if (!message.conversation_id || message.sender_id === user.id) return;
+        if (conversationIdsRef.current.has(message.conversation_id)) {
+          scheduleRefresh();
+        }
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, (payload) => {
+        const participantIds = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
+        if (participantIds.includes(user.id)) {
+          scheduleRefresh();
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, (payload) => {
+        const participantIds = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
+        if (participantIds.includes(user.id)) {
+          scheduleRefresh();
+        }
+      })
       .subscribe();
 
     return () => {
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
-  }, [user?.id]);
+  }, [scheduleRefresh, user?.id]);
 
   const handleRefresh = async () => {
     if (!user) return;
@@ -62,14 +92,6 @@ export default function MessagesScreen() {
       c.other_user?.full_name?.toLowerCase().includes(q)
     );
   }, [conversations, search]);
-
-  if (isLoading && conversations.length === 0) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
@@ -106,15 +128,32 @@ export default function MessagesScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
         }
         ListEmptyComponent={
-          <EmptyState
-            icon="chatbubbles-outline"
-            title={search ? 'No results found' : 'No messages yet'}
-            description={
-              search
-                ? 'Try a different name.'
-                : 'Browse Discover to find someone interesting and start a conversation.'
-            }
-          />
+          isLoading ? (
+            <View style={{ paddingTop: 16, gap: 10 }}>
+              {Array.from({ length: 5 }).map((_, index) => (
+                <View
+                  key={index}
+                  style={{
+                    height: 80,
+                    borderRadius: 14,
+                    backgroundColor: '#FFF',
+                    borderWidth: 1,
+                    borderColor: COLORS.border,
+                  }}
+                />
+              ))}
+            </View>
+          ) : (
+            <EmptyState
+              icon="chatbubbles-outline"
+              title={search ? 'No results found' : 'No messages yet'}
+              description={
+                search
+                  ? 'Try a different name.'
+                  : 'Browse Discover to find someone interesting and start a conversation.'
+              }
+            />
+          )
         }
         renderItem={({ item }) => {
           const other = item.other_user;
@@ -123,6 +162,21 @@ export default function MessagesScreen() {
           return (
             <TouchableOpacity
               onPress={() => router.push(`/(chat)/${item.id}`)}
+              onLongPress={() => {
+                Alert.alert(
+                  'Delete conversation',
+                  `Delete your conversation with ${other?.full_name ?? 'this user'}?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: () => deleteConversation(item.id),
+                    },
+                  ]
+                );
+              }}
+              delayLongPress={500}
               style={[s.convoCard, hasUnread && s.convoCardUnread]}
               activeOpacity={0.85}
             >

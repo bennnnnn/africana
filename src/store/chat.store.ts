@@ -3,6 +3,13 @@ import { Conversation, Message, User } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { notifyUser } from '@/lib/notifications';
 import { MOCK_USERS } from '@/lib/mock-data';
+import {
+  clearCachedMessages,
+  getCachedConversationSnapshot,
+  getCachedMessages,
+  replaceCachedConversations,
+  replaceCachedMessages,
+} from '@/lib/chat-cache';
 
 const MOCK_CONVERSATIONS: Conversation[] = [
   {
@@ -58,6 +65,7 @@ interface ChatState {
   fetchMessages: (conversationId: string) => Promise<void>;
   sendMessage: (conversationId: string, senderId: string, content: string) => Promise<void>;
   deleteMessage: (conversationId: string, messageId: string) => Promise<void>;
+  deleteConversation: (conversationId: string) => Promise<void>;
   getOrCreateConversation: (userId: string, otherUserId: string) => Promise<string | null>;
   markMessagesRead: (conversationId: string, userId: string) => Promise<void>;
   addMessage: (conversationId: string, message: Message) => void;
@@ -69,7 +77,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoading: false,
 
   fetchConversations: async (userId) => {
-    set({ isLoading: true });
+    const cachedSnapshot = await getCachedConversationSnapshot(userId);
+    if (cachedSnapshot.found) {
+      set({ conversations: cachedSnapshot.conversations, isLoading: false });
+    } else {
+      set({ isLoading: true });
+    }
+
     try {
       const { data, error } = await supabase
         .from('conversations')
@@ -78,36 +92,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
         .order('last_message_at', { ascending: false, nullsFirst: false });
 
       if (!error && data) {
-        const conversationsWithUsers = await Promise.all(
-          data.map(async (conv) => {
-            const otherUserId = conv.participant_ids.find((id: string) => id !== userId);
-            let other_user: User | undefined;
+        const conversationIds = data.map((conv) => conv.id);
+        const otherUserIds = Array.from(
+          new Set(
+            data
+              .map((conv) => conv.participant_ids.find((id: string) => id !== userId))
+              .filter(Boolean)
+          )
+        ) as string[];
 
-            if (otherUserId) {
-              const { data: userData } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', otherUserId)
-                .single();
-              other_user = userData ?? undefined;
-            }
+        const [profilesResult, unreadResult] = await Promise.all([
+          otherUserIds.length > 0
+            ? supabase.from('profiles').select('*').in('id', otherUserIds)
+            : Promise.resolve({ data: [] as User[] }),
+          conversationIds.length > 0
+            ? supabase
+                .from('messages')
+                .select('conversation_id')
+                .in('conversation_id', conversationIds)
+                .is('read_at', null)
+                .neq('sender_id', userId)
+            : Promise.resolve({ data: [] as { conversation_id: string }[] }),
+        ]);
 
-            const { count } = await supabase
-              .from('messages')
-              .select('*', { count: 'exact', head: true })
-              .eq('conversation_id', conv.id)
-              .is('read_at', null)
-              .neq('sender_id', userId);
-
-            return { ...conv, other_user, unread_count: count ?? 0 };
-          })
+        const profilesById = new Map(
+          ((profilesResult.data ?? []) as User[]).map((profile) => [profile.id, profile])
         );
+        const unreadCounts = new Map<string, number>();
+        for (const row of (unreadResult.data ?? []) as { conversation_id: string }[]) {
+          unreadCounts.set(row.conversation_id, (unreadCounts.get(row.conversation_id) ?? 0) + 1);
+        }
+
+        const conversationsWithUsers = data.map((conv) => {
+          const otherUserId = conv.participant_ids.find((id: string) => id !== userId);
+          return {
+            ...conv,
+            other_user: otherUserId ? profilesById.get(otherUserId) : undefined,
+            unread_count: unreadCounts.get(conv.id) ?? 0,
+          };
+        });
         // In development, always prepend mock conversations so UI is testable
         const mockToAdd = __DEV__
           ? MOCK_CONVERSATIONS.filter((m) => !conversationsWithUsers.some((r) => r.id === m.id))
           : [];
         const result = [...conversationsWithUsers, ...mockToAdd];
         set({ conversations: result });
+        await replaceCachedConversations(userId, result);
       }
     } finally {
       set({ isLoading: false });
@@ -127,6 +157,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
+    const cachedMessages = await getCachedMessages(conversationId);
+    if (cachedMessages.length > 0) {
+      set((state) => ({
+        messages: { ...state.messages, [conversationId]: cachedMessages },
+      }));
+    }
+
     const { data } = await supabase
       .from('messages')
       .select('*, sender:profiles(*)')
@@ -137,6 +174,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((state) => ({
         messages: { ...state.messages, [conversationId]: data },
       }));
+      await replaceCachedMessages(conversationId, data as Message[]);
     }
   },
 
@@ -162,6 +200,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
+    // ━━ Optimistic UI: show message instantly before DB confirms ━━
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg: Message = {
+      id: tempId,
+      conversation_id: conversationId,
+      sender_id: senderId,
+      content,
+      read_at: null,
+      created_at: new Date().toISOString(),
+    };
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [conversationId]: [...(state.messages[conversationId] ?? []), tempMsg],
+      },
+      conversations: state.conversations.map((c) =>
+        c.id === conversationId
+          ? { ...c, last_message: content, last_message_at: tempMsg.created_at }
+          : c
+      ),
+    }));
+    void replaceCachedMessages(conversationId, [...(get().messages[conversationId] ?? []), tempMsg]);
+
     const { data } = await supabase
       .from('messages')
       .insert({ conversation_id: conversationId, sender_id: senderId, content })
@@ -169,24 +230,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .single();
 
     if (data) {
-      get().addMessage(conversationId, data);
-      await supabase
-        .from('conversations')
-        .update({ last_message: content, last_message_at: new Date().toISOString() })
+      // Replace temp with confirmed message in-place (no flicker)
+      set((state) => ({
+        messages: {
+          ...state.messages,
+          [conversationId]: (state.messages[conversationId] ?? []).map(
+            (m) => m.id === tempId ? data : m
+          ),
+        },
+      }));
+      {
+        const nextMessages = (get().messages[conversationId] ?? []).map((m) => m.id === tempId ? data : m);
+        void replaceCachedMessages(conversationId, nextMessages);
+      }
+      supabase.from('conversations')
+        .update({ last_message: content, last_message_at: data.created_at })
         .eq('id', conversationId);
-
-      // Push-notify the other participant
       const conv = get().conversations.find((c) => c.id === conversationId);
       const recipientId = conv?.participant_ids?.find((id) => id !== senderId);
       const senderName = (data.sender as User | null)?.full_name ?? 'Someone';
-      if (recipientId) {
-        notifyUser({
-          type: 'message',
-          recipientId,
-          senderId,
-          senderName,
-          extra: { conversationId },
-        });
+      if (recipientId) notifyUser({ type: 'message', recipientId, senderId, senderName, extra: { conversationId } });
+    } else {
+      // Remove failed optimistic message
+      set((state) => ({
+        messages: {
+          ...state.messages,
+          [conversationId]: (state.messages[conversationId] ?? []).filter((m) => m.id !== tempId),
+        },
+      }));
+      {
+        const nextMessages = (get().messages[conversationId] ?? []).filter((m) => m.id !== tempId);
+        void replaceCachedMessages(conversationId, nextMessages);
       }
     }
   },
@@ -223,7 +297,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .from('conversations')
       .select('id')
       .contains('participant_ids', [userId, otherUserId])
-      .single();
+      .maybeSingle();
 
     if (existing) return existing.id;
 
@@ -236,6 +310,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return newConv?.id ?? null;
   },
 
+  deleteConversation: async (conversationId) => {
+    // Optimistic: remove instantly from local state
+    set((state) => ({
+      conversations: state.conversations.filter((c) => c.id !== conversationId),
+      messages: Object.fromEntries(
+        Object.entries(state.messages).filter(([id]) => id !== conversationId),
+      ),
+    }));
+    if (conversationId.startsWith('mock-')) return;
+    await clearCachedMessages(conversationId);
+    // Delete messages first (FK constraint), then conversation
+    await supabase.from('messages').delete().eq('conversation_id', conversationId);
+    await supabase.from('conversations').delete().eq('id', conversationId);
+  },
+
   deleteMessage: async (conversationId, messageId) => {
     // Remove from local state immediately
     set((state) => ({
@@ -244,6 +333,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         [conversationId]: (state.messages[conversationId] ?? []).filter((m) => m.id !== messageId),
       },
     }));
+    void replaceCachedMessages(conversationId, (get().messages[conversationId] ?? []).filter((m) => m.id !== messageId));
     // Skip DB call for mock messages
     if (messageId.startsWith('mm-') || conversationId.startsWith('mock-')) return;
     await supabase.from('messages').delete().eq('id', messageId);
