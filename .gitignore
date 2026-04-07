@@ -3,7 +3,11 @@ node_modules/
 dist/
 web-build/
 .env
+.env.*
 *.local
+tmp-*.png
+tmp-*.jpg
+supabase/.temp/
 
 # macOS
 .DS_Store
