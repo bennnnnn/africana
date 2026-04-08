@@ -1,12 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, Modal, Pressable,
-  ActivityIndicator, RefreshControl, Animated, StyleSheet, Alert,
+  View, Text, TouchableOpacity,
+  ActivityIndicator, RefreshControl, Animated, StyleSheet,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useDiscoverStore } from '@/store/discover.store';
 import { useChatStore } from '@/store/chat.store';
@@ -16,7 +15,7 @@ import { MatchModal } from '@/components/ui/MatchModal';
 import { COLORS, RADIUS, FONT, SHADOWS } from '@/constants';
 import { User } from '@/types';
 
-const REPORT_REASONS = ['Fake profile', 'Scam', 'Harassment', 'Nudity', 'Underage', 'Other'] as const;
+const HEADER_HEIGHT = 64; // height of the header content row (excludes status bar)
 
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
@@ -25,15 +24,12 @@ export default function DiscoverScreen() {
   const { users, isLoading, hasMore, filters, fetchUsers, fetchLikedUserIds, toggleLike, likedUserIds, setFilters, resetFilters, subscribeToOnlineStatus, unsubscribeFromOnlineStatus } =
     useDiscoverStore();
   const { getOrCreateConversation } = useChatStore();
-  const [showFilters, setShowFilters]   = useState(false);
-  const [refreshing, setRefreshing]     = useState(false);
-  const [matchUser, setMatchUser]       = useState<User | null>(null);
-  const [optionsUser, setOptionsUser]   = useState<User | null>(null);
-  const [reportVisible, setReportVisible] = useState(false);
-  const [selectedReason, setSelectedReason] = useState<typeof REPORT_REASONS[number] | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [matchUser, setMatchUser]     = useState<User | null>(null);
   const [localBlocked, setLocalBlocked] = useState<Set<string>>(new Set());
 
-  // Toast
+  // ── Toast ────────────────────────────────────────────────────────────────────
   const toastAnim = useRef(new Animated.Value(0)).current;
   const [toast, setToast] = useState<{ icon: string; msg: string } | null>(null);
   const showToast = (icon: string, msg: string) => {
@@ -46,11 +42,14 @@ export default function DiscoverScreen() {
     ]).start(() => setToast(null));
   };
 
-  // Fade-in animation for the header greeting
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-  }, []);
+  // ── Collapsing header ────────────────────────────────────────────────────────
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const clampedScroll = Animated.diffClamp(scrollY, 0, HEADER_HEIGHT);
+  const headerTranslateY = clampedScroll.interpolate({
+    inputRange: [0, HEADER_HEIGHT],
+    outputRange: [0, -HEADER_HEIGHT],
+    extrapolate: 'clamp',
+  });
 
   useEffect(() => {
     if (user) {
@@ -58,9 +57,7 @@ export default function DiscoverScreen() {
       fetchLikedUserIds(user.id);
       subscribeToOnlineStatus();
     }
-    return () => {
-      unsubscribeFromOnlineStatus();
-    };
+    return () => { unsubscribeFromOnlineStatus(); };
   }, [user?.id]);
 
   const handleRefresh = useCallback(async () => {
@@ -71,58 +68,13 @@ export default function DiscoverScreen() {
   }, [user]);
 
   const handleLoadMore = () => {
-    if (!isLoading && hasMore && user) {
-      fetchUsers(user.id, user.interested_in);
-    }
+    if (!isLoading && hasMore && user) fetchUsers(user.id, user.interested_in);
   };
 
   const handleMessage = async (toUserId: string) => {
     if (!user) return;
     const convId = await getOrCreateConversation(user.id, toUserId);
     if (convId) router.push(`/(chat)/${convId}`);
-  };
-
-  const handleBlock = () => {
-    if (!user || !optionsUser) return;
-    const name = optionsUser.full_name;
-    const blockedId = optionsUser.id;
-    setOptionsUser(null); // close sheet first
-    setTimeout(() => {
-      Alert.alert(
-        `Block ${name}?`,
-        "They won't appear in Discover and won't be able to contact you.",
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Block',
-            style: 'destructive',
-            onPress: async () => {
-              await supabase.from('blocks').insert({ blocker_id: user.id, blocked_id: blockedId });
-              setLocalBlocked((prev) => new Set([...prev, blockedId]));
-              showToast('🚫', `${name} blocked`);
-            },
-          },
-        ]
-      );
-    }, 300);
-  };
-
-  const handleReport = () => {
-    setOptionsUser(null);
-    setSelectedReason(null);
-    setTimeout(() => setReportVisible(true), 150);
-  };
-
-  const submitReport = async () => {
-    if (!user || !optionsUser || !selectedReason) return;
-    await supabase.from('reports').insert({
-      reporter_id: user.id,
-      reported_id: optionsUser.id,
-      reason: selectedReason,
-    });
-    setReportVisible(false);
-    setSelectedReason(null);
-    showToast('🚩', 'Report submitted');
   };
 
   const activeFilterCount = Object.entries(filters).filter(([k, v]) => {
@@ -132,99 +84,72 @@ export default function DiscoverScreen() {
     return v !== null;
   }).length;
 
-  return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      {/* Header */}
-      <Animated.View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingHorizontal: 20,
-          paddingVertical: 14,
-          borderBottomWidth: 1,
-          borderBottomColor: COLORS.border,
-          backgroundColor: COLORS.white,
-          opacity: fadeAnim,
-          transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }],
-        }}
-      >
-        <View>
-          <Text style={{ fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.text }}>
-            Discover
-          </Text>
-          <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 1 }}>
-            {users.length > 0 ? `${users.length} members nearby` : 'Find your connection'}
-          </Text>
-        </View>
-        <TouchableOpacity
-          onPress={() => setShowFilters(true)}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            backgroundColor: activeFilterCount > 0 ? `${COLORS.primary}15` : COLORS.savanna,
-            paddingHorizontal: 14,
-            paddingVertical: 8,
-            borderRadius: 20,
-            borderWidth: activeFilterCount > 0 ? 1.5 : 0,
-            borderColor: COLORS.primary,
-          }}
-        >
-          <Ionicons name="options-outline" size={18} color={activeFilterCount > 0 ? COLORS.primary : COLORS.earth} />
-          <Text style={{ fontSize: FONT.sm, fontWeight: FONT.semibold, color: activeFilterCount > 0 ? COLORS.primary : COLORS.earth }}>
-            Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-          </Text>
-        </TouchableOpacity>
-      </Animated.View>
+  const totalHeaderHeight = insets.top + HEADER_HEIGHT;
 
-        <FlatList
+  return (
+    <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
+
+      {/* ── Full-screen scrollable grid ── */}
+      <Animated.FlatList
         data={users}
         keyExtractor={(item) => item.id}
         numColumns={2}
-        contentContainerStyle={{ padding: 16, paddingBottom: tabBarHeight + 16 }}
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingTop: totalHeaderHeight + 8,
+          paddingHorizontal: 16,
+          paddingBottom: tabBarHeight + 16,
+        }}
         columnWrapperStyle={{ justifyContent: 'space-between' }}
         showsVerticalScrollIndicator={false}
         bounces
         alwaysBounceVertical
         overScrollMode="always"
         decelerationRate="normal"
-        scrollEventThrottle={16}
+        scrollEventThrottle={1}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.3}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            progressViewOffset={totalHeaderHeight}
+          />
         }
         renderItem={({ item }) => (
           localBlocked.has(item.id) ? null : (
-          <UserCard
-            user={item}
-            isLiked={likedUserIds.has(item.id)}
-            onLike={async (id) => {
-              if (!user) return;
-              const wasLiked = likedUserIds.has(id);
-              const isMatch = await toggleLike(user.id, id);
-              if (isMatch && !wasLiked) {
-                setMatchUser(users.find((u) => u.id === id) ?? null);
-                showToast('🔥', 'It’s a match!');
-              } else {
-                showToast(wasLiked ? '💔' : '❤️', wasLiked ? 'Unliked' : 'Liked!');
-              }
-            }}
-            onMessage={handleMessage}
-            onOptions={(id) => setOptionsUser(users.find((u) => u.id === id) ?? null)}
-          />
+            <UserCard
+              user={item}
+              isLiked={likedUserIds.has(item.id)}
+              onLike={async (id) => {
+                if (!user) return;
+                const wasLiked = likedUserIds.has(id);
+                const isMatch = await toggleLike(user.id, id);
+                if (isMatch && !wasLiked) {
+                  setMatchUser(users.find((u) => u.id === id) ?? null);
+                  showToast('🔥', 'It's a match!');
+                } else {
+                  showToast(wasLiked ? '💔' : '❤️', wasLiked ? 'Unliked' : 'Liked!');
+                }
+              }}
+              onMessage={handleMessage}
+            />
           )
         )}
         ListEmptyComponent={
           !isLoading ? (
             <View style={{ alignItems: 'center', paddingTop: 60, paddingHorizontal: 32, gap: 12 }}>
               <Text style={{ fontSize: 48 }}>🌍</Text>
-              <Text style={{ fontSize: 20, fontWeight: '800', color: COLORS.text, textAlign: 'center' }}>
+              <Text style={{ fontSize: FONT.xl, fontWeight: FONT.extrabold, color: COLORS.text, textAlign: 'center' }}>
                 No members found
               </Text>
               <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
-                Try widening your filters — age range, location, or religion — and more Africana members will appear.
+                Try widening your filters and more Africana members will appear.
               </Text>
               {activeFilterCount > 0 && (
                 <TouchableOpacity
@@ -246,6 +171,27 @@ export default function DiscoverScreen() {
         }
       />
 
+      {/* ── Collapsing header (absolutely positioned) ── */}
+      <Animated.View
+        style={[s.header, {
+          paddingTop: insets.top,
+          transform: [{ translateY: headerTranslateY }],
+        }]}
+      >
+        <View style={s.headerRow}>
+          <Text style={s.headerTitle}>Discover</Text>
+          <TouchableOpacity
+            onPress={() => setShowFilters(true)}
+            style={[s.filterBtn, activeFilterCount > 0 && s.filterBtnActive]}
+          >
+            <Ionicons name="options-outline" size={18} color={activeFilterCount > 0 ? COLORS.primary : COLORS.earth} />
+            <Text style={[s.filterTxt, activeFilterCount > 0 && { color: COLORS.primary }]}>
+              Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+
       <FilterSheet
         visible={showFilters}
         filters={filters}
@@ -262,7 +208,7 @@ export default function DiscoverScreen() {
 
       <MatchModal visible={!!matchUser} matchedUser={matchUser} onClose={() => setMatchUser(null)} />
 
-      {/* Toast */}
+      {/* ── Toast ── */}
       {toast && (
         <Animated.View pointerEvents="none" style={[
           s.toast,
@@ -272,81 +218,63 @@ export default function DiscoverScreen() {
           <Text style={{ color: COLORS.white, fontSize: 14, fontWeight: FONT.semibold }}>{toast.msg}</Text>
         </Animated.View>
       )}
-
-      {/* Options sheet (block / report) */}
-      <Modal visible={!!optionsUser} transparent animationType="slide" onRequestClose={() => setOptionsUser(null)}>
-        <Pressable style={s.backdrop} onPress={() => setOptionsUser(null)} />
-        <View style={s.sheet}>
-          <View style={s.handle} />
-          <Text style={s.sheetTitle}>{optionsUser?.full_name}</Text>
-          <TouchableOpacity style={s.sheetItem} onPress={handleReport}>
-            <View style={[s.sheetIcon, { backgroundColor: `${COLORS.warning}20` }]}>
-              <Ionicons name="flag-outline" size={18} color={COLORS.earth} />
-            </View>
-            <Text style={s.sheetLabel}>Report</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.sheetItem} onPress={handleBlock}>
-            <View style={[s.sheetIcon, { backgroundColor: `${COLORS.error}12` }]}>
-              <Ionicons name="ban-outline" size={18} color={COLORS.error} />
-            </View>
-            <Text style={[s.sheetLabel, { color: COLORS.error }]}>Block</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.sheetItem, { marginTop: 4 }]} onPress={() => setOptionsUser(null)}>
-            <Text style={{ fontSize: 15, fontWeight: '600', color: COLORS.textSecondary, textAlign: 'center', flex: 1 }}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
-
-      {/* Report reason modal */}
-      <Modal visible={reportVisible} transparent animationType="fade"
-        onRequestClose={() => { setReportVisible(false); setSelectedReason(null); }}>
-        <View style={s.reportOverlay}>
-          <View style={s.reportCard}>
-            <Text style={s.reportTitle}>Report {optionsUser?.full_name}</Text>
-            <Text style={{ fontSize: FONT.sm, color: COLORS.textSecondary, marginTop: 4, marginBottom: 14 }}>Select a reason</Text>
-            <View style={{ gap: 8 }}>
-              {REPORT_REASONS.map((r) => {
-                const on = selectedReason === r;
-                return (
-                  <TouchableOpacity key={r} onPress={() => setSelectedReason(r)}
-                    style={[s.reasonOption, on && s.reasonOptionOn]}>
-                    <Text style={[s.reasonTxt, on && { color: COLORS.primary, fontWeight: '700' }]}>{r}</Text>
-                    {on && <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
-              <TouchableOpacity style={s.reportCancel} onPress={() => { setReportVisible(false); setSelectedReason(null); }}>
-                <Text style={{ fontWeight: FONT.bold, color: COLORS.textStrong, fontSize: FONT.md }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.reportSubmit, !selectedReason && { opacity: 0.4 }]}
-                onPress={submitReport} disabled={!selectedReason}>
-                <Text style={{ fontWeight: FONT.bold, color: COLORS.white, fontSize: FONT.md }}>Report</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  toast:        { position: 'absolute', top: 90, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.toastBg, paddingHorizontal: 18, paddingVertical: 11, borderRadius: RADIUS.full },
-  backdrop:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: COLORS.overlayLight },
-  sheet:        { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: COLORS.white, borderTopLeftRadius: RADIUS.xxl, borderTopRightRadius: RADIUS.xxl, paddingBottom: 36, paddingTop: 8, paddingHorizontal: 20 },
-  handle:       { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: 16 },
-  sheetTitle:   { fontSize: FONT.lg, fontWeight: FONT.extrabold, color: COLORS.textStrong, marginBottom: 14 },
-  sheetItem:    { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  sheetIcon:    { width: 38, height: 38, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
-  sheetLabel:   { fontSize: 16, fontWeight: FONT.semibold, color: COLORS.textStrong },
-  reportOverlay:{ flex: 1, backgroundColor: COLORS.overlayLight, justifyContent: 'center', padding: 24 },
-  reportCard:   { backgroundColor: COLORS.white, borderRadius: RADIUS.xxl, padding: 22 },
-  reportTitle:  { fontSize: FONT.xl, fontWeight: FONT.extrabold, color: COLORS.textStrong },
-  reasonOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 46, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white },
-  reasonOptionOn:{ borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08` },
-  reasonTxt:    { fontSize: 14, fontWeight: FONT.medium, color: COLORS.textStrong },
-  reportCancel: { flex: 1, minHeight: 48, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white },
-  reportSubmit: { flex: 1, minHeight: 48, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.textStrong },
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    ...SHADOWS.sm,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  headerTitle: {
+    fontSize: FONT.xxl,
+    fontWeight: FONT.extrabold,
+    color: COLORS.text,
+  },
+  filterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.savanna,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+  },
+  filterBtnActive: {
+    backgroundColor: `${COLORS.primary}15`,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+  },
+  filterTxt: {
+    fontSize: FONT.sm,
+    fontWeight: FONT.semibold,
+    color: COLORS.earth,
+  },
+  toast: {
+    position: 'absolute',
+    top: 90,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.toastBg,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: RADIUS.full,
+  },
 });

@@ -19,14 +19,13 @@ interface UserCardProps {
   isLiked: boolean;
   onLike: (userId: string) => void;
   onMessage: (userId: string) => void;
-  onOptions?: (userId: string) => void;
 }
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
 const CARD_HEIGHT = CARD_WIDTH * 1.45;
 
-export function UserCard({ user, isLiked, onLike, onMessage, onOptions }: UserCardProps) {
+export function UserCard({ user, isLiked, onLike, onMessage }: UserCardProps) {
   const avatar =
     user.profile_photos?.[0] ||
     user.avatar_url ||
@@ -111,16 +110,6 @@ export function UserCard({ user, isLiked, onLike, onMessage, onOptions }: UserCa
         ) : null}
       </LinearGradient>
 
-      {/* ⋮ Options button — bottom-right */}
-      {onOptions && (
-        <TouchableOpacity
-          onPress={(e) => { e.stopPropagation(); onOptions(user.id); }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          style={s.optionsBtn}
-        >
-          <Ionicons name="ellipsis-horizontal" size={14} color="rgba(255,255,255,0.9)" />
-        </TouchableOpacity>
-      )}
     </TouchableOpacity>
   );
 }
@@ -206,16 +195,5 @@ const s = StyleSheet.create({
   locationText: {
     fontSize: FONT.xs,
     color: 'rgba(255,255,255,0.82)',
-  },
-  optionsBtn: {
-    position: 'absolute',
-    bottom: 10,
-    right: 8,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(0,0,0,0.38)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
