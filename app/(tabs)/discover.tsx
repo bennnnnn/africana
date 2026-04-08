@@ -59,9 +59,13 @@ export default function DiscoverScreen() {
     extrapolate: 'clamp',
   });
 
+  const agePref = user?.min_age_pref && user?.max_age_pref
+    ? { min: user.min_age_pref, max: user.max_age_pref }
+    : undefined;
+
   useEffect(() => {
     if (user) {
-      fetchUsers(user.id, user.interested_in, true);
+      fetchUsers(user.id, user.interested_in, true, agePref);
       fetchLikedUserIds(user.id);
       subscribeToOnlineStatus();
     }
@@ -71,12 +75,12 @@ export default function DiscoverScreen() {
   const handleRefresh = useCallback(async () => {
     if (!user) return;
     setRefreshing(true);
-    await fetchUsers(user.id, user.interested_in, true);
+    await fetchUsers(user.id, user.interested_in, true, agePref);
     setRefreshing(false);
   }, [user]);
 
   const handleLoadMore = () => {
-    if (!isLoading && hasMore && user) fetchUsers(user.id, user.interested_in);
+    if (!isLoading && hasMore && user) fetchUsers(user.id, user.interested_in, false, agePref);
   };
 
   const handleMessage = async (toUserId: string) => {

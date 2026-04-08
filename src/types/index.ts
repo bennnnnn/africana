@@ -58,6 +58,8 @@ export interface User extends OriginLocationFields {
   created_at: string;
   updated_at: string;
   age?: number;
+  min_age_pref?: number | null;
+  max_age_pref?: number | null;
 }
 
 export interface UserSettings {
