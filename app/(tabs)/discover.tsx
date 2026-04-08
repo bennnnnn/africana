@@ -133,7 +133,7 @@ export default function DiscoverScreen() {
   }).length;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.surface }}>
       {/* Header */}
       <Animated.View
         style={{

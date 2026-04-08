@@ -96,7 +96,7 @@ export default function MessagesScreen() {
   }, [conversations, search]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.surface }}>
       {/* Header */}
       <View style={s.header}>
         <Text style={s.title}>Messages</Text>

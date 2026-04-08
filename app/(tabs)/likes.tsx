@@ -275,7 +275,7 @@ export default function LikesScreen() {
   const e = emptyMap[tab];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.surface }}>
 
       {/* Header */}
       <View style={s.header}>
