@@ -38,7 +38,7 @@ export default function LegalScreen() {
   );
 }
 
-function Section({ title, children }: { title: string; children: string }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={{ marginBottom: 20 }}>
       <Text style={s.sectionTitle}>{title}</Text>

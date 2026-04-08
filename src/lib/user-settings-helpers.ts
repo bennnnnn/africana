@@ -70,6 +70,9 @@ export function rowToUserSettings(row: Record<string, unknown>): UserSettings {
     notify_matches: row.notify_matches !== false,
     notify_views: row.notify_views !== false,
     push_token: (row.push_token as string | null) ?? null,
+    likes_seen_at: (row.likes_seen_at as string | null) ?? null,
+    views_seen_at: (row.views_seen_at as string | null) ?? null,
+    favourites_seen_at: (row.favourites_seen_at as string | null) ?? null,
     theme: normalizeTheme(row.theme),
   };
 }

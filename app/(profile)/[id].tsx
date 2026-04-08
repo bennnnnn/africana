@@ -189,8 +189,8 @@ export default function ProfileViewScreen() {
   const educationLabel   = profile.education      ? EDUCATION_OPTIONS.find(e => e.value === profile.education)?.label           ?? profile.education      : null;
   const maritalLabel     = profile.marital_status ? MARITAL_STATUS_OPTIONS.find(m => m.value === profile.marital_status)?.label ?? profile.marital_status : null;
   const wantChildLabel    = profile.want_children  ? WANT_CHILDREN_YES_NO.find(o => o.value === profile.want_children)?.label   ?? profile.want_children  : null;
-  const bodyTypeLabel    = profile.body_type      ? (PHYSICAL_CONDITION_OPTIONS as any[]).find(o => o.value === profile.body_type)?.label ?? profile.body_type : null;
-  const occupationLabel   = profile.occupation     ? (OCCUPATION_OPTIONS as any[]).find(o => o.value === profile.occupation)?.label ?? profile.occupation    : null;
+  const bodyTypeLabel    = profile.body_type      ? PHYSICAL_CONDITION_OPTIONS.find(o => o.value === profile.body_type)?.label ?? profile.body_type : null;
+  const occupationLabel   = profile.occupation     ? OCCUPATION_OPTIONS.find(o => o.value === profile.occupation)?.label ?? profile.occupation    : null;
   const interestedInLabel = INTERESTED_IN_OPTIONS.find(o => o.value === profile.interested_in)?.label ?? null;
 
   const safePhotos = profile.profile_photos ?? [];

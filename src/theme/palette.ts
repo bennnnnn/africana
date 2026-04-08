@@ -1,35 +1,81 @@
 import { COLORS } from '@/constants';
 
-export type ThemeColors = { [K in keyof typeof COLORS]: string };
+type BaseThemeColors = { [K in keyof typeof COLORS]: string };
 
-export const lightColors: ThemeColors = { ...COLORS };
+type ExtendedThemeColors = BaseThemeColors & {
+  background: string;
+  inactive: string;
+  icon: string;
+  iconMuted: string;
+  primarySurface: string;
+  primaryBorder: string;
+  selectedSurface: string;
+  selectedBorder: string;
+  successSurface: string;
+  successBorder: string;
+  warningSurface: string;
+  warningBorder: string;
+  errorSurface: string;
+  errorBorder: string;
+  infoSurface: string;
+  infoBorder: string;
+  favouriteSurface: string;
+  favouriteBorder: string;
+  attention: string;
+};
+
+export type ThemeColors = ExtendedThemeColors;
+
+const monochromeExtras = {
+  background: '#FFFFFF',
+  inactive: '#6B7280',
+  icon: '#111111',
+  iconMuted: '#6B7280',
+  primarySurface: '#FFFFFF',
+  primaryBorder: '#D1D5DB',
+  selectedSurface: '#FFFFFF',
+  selectedBorder: '#111111',
+  successSurface: '#FFFFFF',
+  successBorder: '#D1D5DB',
+  warningSurface: '#FFFFFF',
+  warningBorder: '#D1D5DB',
+  errorSurface: '#FFFFFF',
+  errorBorder: '#D1D5DB',
+  infoSurface: '#FFFFFF',
+  infoBorder: '#D1D5DB',
+  favouriteSurface: '#FFFFFF',
+  favouriteBorder: '#D1D5DB',
+  attention: '#111111',
+} as const;
+
+export const lightColors: ThemeColors = {
+  ...COLORS,
+  primary: '#111111',
+  primaryLight: '#111111',
+  primaryDark: '#111111',
+  success: '#111111',
+  warning: '#111111',
+  error: '#111111',
+  online: '#111111',
+  offline: '#6B7280',
+  surface: '#FFFFFF',
+  card: '#FFFFFF',
+  white: '#FFFFFF',
+  inputBg: '#FFFFFF',
+  text: '#111111',
+  textSecondary: '#4B5563',
+  textMuted: '#6B7280',
+  textInverse: '#FFFFFF',
+  textStrong: '#111111',
+  border: '#E5E7EB',
+  borderStrong: '#D1D5DB',
+  savanna: '#F9FAFB',
+  gold: '#111111',
+  green: '#111111',
+  ...monochromeExtras,
+};
 
 /** Dark surfaces; brand accents unchanged for recognition */
 export const darkColors: ThemeColors = {
-  ...COLORS,
-  background: '#120E0B',
-  surface: '#181210',
-  card: '#221A16',
-  text: '#F7F0EA',
-  textSecondary: '#C0B0A3',
-  textMuted: '#8D7D71',
-  inactive: '#8D7D71',
-  icon: '#C0B0A3',
-  iconMuted: '#8D7D71',
-  border: '#352922',
-  savanna: '#2A211C',
-  primarySurface: '#38241D',
-  primaryBorder: '#704332',
-  selectedSurface: '#38241D',
-  selectedBorder: '#704332',
-  successSurface: '#123227',
-  successBorder: '#1F6B52',
-  warningSurface: '#3A2712',
-  warningBorder: '#9C6A17',
-  errorSurface: '#3A1717',
-  errorBorder: '#7F2A2A',
-  infoSurface: '#16263D',
-  infoBorder: '#335A8F',
-  favouriteSurface: '#3B2D15',
-  favouriteBorder: '#8D6A1F',
+  ...lightColors,
 };

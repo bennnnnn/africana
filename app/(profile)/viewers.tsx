@@ -151,7 +151,7 @@ export default function ViewersScreen() {
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{v.full_name}</Text>
-                    {v.verified && (
+                    {(v.verified || v.verification_status === 'approved') && (
                       <Ionicons name="checkmark-circle" size={15} color={colors.primary} />
                     )}
                   </View>

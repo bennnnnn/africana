@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl, StyleSheet,
+  ActivityIndicator, RefreshControl, StyleSheet, InteractionManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -32,7 +32,7 @@ export default function LikesScreen() {
   const tabBarHeight = 56 + insets.bottom;
   const { user } = useAuthStore();
   const { getOrCreateConversation } = useChatStore();
-  const [tab, setTab] = useState<Tab>('matches');
+  const [tab, setTab] = useState<Tab>('received');
   const [lists, setLists] = useState<Record<Tab, User[]>>({
     matches: [],
     received: [],
@@ -53,12 +53,6 @@ export default function LikesScreen() {
     sent: 0,
     viewers: 0,
     favourites: 0,
-  });
-  // Timestamps of when each activity tab was last seen — used to compute "new since last visit" counts
-  const seenAtRef = useRef<{ likes: string | null; views: string | null; favourites: string | null }>({
-    likes: null,
-    views: null,
-    favourites: null,
   });
   const [loadingTabs, setLoadingTabs] = useState<Record<Tab, boolean>>({
     matches: false,
@@ -190,7 +184,6 @@ export default function LikesScreen() {
           ? [...(state[targetTab] ?? []), ...resolved]
           : resolved,
       }));
-      setCounts((state) => ({ ...state, [targetTab]: nextList.length > 0 ? nextList.length : fallback.length }));
       setLoadedTabs((state) => ({ ...state, [targetTab]: true }));
       if (loadMore || force) {
         setPages((s) => ({ ...s, [targetTab]: currentPage + 1 }));
@@ -199,52 +192,6 @@ export default function LikesScreen() {
       setLoadingTabs((state) => ({ ...state, [targetTab]: false }));
     }
   }, [fetchBlockedSet, loadedTabs, profileSelect, tab, user]);
-
-  // Load the user's last-seen timestamps from user_settings, then count only rows newer than those.
-  const refreshCounts = useCallback(async () => {
-    if (!user) return;
-
-    // 1. Fetch last-seen timestamps (single row, very cheap)
-    const { data: settings } = await supabase
-      .from('user_settings')
-      .select('likes_seen_at, views_seen_at, favourites_seen_at')
-      .eq('user_id', user.id)
-      .single();
-
-    const likesSeen    = settings?.likes_seen_at     ?? null;
-    const viewsSeen    = settings?.views_seen_at     ?? null;
-    const favsSeen     = settings?.favourites_seen_at ?? null;
-
-    seenAtRef.current = { likes: likesSeen, views: viewsSeen, favourites: favsSeen };
-
-    // 2. Count only rows newer than the last-seen timestamp (hits the existing composite indexes)
-    const buildLikesQ = (col: string, val: string, since: string | null) => {
-      let q = supabase.from('likes').select('*', { count: 'exact', head: true }).eq(col, val);
-      if (since) q = q.gt('created_at', since);
-      return q;
-    };
-
-    const [{ count: received }, { count: viewers }, { count: favourites }] = await Promise.all([
-      buildLikesQ('to_user_id', user.id, likesSeen),
-      (() => {
-        let q = supabase.from('profile_views').select('*', { count: 'exact', head: true }).eq('viewed_id', user.id);
-        if (viewsSeen) q = q.gt('viewed_at', viewsSeen);
-        return q;
-      })(),
-      (() => {
-        let q = supabase.from('favourites').select('*', { count: 'exact', head: true }).eq('favourited_id', user.id);
-        if (favsSeen) q = q.gt('created_at', favsSeen);
-        return q;
-      })(),
-    ]);
-
-    setCounts((state) => ({
-      ...state,
-      received:   received   ?? state.received,
-      viewers:    viewers    ?? state.viewers,
-      favourites: favourites ?? state.favourites,
-    }) as Record<Tab, number>);
-  }, [user]);
 
   // Mark the current tab as seen — resets its badge to 0 and persists the timestamp
   const markTabSeen = useCallback(async (t: Tab) => {
@@ -264,9 +211,14 @@ export default function LikesScreen() {
   useEffect(() => {
     if (!user) return;
     blockedIdsRef.current = null;
-    loadTab(tab, true).finally(() => {
-      refreshCounts();
+
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      loadTab(tab, true);
     });
+
+    return () => {
+      interactionHandle.cancel();
+    };
   }, [user?.id]);
 
   useEffect(() => {
@@ -277,25 +229,48 @@ export default function LikesScreen() {
   }, [tab, user?.id]);
 
   useEffect(() => {
-    if (!user || !loadedTabs[tab] || loadingTabs[tab]) return;
+    if (!user) return;
 
-    const warmTabs = TABS.map(({ key }) => key).filter((key) => key !== tab && !loadedTabs[key]);
-    if (warmTabs.length === 0) return;
+    const incrementIfHidden = (targetTab: Tab) => {
+      if (tab === targetTab) return;
+      setCounts((state) => ({ ...state, [targetTab]: state[targetTab] + 1 }));
+    };
 
-    const timer = setTimeout(() => {
-      warmTabs.forEach((targetTab) => {
-        loadTab(targetTab);
-      });
-    }, 250);
+    const isKnownMatch = (otherUserId: string) => {
+      const sent = lists.sent ?? [];
+      const matches = lists.matches ?? [];
+      return sent.some((entry) => entry.id === otherUserId) || matches.some((entry) => entry.id === otherUserId);
+    };
 
-    return () => clearTimeout(timer);
-  }, [loadedTabs, loadingTabs, loadTab, tab, user?.id]);
+    const channel = supabase
+      .channel(`likes-badges-${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'likes' }, (payload) => {
+        const row = payload.new as { from_user_id?: string; to_user_id?: string };
+        if (row.to_user_id !== user.id || !row.from_user_id) return;
+        incrementIfHidden(isKnownMatch(row.from_user_id) ? 'matches' : 'received');
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'profile_views' }, (payload) => {
+        const row = payload.new as { viewed_id?: string };
+        if (row.viewed_id !== user.id) return;
+        incrementIfHidden('viewers');
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'favourites' }, (payload) => {
+        const row = payload.new as { favourited_id?: string };
+        if (row.favourited_id !== user.id) return;
+        incrementIfHidden('favourites');
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [lists.matches, lists.sent, tab, user?.id]);
 
   const handleRefresh = async () => {
     if (!user) return;
     setRefreshing(true);
     setPages((s) => ({ ...s, [tab]: 0 }));
-    await Promise.all([loadTab(tab, true), refreshCounts()]);
+    await loadTab(tab, true);
     setRefreshing(false);
   };
 

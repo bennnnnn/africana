@@ -105,37 +105,37 @@ export default function VerifyScreen() {
       <View style={{
         flexDirection: 'row', alignItems: 'center', gap: 12,
         paddingHorizontal: 20, paddingVertical: 14,
-        backgroundColor: colors.card,
+        backgroundColor: '#FFFFFF',
         borderBottomWidth: 1, borderBottomColor: colors.border,
       }}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+          <Ionicons name="arrow-back" size={24} color="#111111" />
         </TouchableOpacity>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>Profile Verification</Text>
+        <Text style={{ fontSize: 17, fontWeight: '700', color: '#111111' }}>Profile Verification</Text>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 24 }}>
         {/* Status badge */}
         {status === 'pending' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.warningSurface, borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.warningBorder }}>
-            <Ionicons name="time-outline" size={22} color={colors.attention} />
-            <Text style={{ flex: 1, fontSize: 14, color: colors.attention, fontWeight: '600' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.border }}>
+            <Ionicons name="time-outline" size={22} color="#111111" />
+            <Text style={{ flex: 1, fontSize: 14, color: '#111111', fontWeight: '600' }}>
               Verification pending — we're reviewing your submission. This usually takes 24–48 hours.
             </Text>
           </View>
         )}
         {status === 'approved' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.successSurface, borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.successBorder }}>
-            <Ionicons name="checkmark-circle" size={22} color={colors.success} />
-            <Text style={{ flex: 1, fontSize: 14, color: colors.success, fontWeight: '600' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.border }}>
+            <Ionicons name="checkmark-circle" size={22} color="#111111" />
+            <Text style={{ flex: 1, fontSize: 14, color: '#111111', fontWeight: '600' }}>
               Your profile is verified! A blue badge appears on your profile for all members to see.
             </Text>
           </View>
         )}
         {status === 'rejected' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.errorSurface, borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.errorBorder }}>
-            <Ionicons name="close-circle" size={22} color={colors.error} />
-            <Text style={{ flex: 1, fontSize: 14, color: colors.error, fontWeight: '600' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.border }}>
+            <Ionicons name="close-circle" size={22} color="#111111" />
+            <Text style={{ flex: 1, fontSize: 14, color: '#111111', fontWeight: '600' }}>
               Your previous submission was rejected. Please try again with a clear, well-lit photo of your face.
             </Text>
           </View>
@@ -143,10 +143,10 @@ export default function VerifyScreen() {
 
         {/* Hero icon */}
         <View style={{ alignItems: 'center', marginBottom: 28 }}>
-          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: `${colors.primary}15`, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-            <Ionicons name="shield-checkmark-outline" size={38} color={colors.primary} />
+          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+            <Ionicons name="shield-checkmark-outline" size={38} color="#111111" />
           </View>
-          <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text, textAlign: 'center' }}>
+          <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', textAlign: 'center' }}>
             {status === 'approved' ? 'You\'re Verified' : 'Get Verified'}
           </Text>
           <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 21, marginTop: 8, paddingHorizontal: 16 }}>
@@ -161,11 +161,11 @@ export default function VerifyScreen() {
           { icon: 'checkmark-circle-outline', title: 'Get your badge', desc: 'A blue checkmark badge will appear on your profile.' },
         ].map((step, i) => (
           <View key={i} style={{ flexDirection: 'row', gap: 14, marginBottom: 20 }}>
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: `${colors.primary}12`, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Ionicons name={step.icon as any} size={20} color={colors.primary} />
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Ionicons name={step.icon as any} size={20} color="#111111" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{step.title}</Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>{step.title}</Text>
               <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 2, lineHeight: 19 }}>{step.desc}</Text>
             </View>
           </View>
@@ -178,18 +178,18 @@ export default function VerifyScreen() {
               <TouchableOpacity onPress={pickSelfie} style={{ alignItems: 'center', marginBottom: 20 }}>
                 <Image
                   source={{ uri: selfieUri }}
-                  style={{ width: 160, height: 160, borderRadius: 80, borderWidth: 3, borderColor: colors.primary }}
+                  style={{ width: 160, height: 160, borderRadius: 80, borderWidth: 2, borderColor: '#111111' }}
                   contentFit="cover"
                 />
-                <Text style={{ marginTop: 8, fontSize: 13, color: colors.primary, fontWeight: '600' }}>Tap to retake</Text>
+                <Text style={{ marginTop: 8, fontSize: 13, color: '#111111', fontWeight: '600' }}>Tap to retake</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
                 onPress={pickSelfie}
                 style={{ alignItems: 'center', justifyContent: 'center', height: 160, borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.border, marginBottom: 20 }}
               >
-                <Ionicons name="camera-outline" size={32} color={colors.textMuted} />
-                <Text style={{ marginTop: 8, fontSize: 14, color: colors.textMuted }}>Take a selfie</Text>
+                <Ionicons name="camera-outline" size={32} color="#111111" />
+                <Text style={{ marginTop: 8, fontSize: 14, color: '#111111' }}>Take a selfie</Text>
               </TouchableOpacity>
             )}
 
@@ -199,8 +199,10 @@ export default function VerifyScreen() {
               disabled={!selfieUri || uploading}
               fullWidth
               size="lg"
+              style={{ backgroundColor: '#111111', borderWidth: 1, borderColor: '#111111' }}
+              textStyle={{ color: '#FFFFFF' }}
             />
-            {uploading && <ActivityIndicator style={{ marginTop: 12 }} color={colors.primary} />}
+            {uploading && <ActivityIndicator style={{ marginTop: 12 }} color="#111111" />}
           </>
         )}
 

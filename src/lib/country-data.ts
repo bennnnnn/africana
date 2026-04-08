@@ -6,6 +6,7 @@ export type SubdivisionLabel =
 export interface Subdivision {
   name: string;
   cities: string[];
+  region?: string;
 }
 
 export interface CountryData {
@@ -13,6 +14,7 @@ export interface CountryData {
   name: string;
   subdivisionLabel: SubdivisionLabel;
   subdivisions: Subdivision[];
+  pickerMode?: 'subdivision' | 'region';
 }
 
 export interface CountryGroup {

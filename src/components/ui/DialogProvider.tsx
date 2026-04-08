@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-type DialogActionStyle = 'default' | 'destructive';
+type DialogTone = 'default' | 'success' | 'danger';
+type DialogActionStyle = 'default' | 'primary' | 'secondary' | 'destructive';
 
 type DialogAction = {
   label: string;
@@ -20,6 +21,8 @@ type DialogAction = {
 type DialogConfig = {
   title: string;
   message?: string;
+  tone?: DialogTone;
+  icon?: keyof typeof Ionicons.glyphMap;
   actions?: DialogAction[];
 };
 
@@ -75,8 +78,8 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(() => ({ showDialog, showToast, dismissDialog }), [dismissDialog, showDialog, showToast]);
 
-  const cancelAction  = dialog?.actions?.find((a) => a.label.toLowerCase() === 'cancel');
-  const primaryAction = dialog?.actions?.find((a) => a.label.toLowerCase() !== 'cancel');
+  const actions = dialog?.actions ?? [];
+  const useInlineActions = actions.length <= 2;
 
   return (
     <DialogContext.Provider value={value}>
@@ -93,28 +96,37 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
 
             <Animated.View style={[styles.cardWrap, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
               <View style={styles.card}>
+                {dialog.icon ? (
+                  <View style={styles.iconWrap}>
+                    <Ionicons name={dialog.icon} size={20} color="#111111" />
+                  </View>
+                ) : null}
                 <Text style={styles.title}>{dialog.title}</Text>
                 {!!dialog.message && <Text style={styles.message}>{dialog.message}</Text>}
 
-                <View style={styles.btnRow}>
-                  {cancelAction && (
+                <View style={[styles.btnRow, useInlineActions && styles.btnRowInline]}>
+                  {actions.map((action) => (
                     <TouchableOpacity
-                      style={[styles.btn, styles.btnCancel]}
+                      key={`${action.label}-${action.style ?? 'default'}`}
+                      style={[
+                        styles.btn,
+                        useInlineActions && styles.btnInline,
+                        action.label.toLowerCase() === 'cancel' && styles.btnCancel,
+                        action.style === 'destructive' && styles.btnDestructive,
+                      ]}
                       activeOpacity={0.7}
-                      onPress={() => { dismissDialog(); setTimeout(() => void cancelAction.onPress?.(), 200); }}
+                      onPress={() => { dismissDialog(); setTimeout(() => void action.onPress?.(), 200); }}
                     >
-                      <Text style={styles.btnText}>{cancelAction.label}</Text>
+                      <Text
+                        style={[
+                          styles.btnText,
+                          action.style === 'destructive' && styles.btnTextDestructive,
+                        ]}
+                      >
+                        {action.label}
+                      </Text>
                     </TouchableOpacity>
-                  )}
-                  {primaryAction && (
-                    <TouchableOpacity
-                      style={[styles.btn, styles.btnPrimary]}
-                      activeOpacity={0.7}
-                      onPress={() => { dismissDialog(); setTimeout(() => void primaryAction.onPress?.(), 200); }}
-                    >
-                      <Text style={styles.btnText}>{primaryAction.label}</Text>
-                    </TouchableOpacity>
-                  )}
+                  ))}
                 </View>
               </View>
             </Animated.View>
@@ -160,42 +172,69 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 22,
     padding: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.16,
+    shadowRadius: 28,
+    elevation: 10,
+  },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 14,
   },
   title: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#000',
+    color: '#111111',
     marginBottom: 6,
   },
   message: {
     fontSize: 14,
-    color: '#555',
+    color: '#374151',
     lineHeight: 20,
     marginBottom: 22,
   },
   btnRow: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 10,
     marginTop: 8,
   },
+  btnRowInline: {
+    flexDirection: 'row',
+  },
   btn: {
     flex: 1,
-    height: 46,
-    borderRadius: 10,
+    height: 48,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    backgroundColor: '#fff',
+    backgroundColor: '#F3F4F6',
   },
-  btnCancel: {},
-  btnPrimary: {},
+  btnInline: {
+    minWidth: 0,
+  },
+  btnCancel: {
+    backgroundColor: '#F3F4F6',
+  },
+  btnDestructive: {
+    backgroundColor: '#111111',
+  },
   btnText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#000',
+    color: '#111111',
+  },
+  btnTextDestructive: {
+    color: '#FFFFFF',
   },
   toast: {
     position: 'absolute',

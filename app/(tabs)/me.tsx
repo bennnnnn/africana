@@ -165,7 +165,7 @@ export default function MyProfileScreen() {
   };
 
   const openText   = (k: string, v: string | null)   => { setEditing(k); setEditText(v ?? ''); setListSearch(''); };
-  const openSelect = (k: string, v: string | null)   => { setEditing(k); setEditSelect(v); setListSearch(''); };
+  const openSelect = (k: string, v: string | null | undefined)   => { setEditing(k); setEditSelect(v ?? null); setListSearch(''); };
   const openMulti  = (k: string, v: string[])        => { setEditing(k); setEditMulti([...v]); };
   const openBool   = (k: string, v: boolean | null)  => { setEditing(k); setEditBool(v); };
 
@@ -249,8 +249,8 @@ export default function MyProfileScreen() {
   const educationLabel    = user.education      ? EDUCATION_OPTIONS.find(o => o.value === user.education)?.label           ?? user.education      : null;
   const maritalLabel      = user.marital_status ? MARITAL_STATUS_OPTIONS.find(o => o.value === user.marital_status)?.label ?? user.marital_status : null;
   const wantChildrenLabel = user.want_children  ? WANT_CHILDREN_YES_NO.find(o => o.value === user.want_children)?.label   ?? user.want_children  : null;
-  const bodyTypeLabel     = user.body_type      ? (PHYSICAL_CONDITION_OPTIONS as any[]).find(o => o.value === user.body_type)?.label ?? user.body_type : null;
-  const occupationLabel   = user.occupation     ? (OCCUPATION_OPTIONS as any[]).find(o => o.value === user.occupation)?.label ?? user.occupation  : null;
+  const bodyTypeLabel     = user.body_type      ? PHYSICAL_CONDITION_OPTIONS.find(o => o.value === user.body_type)?.label ?? user.body_type : null;
+  const occupationLabel   = user.occupation     ? OCCUPATION_OPTIONS.find(o => o.value === user.occupation)?.label ?? user.occupation  : null;
   const interestedInLabel  = INTERESTED_IN_OPTIONS.find(o => o.value === user.interested_in)?.label ?? null;
   const locationDisplay    = [user.city, user.state, user.country].filter(Boolean).join(', ');
   const originDisplay      = [user.origin_city, user.origin_state, user.origin_country].filter(Boolean).join(', ');

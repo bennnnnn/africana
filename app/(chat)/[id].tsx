@@ -15,6 +15,7 @@ import { useDiscoverStore } from '@/store/discover.store';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { User, Message } from '@/types';
 import { COLORS, RADIUS, FONT, SHADOWS, DEFAULT_AVATAR } from '@/constants';
+import { getHiddenMessageIds, persistHiddenMessageIds } from '@/lib/hidden-messages';
 import { MOCK_USERS } from '@/lib/mock-data';
 import dayjs from 'dayjs';
 import isToday from 'dayjs/plugin/isToday';
@@ -54,6 +55,7 @@ export default function ChatScreen() {
 
 
   const convMessages = messages[conversationId] ?? [];
+  const visibleMessages = convMessages.filter((message) => !hiddenIds.has(message.id));
   const seededConversation = conversations.find((conversation) => conversation.id === conversationId);
   const isLiked = otherUser ? likedUserIds.has(otherUser.id) : false;
   const avatar = otherUser
@@ -128,6 +130,17 @@ export default function ChatScreen() {
 
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, user?.id]);
+
+  useEffect(() => {
+    if (!conversationId || !user) return;
+    let cancelled = false;
+    getHiddenMessageIds(user.id, conversationId).then((storedIds) => {
+      if (!cancelled) setHiddenIds(storedIds);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [conversationId, user?.id]);
 
   // ── Realtime subscription — separate effect so store updates don't rebuild it ─
@@ -207,7 +220,14 @@ export default function ChatScreen() {
         { label: 'Cancel' },
         { label: 'Delete', style: 'destructive', onPress: () => {
           if (isOwn) deleteMessage(conversationId, messageId);
-          else setHiddenIds((prev) => new Set(prev).add(messageId));
+          else {
+            setHiddenIds((prev) => {
+              const next = new Set(prev);
+              next.add(messageId);
+              if (user) void persistHiddenMessageIds(user.id, conversationId, next);
+              return next;
+            });
+          }
           showToast({ message: 'Deleted' });
         }},
       ],
@@ -341,7 +361,7 @@ export default function ChatScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         {/* ── Empty state — outside FlatList to avoid inverted transform issues ── */}
-        {!loading && convMessages.length === 0 && (
+        {!loading && visibleMessages.length === 0 && (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 60, alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
               No messages yet.{'\n'}Say hello! 👋
@@ -352,7 +372,7 @@ export default function ChatScreen() {
         {/* ── Messages — inverted so newest is always at bottom, no scroll animation needed ── */}
         <FlatList
           ref={flatListRef}
-          data={[...convMessages].reverse()}
+          data={[...visibleMessages].reverse()}
           keyExtractor={(item) => item.id}
           inverted
           contentContainerStyle={{ padding: 12, paddingTop: 8 }}
@@ -363,12 +383,10 @@ export default function ChatScreen() {
             // In inverted list, index 0 = newest. nextItem is the older message above it.
             const isOwn = item.sender_id === user?.id;
             const isTemp = item.id.startsWith('temp-');
-            const nextItem = convMessages[convMessages.length - 1 - index - 1]; // older message
+            const nextItem = visibleMessages[visibleMessages.length - 1 - index - 1]; // older message
             const showDate = !nextItem ||
               dayjs(item.created_at).format('YYYY-MM-DD') !== dayjs(nextItem.created_at).format('YYYY-MM-DD');
             const msgReactions = reactions[item.id] ?? [];
-
-            if (hiddenIds.has(item.id)) return null;
 
             return (
               <View>

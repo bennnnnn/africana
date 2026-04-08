@@ -10,12 +10,15 @@ import { supabase } from './supabase';
 // Lazy-load expo-notifications so Expo Go doesn't crash on import
 let Notifications: typeof import('expo-notifications') | null = null;
 try {
-  Notifications = require('expo-notifications');
+  const loadedNotifications = require('expo-notifications') as typeof import('expo-notifications');
+  Notifications = loadedNotifications;
 
   // Configure foreground notification display (only when available)
-  Notifications.setNotificationHandler({
+  loadedNotifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
     }),
@@ -73,8 +76,11 @@ export async function registerForPushNotifications(userId: string): Promise<void
     if (Platform.OS === 'android') await setupAndroidChannels();
 
     const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ??
-      (Constants as any).easConfig?.projectId;
+      (Constants as unknown as {
+        expoConfig?: { extra?: { eas?: { projectId?: string } } };
+        easConfig?: { projectId?: string };
+      }).expoConfig?.extra?.eas?.projectId ??
+      (Constants as unknown as { easConfig?: { projectId?: string } }).easConfig?.projectId;
     const { data: token } = await Notifications.getExpoPushTokenAsync(
       projectId ? { projectId } : undefined
     );

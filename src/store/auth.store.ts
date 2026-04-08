@@ -74,6 +74,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         notify_matches: true,
         notify_views: false,
         push_token: null,
+        likes_seen_at: null,
+        views_seen_at: null,
+        favourites_seen_at: null,
+        theme: 'light' as const,
       };
       const { data: created } = await supabase
         .from('user_settings')

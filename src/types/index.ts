@@ -11,6 +11,8 @@ export type Education =
   | 'high_school' | 'some_college' | 'vocational' | 'bachelors'
   | 'masters' | 'phd' | 'other';
 export type WantChildren = 'yes' | 'no' | 'open';
+export type ThemePreference = 'light' | 'dark';
+export type VerificationStatus = 'pending' | 'approved' | 'rejected';
 export type PhysicalCondition =
   | 'slim'
   | 'athletic'
@@ -47,9 +49,12 @@ export interface User extends OriginLocationFields {
   ethnicity: string | null;          // free text
   occupation: string | null;         // free text
   languages: string[];               // e.g. ['English','Amharic']
-  hobbies: string[];                  // e.g. ['Music','Travel']
+  hobbies?: string[];                // e.g. ['Music','Travel']
   has_children: boolean | null;
   want_children: WantChildren | null;
+  verified?: boolean;
+  verification_status?: VerificationStatus | null;
+  verification_photo?: string | null;
   // Media & status
   profile_photos: string[];
   avatar_url: string | null;
@@ -74,9 +79,10 @@ export interface UserSettings {
   notify_matches: boolean;
   notify_views: boolean;
   push_token: string | null;
-  likes_seen_at: string | null;
-  views_seen_at: string | null;
-  favourites_seen_at: string | null;
+  likes_seen_at?: string | null;
+  views_seen_at?: string | null;
+  favourites_seen_at?: string | null;
+  theme?: ThemePreference;
 }
 
 export interface Like {
@@ -95,6 +101,8 @@ export interface Message {
   content: string;
   read_at: string | null;
   created_at: string;
+  edited_at?: string | null;
+  reactions?: string[];
   sender?: User;
 }
 

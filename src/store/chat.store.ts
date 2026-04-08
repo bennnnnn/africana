@@ -346,9 +346,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   markMessagesRead: async (conversationId, userId) => {
+    const readAt = new Date().toISOString();
+    set((state) => ({
+      conversations: state.conversations.map((conversation) =>
+        conversation.id === conversationId
+          ? { ...conversation, unread_count: 0 }
+          : conversation
+      ),
+      messages: {
+        ...state.messages,
+        [conversationId]: (state.messages[conversationId] ?? []).map((message) =>
+          message.sender_id !== userId && !message.read_at
+            ? { ...message, read_at: readAt }
+            : message
+        ),
+      },
+    }));
+    void replaceCachedMessages(conversationId, get().messages[conversationId] ?? []);
+    if (conversationId.startsWith('mock-')) return;
     await supabase
       .from('messages')
-      .update({ read_at: new Date().toISOString() })
+      .update({ read_at: readAt })
       .eq('conversation_id', conversationId)
       .is('read_at', null)
       .neq('sender_id', userId);

@@ -165,7 +165,7 @@ export default function DiscoverScreen() {
               </Text>
               {activeFilterCount > 0 && (
                 <TouchableOpacity
-                  onPress={() => { resetFilters(); if (user) fetchUsers(user.id, user.interested_in, true); }}
+                  onPress={() => { resetFilters(); if (user) fetchUsers(user.id, user.interested_in, true, agePref); }}
                   style={{ marginTop: 8, backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.xxl }}
                 >
                   <Text style={{ color: COLORS.white, fontWeight: FONT.bold, fontSize: 14 }}>Clear Filters</Text>
@@ -211,11 +211,11 @@ export default function DiscoverScreen() {
         onClose={() => setShowFilters(false)}
         onApply={(f) => {
           setFilters(f);
-          if (user) fetchUsers(user.id, user.interested_in, true);
+          if (user) fetchUsers(user.id, user.interested_in, true, agePref);
         }}
         onReset={() => {
           resetFilters();
-          if (user) fetchUsers(user.id, user.interested_in, true);
+          if (user) fetchUsers(user.id, user.interested_in, true, agePref);
         }}
       />
 
