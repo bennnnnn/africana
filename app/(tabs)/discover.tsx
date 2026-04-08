@@ -3,7 +3,7 @@ import {
   View, Text, FlatList, TouchableOpacity, Modal, Pressable,
   ActivityIndicator, RefreshControl, Animated, StyleSheet, Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -19,6 +19,8 @@ import { User } from '@/types';
 const REPORT_REASONS = ['Fake profile', 'Scam', 'Harassment', 'Nudity', 'Underage', 'Other'] as const;
 
 export default function DiscoverScreen() {
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = 56 + insets.bottom;
   const { user } = useAuthStore();
   const { users, isLoading, hasMore, filters, fetchUsers, fetchLikedUserIds, toggleLike, likedUserIds, setFilters, resetFilters, subscribeToOnlineStatus, unsubscribeFromOnlineStatus } =
     useDiscoverStore();
@@ -152,8 +154,7 @@ export default function DiscoverScreen() {
             Discover
           </Text>
           <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 1 }}>
-            {user ? `Hey ${user.full_name?.split(' ')[0] ?? ''} 👋  ` : ''}
-            {users.length > 0 ? `${users.length} members` : 'Find your connection'}
+            {users.length > 0 ? `${users.length} members nearby` : 'Find your connection'}
           </Text>
         </View>
         <TouchableOpacity
@@ -181,12 +182,14 @@ export default function DiscoverScreen() {
         data={users}
         keyExtractor={(item) => item.id}
         numColumns={2}
-        contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: tabBarHeight + 16 }}
         columnWrapperStyle={{ justifyContent: 'space-between' }}
         showsVerticalScrollIndicator={false}
         bounces
         alwaysBounceVertical
         overScrollMode="always"
+        decelerationRate="normal"
+        scrollEventThrottle={16}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.3}
         refreshControl={

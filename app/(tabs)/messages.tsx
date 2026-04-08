@@ -10,7 +10,7 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/auth.store';
@@ -25,6 +25,8 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 dayjs.extend(relativeTime);
 
 export default function MessagesScreen() {
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = 56 + insets.bottom;
   const { user } = useAuthStore();
   const { conversations, isLoading, fetchConversations, deleteConversation } = useChatStore();
   const [refreshing, setRefreshing] = useState(false);
@@ -122,7 +124,7 @@ export default function MessagesScreen() {
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
+        contentContainerStyle={{ padding: 12, paddingBottom: tabBarHeight + 16 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
