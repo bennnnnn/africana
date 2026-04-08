@@ -42,12 +42,20 @@ export default function DiscoverScreen() {
     ]).start(() => setToast(null));
   };
 
-  // ── Collapsing header ────────────────────────────────────────────────────────
+  // ── Scroll-driven header animations ─────────────────────────────────────────
   const scrollY = useRef(new Animated.Value(0)).current;
-  const clampedScroll = Animated.diffClamp(scrollY, 0, HEADER_HEIGHT);
-  const headerTranslateY = clampedScroll.interpolate({
-    inputRange: [0, HEADER_HEIGHT],
-    outputRange: [0, -HEADER_HEIGHT],
+
+  // On overscroll (pull down, scrollY goes negative) header gently stretches down — elastic feel
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [-80, 0],
+    outputRange: [28, 0],
+    extrapolate: 'clamp',
+  });
+
+  // Shadow fades in as soon as content scrolls under the header — gives depth
+  const headerShadowOpacity = scrollY.interpolate({
+    inputRange: [0, 24],
+    outputRange: [0, 1],
     extrapolate: 'clamp',
   });
 
@@ -171,11 +179,12 @@ export default function DiscoverScreen() {
         }
       />
 
-      {/* ── Collapsing header (absolutely positioned) ── */}
+      {/* ── Fixed header with elastic overscroll + depth shadow ── */}
       <Animated.View
         style={[s.header, {
           paddingTop: insets.top,
           transform: [{ translateY: headerTranslateY }],
+          shadowOpacity: headerShadowOpacity,
         }]}
       >
         <View style={s.headerRow}>
@@ -230,9 +239,10 @@ const s = StyleSheet.create({
     right: 0,
     zIndex: 10,
     backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    ...SHADOWS.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
+    elevation: 6,
   },
   headerRow: {
     flexDirection: 'row',
