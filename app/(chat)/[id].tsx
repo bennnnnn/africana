@@ -2,9 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   Modal, Animated, KeyboardAvoidingView, Platform,
-  StyleSheet, Dimensions,
+  StyleSheet, Dimensions, Pressable,
 } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -13,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { useDiscoverStore } from '@/store/discover.store';
+import { useDialog } from '@/components/ui/DialogProvider';
 import { User, Message } from '@/types';
 import { COLORS, RADIUS, FONT, SHADOWS, DEFAULT_AVATAR } from '@/constants';
 import { MOCK_USERS } from '@/lib/mock-data';
@@ -24,14 +24,15 @@ dayjs.extend(isToday);
 dayjs.extend(isYesterday);
 
 const { width } = Dimensions.get('window');
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 const REPORT_REASONS = ['Fake profile', 'Scam', 'Harassment', 'Nudity', 'Underage', 'Other'] as const;
+const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuthStore();
   const { conversations, messages, fetchMessages, sendMessage, deleteMessage, markMessagesRead, addMessage } = useChatStore();
   const { likedUserIds, toggleLike, fetchLikedUserIds } = useDiscoverStore();
+  const { showDialog, showToast } = useDialog();
 
   const [otherUser, setOtherUser]         = useState<User | null>(null);
   const [text, setText]                   = useState('');
@@ -39,28 +40,18 @@ export default function ChatScreen() {
   const [messagingDisabled, setMessagingDisabled] = useState(false);
   const [menuVisible, setMenuVisible]     = useState(false);
   const [isFavourite, setIsFavourite]     = useState(false);
-  const [reportVisible, setReportVisible] = useState(false);
-  const [selectedReason, setSelectedReason] = useState<typeof REPORT_REASONS[number] | null>(null);
-  const [blockVisible, setBlockVisible]   = useState(false);
-  const [ctxMsg, setCtxMsg]               = useState<{ id: string; content: string; isOwn: boolean } | null>(null);
-  // Local emoji reactions (visual only — persisted reactions need a DB table)
-  const [reactions, setReactions]         = useState<Record<string, string[]>>({});
-
   const menuAnim  = useRef(new Animated.Value(0)).current;
-  const ctxAnim   = useRef(new Animated.Value(0)).current;
-  const toastAnim = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList>(null);
-  const [toast, setToast] = useState<{ icon: string; message: string } | null>(null);
+  const inputRef = useRef<TextInput>(null);
+  const [inputFocused, setInputFocused] = useState(false);
+  // Unified overlay — one at a time; isOwn=true → own message (trash only), isOwn=false → other's (emojis + trash)
+  const [msgSheet, setMsgSheet] = useState<{ messageId: string; isOwn: boolean } | null>(null);
+  const reactionAnim = useRef(new Animated.Value(0)).current;
+  // Local reactions map: messageId → emoji[]
+  const [reactions, setReactions] = useState<Record<string, string[]>>({});
+  // Locally hidden messages (deleted for me only)
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
 
-  const showToast = (icon: string, message: string) => {
-    setToast({ icon, message });
-    toastAnim.setValue(0);
-    Animated.sequence([
-      Animated.timing(toastAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.delay(1600),
-      Animated.timing(toastAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
-    ]).start(() => setToast(null));
-  };
 
   const convMessages = messages[conversationId] ?? [];
   const seededConversation = conversations.find((conversation) => conversation.id === conversationId);
@@ -80,7 +71,7 @@ export default function ChatScreen() {
       .then(({ data }) => setIsFavourite(!!data));
   }, [user?.id, otherUser?.id]);
 
-  // ── Chat init — ALL parallel ─────────────────────────────────────────────────
+  // ── Chat init — runs once per conversation ───────────────────────────────────
   useEffect(() => {
     if (!conversationId || !user) return;
     const isMock = conversationId.startsWith('mock-conv-');
@@ -95,10 +86,11 @@ export default function ChatScreen() {
         return;
       }
 
-      if (seededConversation?.other_user) {
-        setOtherUser(seededConversation.other_user);
+      const seeded = seededConversation;
+      if (seeded?.other_user) {
+        setOtherUser(seeded.other_user);
         setLoading(false);
-        const otherId = seededConversation.other_user.id;
+        const otherId = seeded.other_user.id;
         await Promise.all([
           fetchMessages(conversationId),
           markMessagesRead(conversationId, user.id),
@@ -114,7 +106,6 @@ export default function ChatScreen() {
         return;
       }
 
-      // Run conversation fetch + messages fetch in parallel
       const [convResult] = await Promise.all([
         supabase.from('conversations').select('*').eq('id', conversationId).single(),
         fetchMessages(conversationId),
@@ -136,10 +127,13 @@ export default function ChatScreen() {
     };
 
     init();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, user?.id]);
 
-    if (isMock) return;
+  // ── Realtime subscription — separate effect so store updates don't rebuild it ─
+  useEffect(() => {
+    if (!conversationId || !user || conversationId.startsWith('mock-conv-')) return;
 
-    // Real-time: use payload.new directly — NO extra DB fetch
     const channel = supabase
       .channel(`messages-${conversationId}`)
       .on('postgres_changes', {
@@ -155,14 +149,9 @@ export default function ChatScreen() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [conversationId, seededConversation?.other_user?.id, user?.id]);
+  }, [conversationId, user?.id]);
 
-  // ── Auto-scroll ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (convMessages.length > 0) {
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
-    }
-  }, [convMessages.length]);
+  // Inverted FlatList handles scroll position automatically — no manual scrollToEnd needed
 
   // ── Menus ────────────────────────────────────────────────────────────────────
   const openMenu = () => {
@@ -172,48 +161,65 @@ export default function ChatScreen() {
   const closeMenu = () => {
     Animated.timing(menuAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => setMenuVisible(false));
   };
-  const openCtx = (id: string, content: string, isOwn: boolean) => {
-    setCtxMsg({ id, content, isOwn });
-    ctxAnim.setValue(0);
-    Animated.spring(ctxAnim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 }).start();
-  };
-  const closeCtx = () => {
-    Animated.timing(ctxAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => setCtxMsg(null));
-  };
-
   // ── Actions ──────────────────────────────────────────────────────────────────
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!text.trim() || !user) return;
-    if (messagingDisabled) return; // disabled notice shown in UI
+    if (messagingDisabled) return;
     const content = text.trim();
     setText('');
-    sendMessage(conversationId, user.id, content); // optimistic — no await needed
+    inputRef.current?.focus();
+    const { error } = await sendMessage(conversationId, user.id, content, user.full_name);
+    if (error) {
+      setText(content);
+      showToast({ message: 'Message failed to send' });
+      console.error('[Chat] send error:', error);
+    }
   };
 
-  const handleReact = (emoji: string) => {
-    if (!ctxMsg) return;
-    const msgId = ctxMsg.id;
+  const openMsgSheet = (messageId: string, isOwn: boolean) => {
+    setMsgSheet({ messageId, isOwn });
+    reactionAnim.setValue(0);
+    Animated.spring(reactionAnim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 }).start();
+  };
+
+  const closeMsgSheet = () => {
+    Animated.timing(reactionAnim, { toValue: 0, duration: 150, useNativeDriver: true })
+      .start(() => setMsgSheet(null));
+  };
+
+  const handleReact = (messageId: string, emoji: string) => {
     setReactions((prev) => {
-      const current = prev[msgId] ?? [];
+      const current = prev[messageId] ?? [];
       const exists = current.includes(emoji);
-      return { ...prev, [msgId]: exists ? current.filter((e) => e !== emoji) : [...current, emoji] };
+      return { ...prev, [messageId]: exists ? current.filter((e) => e !== emoji) : [...current, emoji] };
     });
-    closeCtx();
+    closeMsgSheet();
   };
 
-  const handleDelete = (messageId: string) => {
-    deleteMessage(conversationId, messageId); // optimistic in store
-    closeCtx();
+  const handleTrashPress = (messageId: string, isOwn: boolean) => {
+    closeMsgSheet();
+    showDialog({
+      title: 'Delete message',
+      message: isOwn
+        ? 'This will permanently delete the message for everyone.'
+        : 'This will remove the message from your view.',
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Delete', style: 'destructive', onPress: () => {
+          if (isOwn) deleteMessage(conversationId, messageId);
+          else setHiddenIds((prev) => new Set(prev).add(messageId));
+          showToast({ message: 'Deleted' });
+        }},
+      ],
+    });
   };
-
-  const handleCopy = (content: string) => { Clipboard.setStringAsync(content); closeCtx(); };
 
   const handleLike = async () => {
     closeMenu();
     if (!user || !otherUser) return;
     const wasLiked = likedUserIds.has(otherUser.id);
     toggleLike(user.id, otherUser.id);
-    showToast(wasLiked ? '💔' : '❤️', wasLiked ? 'Unliked' : 'Liked!');
+    showToast({ message: wasLiked ? 'Unliked' : 'Liked' });
   };
 
   const handleFavourite = async () => {
@@ -222,32 +228,50 @@ export default function ChatScreen() {
     if (isFavourite) {
       await supabase.from('favourites').delete().eq('user_id', user.id).eq('favourited_id', otherUser.id);
       setIsFavourite(false);
-      showToast('🗑️', 'Removed from favourites');
+      showToast({ message: 'Removed from favourites' });
     } else {
       await supabase.from('favourites').insert({ user_id: user.id, favourited_id: otherUser.id });
       setIsFavourite(true);
-      showToast('⭐', 'Added to favourites!');
+      showToast({ message: 'Added to favourites' });
     }
   };
 
-  const submitReport = async () => {
-    if (!user || !otherUser || !selectedReason) return;
-    await supabase.from('reports').insert({ reporter_id: user.id, reported_id: otherUser.id, reason: selectedReason });
-    setReportVisible(false);
-    setSelectedReason(null);
+  const handleReport = () => {
+    closeMenu();
+    if (!user || !otherUser) return;
+    showDialog({
+      title: `Report ${otherUser.full_name}`,
+      message: 'Select a reason. Our team will review it.',
+      actions: REPORT_REASONS.map((reason) => ({
+        label: reason,
+        onPress: async () => {
+          await supabase.from('reports').insert({ reporter_id: user.id, reported_id: otherUser.id, reason });
+          showToast({ message: 'Report submitted' });
+        },
+      })),
+    });
   };
 
-  const confirmBlock = async () => {
+  const handleBlock = () => {
+    closeMenu();
     if (!user || !otherUser) return;
-    await supabase.from('blocks').insert({ blocker_id: user.id, blocked_id: otherUser.id });
-    setBlockVisible(false);
-    router.back();
+    showDialog({
+      title: `Block ${otherUser.full_name}?`,
+      message: "They won't be able to see your profile or send you messages.",
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Block', style: 'destructive', onPress: async () => {
+          await supabase.from('blocks').insert({ blocker_id: user.id, blocked_id: otherUser.id });
+          router.back();
+        }},
+      ],
+    });
   };
 
   const isOwnProfile = user?.id === otherUser?.id;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#FDF6EE' }}>
 
       {/* ── Header ── */}
       <View style={s.header}>
@@ -282,9 +306,9 @@ export default function ChatScreen() {
         )}
       </View>
 
-      {/* ── Dropdown menu ── */}
+      {/* ── Dropdown menu — absolute, no Modal so keyboard stays open ── */}
       {menuVisible && (
-        <Modal transparent animationType="none" onRequestClose={closeMenu}>
+        <>
           <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={closeMenu} />
           <Animated.View style={[s.dropdown, {
             opacity: menuAnim,
@@ -299,16 +323,16 @@ export default function ChatScreen() {
               <Text style={s.menuLabel}>{isFavourite ? 'Unfavourite' : 'Favourite'}</Text>
             </TouchableOpacity>
             <View style={{ height: 1, backgroundColor: COLORS.border, marginHorizontal: 14 }} />
-            <TouchableOpacity style={s.menuItem} onPress={() => { closeMenu(); setTimeout(() => setReportVisible(true), 120); }}>
+            <TouchableOpacity style={s.menuItem} onPress={handleReport}>
               <View style={s.menuIcon}><Ionicons name="flag-outline" size={17} color={COLORS.textStrong} /></View>
               <Text style={s.menuLabel}>Report</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.menuItem} onPress={() => { closeMenu(); setTimeout(() => setBlockVisible(true), 120); }}>
+            <TouchableOpacity style={s.menuItem} onPress={handleBlock}>
               <View style={s.menuIcon}><Ionicons name="ban-outline" size={17} color={COLORS.error} /></View>
               <Text style={[s.menuLabel, { color: COLORS.error }]}>Block</Text>
             </TouchableOpacity>
           </Animated.View>
-        </Modal>
+        </>
       )}
 
       <KeyboardAvoidingView
@@ -316,50 +340,62 @@ export default function ChatScreen() {
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        {/* ── Messages ── */}
+        {/* ── Empty state — outside FlatList to avoid inverted transform issues ── */}
+        {!loading && convMessages.length === 0 && (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 60, alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
+              No messages yet.{'\n'}Say hello! 👋
+            </Text>
+          </View>
+        )}
+
+        {/* ── Messages — inverted so newest is always at bottom, no scroll animation needed ── */}
         <FlatList
           ref={flatListRef}
-          data={convMessages}
+          data={[...convMessages].reverse()}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 12, paddingBottom: 8 }}
+          inverted
+          contentContainerStyle={{ padding: 12, paddingTop: 8 }}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            !loading ? (
-              <View style={{ alignItems: 'center', paddingTop: 60 }}>
-                <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
-                  No messages yet.{'\n'}Say hello! 👋
-                </Text>
-              </View>
-            ) : null
-          }
-          renderItem={({ item, index }) => {
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={null}
+          renderItem={({ item, index, separators: _ }) => {
+            // In inverted list, index 0 = newest. nextItem is the older message above it.
             const isOwn = item.sender_id === user?.id;
             const isTemp = item.id.startsWith('temp-');
-            const showDate = index === 0 ||
-              dayjs(item.created_at).format('YYYY-MM-DD') !== dayjs(convMessages[index - 1]?.created_at).format('YYYY-MM-DD');
+            const nextItem = convMessages[convMessages.length - 1 - index - 1]; // older message
+            const showDate = !nextItem ||
+              dayjs(item.created_at).format('YYYY-MM-DD') !== dayjs(nextItem.created_at).format('YYYY-MM-DD');
             const msgReactions = reactions[item.id] ?? [];
+
+            if (hiddenIds.has(item.id)) return null;
 
             return (
               <View>
-                {showDate && (
-                  <View style={{ alignItems: 'center', marginVertical: 12 }}>
-                    <Text style={s.datePill}>
-                      {dayjs(item.created_at).isToday() ? 'Today'
-                        : dayjs(item.created_at).isYesterday() ? 'Yesterday'
-                        : dayjs(item.created_at).format('ddd, MMM D')}
-                    </Text>
-                  </View>
-                )}
                 <View style={{ flexDirection: 'row', justifyContent: isOwn ? 'flex-end' : 'flex-start', marginBottom: 4 }}>
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onLongPress={() => openCtx(item.id, item.content, isOwn)}
+                  <Pressable
+                    onLongPress={() => openMsgSheet(item.id, isOwn)}
                     delayLongPress={350}
+                    android_ripple={null}
+                    style={{ opacity: 1 }}
                   >
                     <View style={{ maxWidth: width * 0.72 }}>
-                      <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleOther, isTemp && { opacity: 0.6 }]}>
+                      <View style={[s.bubble, isOwn ? s.bubbleOwn : s.bubbleOther]}>
                         <Text style={[s.bubbleText, { color: isOwn ? COLORS.white : COLORS.textStrong }]}>{item.content}</Text>
                       </View>
+                      {/* Reactions hug the bottom edge of the bubble */}
+                      {msgReactions.length > 0 && (
+                        <View style={{ flexDirection: 'row', gap: 3, marginTop: -10,
+                          marginBottom: 4,
+                          paddingHorizontal: 6,
+                          justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
+                          {msgReactions.map((emoji, i) => (
+                            <View key={i} style={s.reactionBubble}>
+                              <Text style={{ fontSize: 13 }}>{emoji}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3,
                         justifyContent: isOwn ? 'flex-end' : 'flex-start', paddingHorizontal: 4 }}>
                         <Text style={s.timestamp}>{dayjs(item.created_at).format('h:mm A')}</Text>
@@ -369,18 +405,18 @@ export default function ChatScreen() {
                           </Text>
                         )}
                       </View>
-                      {msgReactions.length > 0 && (
-                        <View style={[s.reactionRow, { justifyContent: isOwn ? 'flex-end' : 'flex-start' }]}>
-                          {msgReactions.map((emoji, i) => (
-                            <View key={i} style={s.reactionBubble}>
-                              <Text style={{ fontSize: 15 }}>{emoji}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
                     </View>
-                  </TouchableOpacity>
+                  </Pressable>
                 </View>
+                {showDate && (
+                  <View style={{ alignItems: 'center', marginVertical: 12 }}>
+                    <Text style={s.datePill}>
+                      {dayjs(item.created_at).isToday() ? 'Today'
+                        : dayjs(item.created_at).isYesterday() ? 'Yesterday'
+                        : dayjs(item.created_at).format('ddd, MMM D')}
+                    </Text>
+                  </View>
+                )}
               </View>
             );
           }}
@@ -394,14 +430,19 @@ export default function ChatScreen() {
         ) : (
           <View style={s.inputRow}>
             <TextInput
+              ref={inputRef}
               value={text}
               onChangeText={setText}
               placeholder="Type a message…"
               placeholderTextColor={COLORS.textMuted}
               multiline
               maxLength={1000}
-              style={s.input}
+              style={[s.input, inputFocused && s.inputFocused]}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               onSubmitEditing={handleSend}
+              blurOnSubmit={false}
+              autoFocus
             />
             <TouchableOpacity
               onPress={handleSend}
@@ -414,128 +455,53 @@ export default function ChatScreen() {
         )}
       </KeyboardAvoidingView>
 
-      {/* ── Toast notification ── */}
-      {toast && (
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: 80,
-            alignSelf: 'center',
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            backgroundColor: COLORS.toastBg,
-            paddingHorizontal: 18,
-            paddingVertical: 11,
-            borderRadius: RADIUS.full,
-            opacity: toastAnim,
-            transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }],
-          }}
-        >
-          <Text style={{ fontSize: 18 }}>{toast.icon}</Text>
-          <Text style={{ color: COLORS.white, fontSize: 14, fontWeight: FONT.semibold }}>{toast.message}</Text>
-        </Animated.View>
-      )}
 
-      {/* ── Long-press context sheet ── */}
-      {ctxMsg && (
-        <Modal transparent animationType="none" onRequestClose={closeCtx}>
-          <TouchableOpacity style={s.ctxBackdrop} activeOpacity={1} onPress={closeCtx} />
-          <Animated.View style={[s.ctxSheet, {
-            opacity: ctxAnim,
-            transform: [{ translateY: ctxAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }],
-          }]}>
-            <View style={s.ctxHandle} />
 
-            {/* Emoji reaction row */}
-            <View style={s.reactionPicker}>
-              {QUICK_REACTIONS.map((emoji) => {
-                const active = (reactions[ctxMsg.id] ?? []).includes(emoji);
-                return (
-                  <TouchableOpacity key={emoji} onPress={() => handleReact(emoji)}
-                    style={[s.reactionPickerItem, active && s.reactionPickerItemActive]}>
-                    <Text style={{ fontSize: 24 }}>{emoji}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
 
-            <View style={{ height: 1, backgroundColor: COLORS.border, marginHorizontal: 20, marginVertical: 4 }} />
+      {/* ── Unified message overlay — no Modal so keyboard stays open ── */}
+      {msgSheet && (
+        <>
+          {/* Backdrop */}
+          <TouchableOpacity style={s.ctxBackdrop} activeOpacity={1} onPress={closeMsgSheet} />
 
-            {/* Copy */}
-            <TouchableOpacity style={s.ctxItem} onPress={() => handleCopy(ctxMsg.content)}>
-              <View style={[s.ctxIcon, { backgroundColor: COLORS.savanna }]}>
-                <Ionicons name="copy-outline" size={18} color={COLORS.textStrong} />
+          {/* Emoji reactions card — only for other user's messages */}
+          {!msgSheet.isOwn && (
+            <Animated.View style={[s.reactionCard, {
+              opacity: reactionAnim,
+              transform: [{ scale: reactionAnim.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
+            }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 12, paddingVertical: 16 }}>
+                {REACTIONS.map((emoji) => {
+                  const active = (reactions[msgSheet.messageId] ?? []).includes(emoji);
+                  return (
+                    <TouchableOpacity
+                      key={emoji}
+                      onPress={() => handleReact(msgSheet.messageId, emoji)}
+                      style={[s.reactionBtn, active && s.reactionBtnActive]}
+                    >
+                      <Text style={{ fontSize: 28 }}>{emoji}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              <Text style={s.ctxLabel}>Copy</Text>
-            </TouchableOpacity>
+            </Animated.View>
+          )}
 
-            {/* Delete (own messages only — no Alert, instant) */}
-            {ctxMsg.isOwn && (
-              <>
-                <View style={{ height: 1, backgroundColor: COLORS.border, marginHorizontal: 20 }} />
-                <TouchableOpacity style={s.ctxItem} onPress={() => handleDelete(ctxMsg.id)}>
-                  <View style={[s.ctxIcon, { backgroundColor: `${COLORS.error}12` }]}>
-                    <Ionicons name="trash-outline" size={18} color={COLORS.error} />
-                  </View>
-                  <Text style={[s.ctxLabel, { color: COLORS.error }]}>Delete message</Text>
-                </TouchableOpacity>
-              </>
-            )}
+          {/* Floating trash icon — same for both own and other's messages */}
+          <Animated.View style={[s.deleteFloat, {
+            opacity: reactionAnim,
+            transform: [{ scale: reactionAnim.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
+          }]}>
+            <TouchableOpacity
+              onPress={() => handleTrashPress(msgSheet.messageId, msgSheet.isOwn)}
+              style={s.deleteFloatBtn}
+            >
+              <Ionicons name="trash-outline" size={22} color={COLORS.textStrong} />
+            </TouchableOpacity>
           </Animated.View>
-        </Modal>
+        </>
       )}
 
-      {/* ── Report modal ── */}
-      <Modal visible={reportVisible} transparent animationType="fade"
-        onRequestClose={() => { setReportVisible(false); setSelectedReason(null); }}>
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <Text style={s.modalTitle}>Report {otherUser?.full_name}</Text>
-            <Text style={s.modalSub}>Select a reason</Text>
-            <View style={{ gap: 8, marginTop: 14 }}>
-              {REPORT_REASONS.map((reason) => {
-                const on = selectedReason === reason;
-                return (
-                  <TouchableOpacity key={reason} onPress={() => setSelectedReason(reason)}
-                    style={[s.reportOption, on && s.reportOptionOn]}>
-                    <Text style={[s.reportOptionTxt, on && { color: COLORS.primary, fontWeight: '700' }]}>{reason}</Text>
-                    {on && <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <View style={s.modalActions}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => { setReportVisible(false); setSelectedReason(null); }}>
-                <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.textStrong }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.modalConfirm, !selectedReason && { opacity: 0.4 }]}
-                onPress={submitReport} disabled={!selectedReason}>
-                <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.white }}>Report</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── Block modal ── */}
-      <Modal visible={blockVisible} transparent animationType="fade" onRequestClose={() => setBlockVisible(false)}>
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <Text style={s.modalTitle}>Block {otherUser?.full_name}?</Text>
-            <Text style={s.modalSub}>They won't be able to see your profile or message you.</Text>
-            <View style={s.modalActions}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => setBlockVisible(false)}>
-                <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.textStrong }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.modalConfirm, { backgroundColor: COLORS.error }]} onPress={confirmBlock}>
-                <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.white }}>Block</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -548,7 +514,7 @@ const s = StyleSheet.create({
   headerName: { fontSize: 16, fontWeight: FONT.bold, color: COLORS.textStrong },
   headerStatus: { fontSize: FONT.xs, fontWeight: FONT.medium, marginTop: 1 },
   iconBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 },
   dropdown: { position: 'absolute', top: 96, right: 12, backgroundColor: COLORS.white, borderRadius: RADIUS.lg, paddingVertical: 6, minWidth: 180, ...SHADOWS.md, borderWidth: 1, borderColor: COLORS.border, zIndex: 999 },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 12 },
   menuIcon: { width: 32, height: 32, borderRadius: RADIUS.md, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
@@ -559,29 +525,44 @@ const s = StyleSheet.create({
   bubbleOther: { backgroundColor: COLORS.white, borderBottomLeftRadius: 4 },
   bubbleText: { fontSize: FONT.md, lineHeight: 21 },
   timestamp: { fontSize: 10, color: COLORS.textMuted },
-  reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  reactionBubble: { backgroundColor: COLORS.white, borderRadius: RADIUS.md, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: COLORS.border, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 2, elevation: 1 },
   disabledBar: { padding: 16, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border, alignItems: 'center' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border, gap: 8 },
-  input: { flex: 1, minHeight: 42, maxHeight: 120, backgroundColor: COLORS.surface, borderRadius: RADIUS.full, paddingHorizontal: 16, paddingVertical: 10, fontSize: FONT.md, color: COLORS.textStrong, borderWidth: 1, borderColor: COLORS.border },
+  input: { flex: 1, minHeight: 42, maxHeight: 120, backgroundColor: COLORS.white, borderRadius: RADIUS.full, paddingHorizontal: 16, paddingVertical: 10, fontSize: FONT.md, color: COLORS.textStrong, borderWidth: 1.5, borderColor: COLORS.border },
+  inputFocused: { borderColor: COLORS.primary, backgroundColor: COLORS.white, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 2 },
   sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  ctxBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: COLORS.overlayLight },
-  ctxSheet: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: COLORS.white, borderTopLeftRadius: RADIUS.xxl, borderTopRightRadius: RADIUS.xxl, paddingBottom: 36, paddingTop: 8, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 20 },
-  ctxHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: 12 },
-  ctxItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, gap: 14 },
-  ctxIcon: { width: 38, height: 38, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
-  ctxLabel: { fontSize: 16, fontWeight: FONT.medium, color: COLORS.textStrong },
-  reactionPicker: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 20, paddingVertical: 14 },
-  reactionPickerItem: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  reactionPickerItemActive: { backgroundColor: `${COLORS.success}18`, borderWidth: 1.5, borderColor: COLORS.success },
-  modalOverlay: { flex: 1, backgroundColor: COLORS.overlayLight, justifyContent: 'center', padding: 24 },
-  modalCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.xxl, padding: 22 },
-  modalTitle: { fontSize: FONT.xl, fontWeight: FONT.extrabold, color: COLORS.textStrong, lineHeight: 26 },
-  modalSub: { marginTop: 6, fontSize: 14, color: COLORS.textSecondary, lineHeight: 20 },
-  modalActions: { flexDirection: 'row', gap: 12, marginTop: 20 },
-  modalCancel: { flex: 1, minHeight: 50, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white },
-  modalConfirm: { flex: 1, minHeight: 50, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.textStrong },
-  reportOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48, borderRadius: RADIUS.lg, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white },
-  reportOptionOn: { borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08` },
-  reportOptionTxt: { fontSize: 14, fontWeight: FONT.medium, color: COLORS.textStrong },
+  // Reaction bubble under message
+  reactionBubble: { backgroundColor: COLORS.white, borderRadius: 12, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: COLORS.border },
+  // Reaction sheet
+  ctxBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: COLORS.overlayLight, zIndex: 998 },
+  reactionBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  reactionBtnActive: { backgroundColor: `${COLORS.primary}18`, borderWidth: 1.5, borderColor: COLORS.primary },
+  reactionCard: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    top: '22%',
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xxl,
+    overflow: 'hidden',
+    zIndex: 999,
+    ...SHADOWS.lg,
+  },
+  deleteFloat: {
+    position: 'absolute',
+    alignSelf: 'center',
+    left: 0,
+    right: 0,
+    top: '40%',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  deleteFloatBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.md,
+  },
 });

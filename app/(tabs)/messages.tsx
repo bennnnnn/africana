@@ -7,9 +7,9 @@ import {
   ActivityIndicator,
   RefreshControl,
   TextInput,
-  Alert,
   StyleSheet,
 } from 'react-native';
+import { useDialog } from '@/components/ui/DialogProvider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +18,7 @@ import { useChatStore } from '@/store/chat.store';
 import { supabase } from '@/lib/supabase';
 import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { COLORS, RADIUS, FONT, SHADOWS } from '@/constants';
+import { COLORS, RADIUS, FONT } from '@/constants';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -29,6 +29,7 @@ export default function MessagesScreen() {
   const tabBarHeight = 56 + insets.bottom;
   const { user } = useAuthStore();
   const { conversations, isLoading, fetchConversations, deleteConversation } = useChatStore();
+  const { showDialog } = useDialog();
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -36,7 +37,7 @@ export default function MessagesScreen() {
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    conversationIdsRef.current = new Set(conversations.map((conversation) => conversation.id));
+    conversationIdsRef.current = new Set(conversations.map((c) => c.id));
   }, [conversations]);
 
   const scheduleRefresh = useCallback(() => {
@@ -56,21 +57,15 @@ export default function MessagesScreen() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const message = payload.new as { conversation_id?: string; sender_id?: string };
         if (!message.conversation_id || message.sender_id === user.id) return;
-        if (conversationIdsRef.current.has(message.conversation_id)) {
-          scheduleRefresh();
-        }
+        if (conversationIdsRef.current.has(message.conversation_id)) scheduleRefresh();
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, (payload) => {
-        const participantIds = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
-        if (participantIds.includes(user.id)) {
-          scheduleRefresh();
-        }
+        const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
+        if (ids.includes(user.id)) scheduleRefresh();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, (payload) => {
-        const participantIds = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
-        if (participantIds.includes(user.id)) {
-          scheduleRefresh();
-        }
+        const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
+        if (ids.includes(user.id)) scheduleRefresh();
       })
       .subscribe();
 
@@ -90,10 +85,26 @@ export default function MessagesScreen() {
   const filtered = useMemo(() => {
     if (!search.trim()) return conversations;
     const q = search.toLowerCase();
-    return conversations.filter((c) =>
-      c.other_user?.full_name?.toLowerCase().includes(q)
-    );
+    return conversations.filter((c) => c.other_user?.full_name?.toLowerCase().includes(q));
   }, [conversations, search]);
+
+  const ListHeader = (
+    <View style={s.searchWrap}>
+      <Ionicons name="search-outline" size={15} color={COLORS.textMuted} />
+      <TextInput
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search conversations..."
+        placeholderTextColor={COLORS.textMuted}
+        style={s.searchInput}
+      />
+      {search.length > 0 && (
+        <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="close-circle" size={15} color={COLORS.textMuted} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.surface }}>
@@ -102,47 +113,21 @@ export default function MessagesScreen() {
         <Text style={s.title}>Messages</Text>
       </View>
 
-      {/* Search */}
-      {conversations.length > 0 && (
-        <View style={s.searchWrap}>
-          <Ionicons name="search-outline" size={16} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search conversations..."
-            placeholderTextColor={COLORS.textMuted}
-            style={s.searchInput}
-          />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')}>
-              <Ionicons name="close-circle" size={16} color={COLORS.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 12, paddingBottom: tabBarHeight + 16 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: tabBarHeight + 16 }}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={conversations.length > 0 ? ListHeader : null}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
         }
+        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         ListEmptyComponent={
           isLoading ? (
-            <View style={{ paddingTop: 16, gap: 10 }}>
-              {Array.from({ length: 5 }).map((_, index) => (
-                <View
-                  key={index}
-                  style={{
-                    height: 80,
-                    borderRadius: RADIUS.lg,
-                    backgroundColor: COLORS.white,
-                    borderWidth: 1,
-                    borderColor: COLORS.border,
-                  }}
-                />
+            <View style={{ paddingTop: 16, gap: 8 }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <View key={i} style={s.skeleton} />
               ))}
             </View>
           ) : (
@@ -165,22 +150,18 @@ export default function MessagesScreen() {
             <TouchableOpacity
               onPress={() => router.push(`/(chat)/${item.id}`)}
               onLongPress={() => {
-                Alert.alert(
-                  'Delete conversation',
-                  `Delete your conversation with ${other?.full_name ?? 'this user'}?`,
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Delete',
-                      style: 'destructive',
-                      onPress: () => deleteConversation(item.id),
-                    },
-                  ]
-                );
+                showDialog({
+                  title: 'Delete conversation',
+                  message: `Delete your conversation with ${other?.full_name ?? 'this user'}? This cannot be undone.`,
+                  actions: [
+                    { label: 'Cancel' },
+                    { label: 'Delete', style: 'destructive', onPress: () => deleteConversation(item.id) },
+                  ],
+                });
               }}
               delayLongPress={500}
-              style={[s.convoCard, hasUnread && s.convoCardUnread]}
-              activeOpacity={0.85}
+              style={s.card}
+              activeOpacity={0.82}
             >
               <Avatar
                 uri={other?.avatar_url}
@@ -191,17 +172,17 @@ export default function MessagesScreen() {
               />
 
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={[s.convoName, hasUnread && { fontWeight: '700' }]} numberOfLines={1}>
+                <View style={s.cardTop}>
+                  <Text style={[s.cardName, hasUnread && s.cardNameUnread]} numberOfLines={1}>
                     {other?.full_name ?? 'Unknown'}
                   </Text>
                   {item.last_message_at && (
-                    <Text style={s.convoTime}>{dayjs(item.last_message_at).fromNow()}</Text>
+                    <Text style={s.cardTime}>{dayjs(item.last_message_at).fromNow()}</Text>
                   )}
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 3 }}>
+                <View style={s.cardBottom}>
                   <Text
-                    style={[s.convoPreview, hasUnread && { color: COLORS.text, fontWeight: '500' }]}
+                    style={[s.cardPreview, hasUnread && s.cardPreviewUnread]}
                     numberOfLines={1}
                   >
                     {item.last_message ?? 'Start a conversation'}
@@ -224,41 +205,66 @@ export default function MessagesScreen() {
 const s = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingTop: 14,
+    paddingBottom: 14,
+    backgroundColor: COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.white,
   },
-  title: { fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.text },
+  title:    { fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.text },
+
+  // ── Search ─────────────────────────────────────────────────────────────────
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 12,
-    marginVertical: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.savanna,
+    gap: 8,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.full,
     borderWidth: 1,
     borderColor: COLORS.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+    marginTop: 8,
   },
-  searchInput: { flex: 1, fontSize: 14, color: COLORS.text },
-  convoCard: {
+  searchInput: {
+    flex: 1,
+    fontSize: FONT.sm,
+    color: COLORS.text,
+    padding: 0,
+  },
+
+  // ── Conversation card ───────────────────────────────────────────────────────
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     padding: 14,
-    marginBottom: 8,
-    ...SHADOWS.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  convoCardUnread: {
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.primary,
+  cardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  convoName: { fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.text, flex: 1 },
-  convoTime: { fontSize: FONT.xs, color: COLORS.textMuted },
-  convoPreview: { fontSize: FONT.sm, color: COLORS.textSecondary, flex: 1 },
+  cardName:        { fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.text, flex: 1 },
+  cardNameUnread:  { fontWeight: FONT.extrabold, color: COLORS.text },
+  cardTime:        { fontSize: FONT.xs, color: COLORS.textMuted, marginLeft: 8 },
+  cardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 3,
+  },
+  cardPreview:        { fontSize: FONT.sm, color: COLORS.textSecondary, flex: 1 },
+  cardPreviewUnread:  { color: COLORS.text, fontWeight: FONT.medium },
+
+  // ── Unread badge ────────────────────────────────────────────────────────────
   badge: {
     backgroundColor: COLORS.primary,
     borderRadius: 10,
@@ -270,4 +276,13 @@ const s = StyleSheet.create({
     marginLeft: 8,
   },
   badgeText: { color: COLORS.white, fontSize: FONT.xs, fontWeight: FONT.bold },
+
+  // ── Loading skeleton ────────────────────────────────────────────────────────
+  skeleton: {
+    height: 76,
+    borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
 });

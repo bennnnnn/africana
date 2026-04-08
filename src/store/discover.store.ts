@@ -43,7 +43,6 @@ const DEFAULT_FILTERS: FilterOptions = {
   min_age: 18,
   max_age: 100,
   religion: null,
-  marital_status: null,
   online_only: false,
 };
 
@@ -134,7 +133,6 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       if (filters.state)          query = query.eq('state', filters.state);
       if (filters.city)           query = query.eq('city', filters.city);
       if (filters.religion)       query = query.eq('religion', filters.religion);
-      if (filters.marital_status) query = query.eq('marital_status', filters.marital_status);
       if (filters.online_only)    query = query.eq('online_status', 'online');
 
       query = query.order('last_seen', { ascending: false });

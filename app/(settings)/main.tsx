@@ -2,16 +2,15 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-
   ScrollView,
   TouchableOpacity,
   Switch,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/auth.store';
+import { useDialog } from '@/components/ui/DialogProvider';
 import { COLORS, FONT, APP_NAME } from '@/constants';
 
 interface SettingRowProps {
@@ -99,27 +98,28 @@ function SectionHeader({ label }: { label: string }) {
 
 export default function SettingsScreen() {
   const { user, settings, updateSettings, signOut } = useAuthStore();
+  const { showDialog } = useDialog();
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
-    ]);
+    showDialog({
+      title: 'Sign Out',
+      message: 'Are you sure you want to sign out?',
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+      ],
+    });
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete Account',
-      'This will permanently delete your account and all data. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Account',
-          style: 'destructive',
-          onPress: () => router.push('/(settings)/delete-account'),
-        },
-      ]
-    );
+    showDialog({
+      title: 'Delete Account',
+      message: 'This will permanently delete your account and all data. This cannot be undone.',
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Delete Account', style: 'destructive', onPress: () => router.push('/(settings)/delete-account') },
+      ],
+    });
   };
 
   return (
@@ -261,11 +261,11 @@ export default function SettingsScreen() {
             iconColor={COLORS.earth}
             label="About Africana"
             description="Version 1.0.0"
-            onPress={() => Alert.alert(
-              'Africana v1.0.0',
-              'Africana is a dating app built for Africans and the African diaspora — connecting hearts across the world.\n\nBuilt with ❤️ for the culture.',
-              [{ text: 'Close', style: 'cancel' }],
-            )}
+            onPress={() => showDialog({
+              title: 'Africana v1.0.0',
+              message: 'A dating app built for Africans and the African diaspora — connecting hearts across the world.',
+              actions: [{ label: 'Close' }],
+            })}
           />
           <SettingRow
             icon="log-out-outline"

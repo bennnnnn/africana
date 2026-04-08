@@ -1,7 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -9,11 +8,8 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '@/theme/ThemeProvider';
 
-type DialogTone = 'default' | 'success' | 'warning' | 'danger';
-type DialogActionStyle = 'primary' | 'secondary' | 'destructive';
+type DialogActionStyle = 'default' | 'destructive';
 
 type DialogAction = {
   label: string;
@@ -24,15 +20,11 @@ type DialogAction = {
 type DialogConfig = {
   title: string;
   message?: string;
-  tone?: DialogTone;
-  icon?: keyof typeof Ionicons.glyphMap;
   actions?: DialogAction[];
 };
 
 type ToastConfig = {
-  title: string;
-  message?: string;
-  tone?: DialogTone;
+  message: string;
   icon?: keyof typeof Ionicons.glyphMap;
   durationMs?: number;
 };
@@ -45,155 +37,104 @@ type DialogContextValue = {
 
 const DialogContext = createContext<DialogContextValue | null>(null);
 
-const DEFAULT_DIALOG_ACTIONS: DialogAction[] = [{ label: 'OK', style: 'primary' }];
-
-function toneMeta(tone: DialogTone, colors: ReturnType<typeof useTheme>['colors']) {
-  switch (tone) {
-    case 'success':
-      return { accent: colors.success, soft: `${colors.success}18`, icon: 'checkmark' as const };
-    case 'warning':
-      return { accent: colors.warning, soft: `${colors.warning}18`, icon: 'alert' as const };
-    case 'danger':
-      return { accent: colors.error, soft: `${colors.error}18`, icon: 'close' as const };
-    default:
-      return { accent: colors.primary, soft: `${colors.primary}18`, icon: 'information' as const };
-  }
-}
-
 export function DialogProvider({ children }: { children: React.ReactNode }) {
-  const { colors } = useTheme();
-  const [dialog, setDialog] = useState<DialogConfig | null>(null);
-  const [toast, setToast] = useState<ToastConfig | null>(null);
-  const toastAnim = useRef(new Animated.Value(0)).current;
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [dialog, setDialog]   = useState<DialogConfig | null>(null);
+  const [toast, setToast]     = useState<ToastConfig | null>(null);
+  const fadeAnim   = useRef(new Animated.Value(0)).current;
+  const scaleAnim  = useRef(new Animated.Value(0.94)).current;
+  const toastAnim  = useRef(new Animated.Value(0)).current;
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dismissDialog = useCallback(() => {
-    setDialog(null);
-  }, []);
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 0, duration: 160, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 0.94, duration: 160, useNativeDriver: true }),
+    ]).start(() => setDialog(null));
+  }, [fadeAnim, scaleAnim]);
 
   const showDialog = useCallback((config: DialogConfig) => {
-    setDialog({
-      ...config,
-      actions: config.actions?.length ? config.actions : DEFAULT_DIALOG_ACTIONS,
-    });
-  }, []);
-
-  const hideToast = useCallback(() => {
+    fadeAnim.setValue(0);
+    scaleAnim.setValue(0.94);
+    setDialog({ actions: [{ label: 'OK' }], ...config });
     Animated.parallel([
-      Animated.timing(toastAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
-    ]).start(() => setToast(null));
-  }, [toastAnim]);
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 120, friction: 10 }),
+    ]).start();
+  }, [fadeAnim, scaleAnim]);
 
   const showToast = useCallback((config: ToastConfig) => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast(config);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     toastAnim.setValue(0);
-    Animated.spring(toastAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      tension: 85,
-      friction: 10,
-    }).start();
-    toastTimerRef.current = setTimeout(() => {
-      hideToast();
-    }, config.durationMs ?? 2200);
-  }, [hideToast, toastAnim]);
+    setToast(config);
+    Animated.spring(toastAnim, { toValue: 1, useNativeDriver: true, tension: 100, friction: 10 }).start();
+    toastTimer.current = setTimeout(() => {
+      Animated.timing(toastAnim, { toValue: 0, duration: 180, useNativeDriver: true })
+        .start(() => setToast(null));
+    }, config.durationMs ?? 2000);
+  }, [toastAnim]);
 
   const value = useMemo(() => ({ showDialog, showToast, dismissDialog }), [dismissDialog, showDialog, showToast]);
-  const dialogTone = toneMeta(dialog?.tone ?? 'default', colors);
-  const toastTone = toneMeta(toast?.tone ?? 'default', colors);
+
+  const cancelAction  = dialog?.actions?.find((a) => a.label.toLowerCase() === 'cancel');
+  const primaryAction = dialog?.actions?.find((a) => a.label.toLowerCase() !== 'cancel');
 
   return (
     <DialogContext.Provider value={value}>
-      {children}
+      {/* Wrapper fills screen so absolute children position correctly */}
+      <View style={{ flex: 1 }}>
+        {children}
 
-      <Modal
-        visible={!!dialog}
-        transparent
-        animationType="fade"
-        onRequestClose={dismissDialog}
-      >
-        <View style={styles.overlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={dismissDialog} />
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={[styles.iconWrap, { backgroundColor: dialogTone.soft }]}>
-              <Ionicons
-                name={dialog?.icon ?? dialogTone.icon}
-                size={22}
-                color={dialogTone.accent}
-              />
-            </View>
-            <Text style={[styles.title, { color: colors.text }]}>{dialog?.title}</Text>
-            {!!dialog?.message && (
-              <Text style={[styles.message, { color: colors.textSecondary }]}>{dialog.message}</Text>
-            )}
+        {/* ── Dialog — no Modal, keyboard never dismisses ── */}
+        {dialog && (
+          <>
+            <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: fadeAnim }]}>
+              <Pressable style={StyleSheet.absoluteFill} onPress={dismissDialog} />
+            </Animated.View>
 
-            <View style={styles.actions}>
-              {dialog?.actions?.map((action, index) => {
-                const isPrimary = (action.style ?? 'secondary') === 'primary';
-                const isDestructive = action.style === 'destructive';
-                const accent = isDestructive ? colors.error : colors.primary;
-                const backgroundColor = isPrimary ? accent : colors.surface;
-                const borderColor = isPrimary ? accent : colors.border;
-                const textColor = isPrimary ? '#FFFFFF' : isDestructive ? colors.error : colors.text;
+            <Animated.View style={[styles.cardWrap, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+              <View style={styles.card}>
+                <Text style={styles.title}>{dialog.title}</Text>
+                {!!dialog.message && <Text style={styles.message}>{dialog.message}</Text>}
 
-                return (
-                  <TouchableOpacity
-                    key={`${action.label}-${index}`}
-                    activeOpacity={0.9}
-                    style={[
-                      styles.actionBtn,
-                      { backgroundColor, borderColor },
-                    ]}
-                    onPress={() => {
-                      dismissDialog();
-                      setTimeout(() => {
-                        void action.onPress?.();
-                      }, 120);
-                    }}
-                  >
-                    <Text style={[styles.actionText, { color: textColor }]}>{action.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      </Modal>
+                <View style={styles.btnRow}>
+                  {cancelAction && (
+                    <TouchableOpacity
+                      style={[styles.btn, styles.btnCancel]}
+                      activeOpacity={0.7}
+                      onPress={() => { dismissDialog(); setTimeout(() => void cancelAction.onPress?.(), 200); }}
+                    >
+                      <Text style={styles.btnText}>{cancelAction.label}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {primaryAction && (
+                    <TouchableOpacity
+                      style={[styles.btn, styles.btnPrimary]}
+                      activeOpacity={0.7}
+                      onPress={() => { dismissDialog(); setTimeout(() => void primaryAction.onPress?.(), 200); }}
+                    >
+                      <Text style={styles.btnText}>{primaryAction.label}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            </Animated.View>
+          </>
+        )}
 
-      {toast && (
-        <SafeAreaView pointerEvents="box-none" style={styles.toastRoot}>
+        {/* ── Toast ── */}
+        {toast && (
           <Animated.View
-            style={[
-              styles.toast,
-              {
-                backgroundColor: 'rgba(17, 24, 39, 0.94)',
-                borderColor: `${toastTone.accent}55`,
-                opacity: toastAnim,
-                transform: [
-                  {
-                    translateY: toastAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [20, 0],
-                    }),
-                  },
-                ],
-              },
-            ]}
+            pointerEvents="none"
+            style={[styles.toast, {
+              opacity: toastAnim,
+              transform: [{ scale: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }],
+            }]}
           >
-            <View style={[styles.toastAccent, { backgroundColor: toastTone.accent }]} />
-            <View style={[styles.toastIconWrap, { backgroundColor: toastTone.soft }]}>
-              <Ionicons name={toast.icon ?? toastTone.icon} size={18} color={toastTone.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.toastTitle, { color: '#FFFFFF' }]}>{toast.title}</Text>
-              {!!toast.message && (
-                <Text style={[styles.toastMessage, { color: 'rgba(255,255,255,0.82)' }]}>{toast.message}</Text>
-              )}
-            </View>
+            {toast.icon && <Ionicons name={toast.icon} size={14} color="#fff" />}
+            <Text style={styles.toastText}>{toast.message}</Text>
           </Animated.View>
-        </SafeAreaView>
-      )}
+        )}
+      </View>
     </DialogContext.Provider>
   );
 }
@@ -205,99 +146,73 @@ export function useDialog() {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(10, 10, 10, 0.44)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
+  backdrop: {
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    zIndex: 9998,
+  },
+  cardWrap: {
+    position: 'absolute',
+    top: '18%',
+    left: 24,
+    right: 24,
+    zIndex: 9999,
   },
   card: {
     width: '100%',
-    maxWidth: 380,
-    borderRadius: 28,
-    padding: 24,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 14,
-  },
-  iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 22,
   },
   title: {
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: '800',
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 6,
   },
   message: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    color: '#555',
+    lineHeight: 20,
     marginBottom: 22,
   },
-  actions: {
+  btnRow: {
+    flexDirection: 'row',
     gap: 10,
+    marginTop: 8,
   },
-  actionBtn: {
-    minHeight: 50,
-    borderRadius: 16,
-    borderWidth: 1,
+  btn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#fff',
   },
-  actionText: {
+  btnCancel: {},
+  btnPrimary: {},
+  btnText: {
     fontSize: 15,
-    fontWeight: '700',
-  },
-  toastRoot: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    top: '50%',
-    marginTop: -44,
+    fontWeight: '600',
+    color: '#000',
   },
   toast: {
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    position: 'absolute',
+    top: 60,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 16 },
-    elevation: 16,
+    gap: 7,
+    backgroundColor: '#111',
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 22,
+    zIndex: 9999,
   },
-  toastAccent: {
-    width: 4,
-    alignSelf: 'stretch',
-    borderRadius: 999,
-  },
-  toastIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toastTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  toastMessage: {
+  toastText: {
     fontSize: 13,
-    lineHeight: 18,
+    fontWeight: '600',
+    color: '#fff',
   },
 });

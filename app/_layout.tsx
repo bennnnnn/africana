@@ -13,6 +13,8 @@ import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@/lib/supabase';
 import { createSessionFromUrl } from '@/lib/google-auth';
 import { useAuthStore } from '@/store/auth.store';
+import { ThemeProvider } from '@/theme/ThemeProvider';
+import { DialogProvider } from '@/components/ui/DialogProvider';
 
 WebBrowser.maybeCompleteAuthSession();
 SplashScreen.preventAutoHideAsync();
@@ -135,15 +137,19 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-      <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="(profile)" />
-        <Stack.Screen name="(chat)" />
-        <Stack.Screen name="(settings)" />
-      </Stack>
+        <ThemeProvider>
+          <DialogProvider>
+            <StatusBar style="auto" />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="(profile)" />
+              <Stack.Screen name="(chat)" />
+              <Stack.Screen name="(settings)" />
+            </Stack>
+          </DialogProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

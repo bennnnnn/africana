@@ -74,6 +74,9 @@ export interface UserSettings {
   notify_matches: boolean;
   notify_views: boolean;
   push_token: string | null;
+  likes_seen_at: string | null;
+  views_seen_at: string | null;
+  favourites_seen_at: string | null;
 }
 
 export interface Like {
@@ -119,6 +122,5 @@ export interface FilterOptions {
   min_age: number;
   max_age: number;
   religion: Religion | null;
-  marital_status: MaritalStatus | null;
   online_only: boolean;
 }

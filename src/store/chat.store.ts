@@ -63,7 +63,7 @@ interface ChatState {
   isLoading: boolean;
   fetchConversations: (userId: string) => Promise<void>;
   fetchMessages: (conversationId: string) => Promise<void>;
-  sendMessage: (conversationId: string, senderId: string, content: string) => Promise<void>;
+  sendMessage: (conversationId: string, senderId: string, content: string, senderName?: string) => Promise<{ error: string | null }>;
   deleteMessage: (conversationId: string, messageId: string) => Promise<void>;
   deleteConversation: (conversationId: string) => Promise<void>;
   getOrCreateConversation: (userId: string, otherUserId: string) => Promise<string | null>;
@@ -178,7 +178,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (conversationId, senderId, content) => {
+  sendMessage: async (conversationId, senderId, content, senderName = 'Someone') => {
     // For mock conversations — store message locally only
     if (conversationId.startsWith('mock-')) {
       const msg: Message = {
@@ -197,7 +197,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             : c
         ),
       }));
-      return;
+      return { error: null };
     }
 
     // ━━ Optimistic UI: show message instantly before DB confirms ━━
@@ -223,46 +223,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
     void replaceCachedMessages(conversationId, [...(get().messages[conversationId] ?? []), tempMsg]);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('messages')
       .insert({ conversation_id: conversationId, sender_id: senderId, content })
-      .select('*, sender:profiles(*)')
+      .select()
       .single();
 
-    if (data) {
-      // Replace temp with confirmed message in-place (no flicker)
-      set((state) => ({
-        messages: {
-          ...state.messages,
-          [conversationId]: (state.messages[conversationId] ?? []).map(
-            (m) => m.id === tempId ? data : m
-          ),
-        },
-      }));
-      {
-        const nextMessages = (get().messages[conversationId] ?? []).map((m) => m.id === tempId ? data : m);
-        void replaceCachedMessages(conversationId, nextMessages);
-      }
-      supabase.from('conversations')
-        .update({ last_message: content, last_message_at: data.created_at })
-        .eq('id', conversationId);
-      const conv = get().conversations.find((c) => c.id === conversationId);
-      const recipientId = conv?.participant_ids?.find((id) => id !== senderId);
-      const senderName = (data.sender as User | null)?.full_name ?? 'Someone';
-      if (recipientId) notifyUser({ type: 'message', recipientId, senderId, senderName, extra: { conversationId } });
-    } else {
-      // Remove failed optimistic message
+    if (error || !data) {
+      console.error('[sendMessage] insert failed:', error?.message, '| code:', error?.code, '| details:', error?.details, '| hint:', error?.hint);
+      // Roll back optimistic message
       set((state) => ({
         messages: {
           ...state.messages,
           [conversationId]: (state.messages[conversationId] ?? []).filter((m) => m.id !== tempId),
         },
       }));
-      {
-        const nextMessages = (get().messages[conversationId] ?? []).filter((m) => m.id !== tempId);
-        void replaceCachedMessages(conversationId, nextMessages);
-      }
+      void replaceCachedMessages(
+        conversationId,
+        (get().messages[conversationId] ?? []).filter((m) => m.id !== tempId),
+      );
+      return { error: error?.message ?? 'Failed to send message' };
     }
+
+    // Replace temp with confirmed message in-place (no flicker)
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [conversationId]: (state.messages[conversationId] ?? []).map(
+          (m) => m.id === tempId ? data : m
+        ),
+      },
+    }));
+    void replaceCachedMessages(
+      conversationId,
+      (get().messages[conversationId] ?? []).map((m) => m.id === tempId ? data : m),
+    );
+
+    // Update conversation last_message (participants can update — see migration)
+    supabase.from('conversations')
+      .update({ last_message: content, last_message_at: data.created_at })
+      .eq('id', conversationId);
+
+    const conv = get().conversations.find((c) => c.id === conversationId);
+    const recipientId = conv?.participant_ids?.find((id) => id !== senderId);
+    if (recipientId) notifyUser({ type: 'message', recipientId, senderId, senderName, extra: { conversationId } });
+
+    return { error: null };
   },
 
   getOrCreateConversation: async (userId, otherUserId) => {

@@ -6,12 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
-  Pressable,
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { FilterOptions, Religion, MaritalStatus } from '@/types';
-import { COLORS, RELIGION_OPTIONS, MARITAL_STATUS_OPTIONS } from '@/constants';
+import { FilterOptions, Religion } from '@/types';
+import { COLORS, RELIGION_OPTIONS } from '@/constants';
 import { Button } from '@/components/ui/Button';
 import { RangeSlider } from '@/components/ui/RangeSlider';
 import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
@@ -115,20 +114,6 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
             onChange={(v) => update('religion', v as Religion | null)}
           />
 
-          {/* Marital Status */}
-          <SectionLabel label="Marital Status" />
-          <View style={s.chips}>
-            <ChipButton label="Any" selected={local.marital_status === null} onPress={() => update('marital_status', null)} />
-            {MARITAL_STATUS_OPTIONS.map((opt) => (
-              <ChipButton
-                key={opt.value}
-                label={`${opt.emoji} ${opt.label}`}
-                selected={local.marital_status === opt.value}
-                onPress={() => update('marital_status', local.marital_status === opt.value ? null : opt.value as MaritalStatus)}
-              />
-            ))}
-          </View>
-
           {/* Location (country + optional state/city) */}
           <SectionLabel label="Location" />
           <LocationPicker
@@ -167,14 +152,6 @@ function SectionLabel({ label }: { label: string }) {
   return <Text style={s.sectionLabel}>{label}</Text>;
 }
 
-function ChipButton({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={[s.chip, selected && s.chipOn]}>
-      <Text style={[s.chipText, selected && s.chipTextOn]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const s = {
   header: {
     flexDirection: 'row' as const,
@@ -204,18 +181,6 @@ const s = {
     letterSpacing: 0.6,
     marginTop: 20,
   },
-  chips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8, marginBottom: 4 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    backgroundColor: '#FFFFFF',
-  },
-  chipOn: { borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}15` as const },
-  chipText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '400' as const },
-  chipTextOn: { color: COLORS.primary, fontWeight: '600' as const },
   clearBtn: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

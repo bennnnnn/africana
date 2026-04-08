@@ -54,6 +54,12 @@ export default function LikesScreen() {
     viewers: 0,
     favourites: 0,
   });
+  // Timestamps of when each activity tab was last seen — used to compute "new since last visit" counts
+  const seenAtRef = useRef<{ likes: string | null; views: string | null; favourites: string | null }>({
+    likes: null,
+    views: null,
+    favourites: null,
+  });
   const [loadingTabs, setLoadingTabs] = useState<Record<Tab, boolean>>({
     matches: false,
     received: false,
@@ -194,23 +200,65 @@ export default function LikesScreen() {
     }
   }, [fetchBlockedSet, loadedTabs, profileSelect, tab, user]);
 
+  // Load the user's last-seen timestamps from user_settings, then count only rows newer than those.
   const refreshCounts = useCallback(async () => {
     if (!user) return;
-    const [{ count: received }, { count: sent }, { count: viewers }, { count: favourites }] = await Promise.all([
-      supabase.from('likes').select('*', { count: 'exact', head: true }).eq('to_user_id', user.id),
-      supabase.from('likes').select('*', { count: 'exact', head: true }).eq('from_user_id', user.id),
-      supabase.from('profile_views').select('*', { count: 'exact', head: true }).eq('viewed_id', user.id),
-      supabase.from('favourites').select('*', { count: 'exact', head: true }).eq('favourited_id', user.id),
+
+    // 1. Fetch last-seen timestamps (single row, very cheap)
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('likes_seen_at, views_seen_at, favourites_seen_at')
+      .eq('user_id', user.id)
+      .single();
+
+    const likesSeen    = settings?.likes_seen_at     ?? null;
+    const viewsSeen    = settings?.views_seen_at     ?? null;
+    const favsSeen     = settings?.favourites_seen_at ?? null;
+
+    seenAtRef.current = { likes: likesSeen, views: viewsSeen, favourites: favsSeen };
+
+    // 2. Count only rows newer than the last-seen timestamp (hits the existing composite indexes)
+    const buildLikesQ = (col: string, val: string, since: string | null) => {
+      let q = supabase.from('likes').select('*', { count: 'exact', head: true }).eq(col, val);
+      if (since) q = q.gt('created_at', since);
+      return q;
+    };
+
+    const [{ count: received }, { count: viewers }, { count: favourites }] = await Promise.all([
+      buildLikesQ('to_user_id', user.id, likesSeen),
+      (() => {
+        let q = supabase.from('profile_views').select('*', { count: 'exact', head: true }).eq('viewed_id', user.id);
+        if (viewsSeen) q = q.gt('viewed_at', viewsSeen);
+        return q;
+      })(),
+      (() => {
+        let q = supabase.from('favourites').select('*', { count: 'exact', head: true }).eq('favourited_id', user.id);
+        if (favsSeen) q = q.gt('created_at', favsSeen);
+        return q;
+      })(),
     ]);
 
     setCounts((state) => ({
       ...state,
-      received: received ?? state.received,
-      sent: sent ?? state.sent,
-      viewers: viewers ?? state.viewers,
+      received:   received   ?? state.received,
+      viewers:    viewers    ?? state.viewers,
       favourites: favourites ?? state.favourites,
-      matches: state.matches,
     }) as Record<Tab, number>);
+  }, [user]);
+
+  // Mark the current tab as seen — resets its badge to 0 and persists the timestamp
+  const markTabSeen = useCallback(async (t: Tab) => {
+    if (!user) return;
+    const now = new Date().toISOString();
+    const colMap: Partial<Record<Tab, string>> = {
+      received:   'likes_seen_at',
+      viewers:    'views_seen_at',
+      favourites: 'favourites_seen_at',
+    };
+    const col = colMap[t];
+    if (!col) return; // matches + sent have no "new" badge
+    setCounts((s) => ({ ...s, [t]: 0 }));
+    await supabase.from('user_settings').update({ [col]: now }).eq('user_id', user.id);
   }, [user]);
 
   useEffect(() => {
@@ -224,6 +272,8 @@ export default function LikesScreen() {
   useEffect(() => {
     if (!user) return;
     loadTab(tab);
+    // Clear badge when user opens a tab with unseen activity
+    if (counts[tab] > 0) markTabSeen(tab);
   }, [tab, user?.id]);
 
   useEffect(() => {
