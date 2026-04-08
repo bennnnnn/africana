@@ -18,7 +18,7 @@ import { useChatStore } from '@/store/chat.store';
 import { supabase } from '@/lib/supabase';
 import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { COLORS } from '@/constants';
+import { COLORS, RADIUS, FONT, SHADOWS } from '@/constants';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -135,8 +135,8 @@ export default function MessagesScreen() {
                   key={index}
                   style={{
                     height: 80,
-                    borderRadius: 14,
-                    backgroundColor: '#FFF',
+                    borderRadius: RADIUS.lg,
+                    backgroundColor: COLORS.white,
                     borderWidth: 1,
                     borderColor: COLORS.border,
                   }}
@@ -225,9 +225,9 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.white,
   },
-  title: { fontSize: 24, fontWeight: '800', color: COLORS.text },
+  title: { fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.text },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -235,7 +235,7 @@ const s = StyleSheet.create({
     marginVertical: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     backgroundColor: COLORS.savanna,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -244,23 +244,19 @@ const s = StyleSheet.create({
   convoCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    borderRadius: 14,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
     padding: 14,
     marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    ...SHADOWS.sm,
   },
   convoCardUnread: {
     borderLeftWidth: 3,
     borderLeftColor: COLORS.primary,
   },
-  convoName: { fontSize: 15, fontWeight: '600', color: COLORS.text, flex: 1 },
-  convoTime: { fontSize: 11, color: COLORS.textMuted },
-  convoPreview: { fontSize: 13, color: COLORS.textSecondary, flex: 1 },
+  convoName: { fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.text, flex: 1 },
+  convoTime: { fontSize: FONT.xs, color: COLORS.textMuted },
+  convoPreview: { fontSize: FONT.sm, color: COLORS.textSecondary, flex: 1 },
   badge: {
     backgroundColor: COLORS.primary,
     borderRadius: 10,
@@ -271,5 +267,5 @@ const s = StyleSheet.create({
     paddingHorizontal: 5,
     marginLeft: 8,
   },
-  badgeText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
+  badgeText: { color: COLORS.white, fontSize: FONT.xs, fontWeight: FONT.bold },
 });

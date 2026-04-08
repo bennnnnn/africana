@@ -1,23 +1,107 @@
 export const COLORS = {
-  primary: '#C84B31',
+  // ── Brand ──────────────────────────────────────────────────────────────────
+  primary:      '#C84B31',
   primaryLight: '#E07F66',
-  primaryDark: '#A33B26',
-  earth: '#8B5E3C',
-  earthLight: '#D4A574',
-  savanna: '#F5E6D0',
-  gold: '#D4AF37',
-  green: '#2D6A4F',
-  surface: '#FAFAF8',
-  card: '#FFFFFF',
-  text: '#1A1A1A',
+  primaryDark:  '#A33B26',
+  earth:        '#8B5E3C',
+  earthLight:   '#D4A574',
+  savanna:      '#F5E6D0',
+  gold:         '#D4AF37',
+  green:        '#2D6A4F',
+
+  // ── Surfaces ────────────────────────────────────────────────────────────────
+  surface:  '#FAFAF8',
+  card:     '#FFFFFF',
+  white:    '#FFFFFF',
+  inputBg:  '#FFFFFF',
+
+  // ── Text ───────────────────────────────────────────────────────────────────
+  text:          '#1A1A1A',
   textSecondary: '#6B7280',
-  textMuted: '#9CA3AF',
-  border: '#E5E7EB',
-  error: '#EF4444',
+  textMuted:     '#9CA3AF',
+  textInverse:   '#FFFFFF',
+  textStrong:    '#111111',
+
+  // ── Borders ────────────────────────────────────────────────────────────────
+  border:       '#E5E7EB',
+  borderStrong: '#D1D5DB',
+
+  // ── Semantic ───────────────────────────────────────────────────────────────
+  error:   '#EF4444',
   success: '#10B981',
   warning: '#F59E0B',
-  online: '#10B981',
+
+  // ── Status ─────────────────────────────────────────────────────────────────
+  online:  '#10B981',
   offline: '#9CA3AF',
+
+  // ── Overlays ───────────────────────────────────────────────────────────────
+  overlay:      'rgba(0,0,0,0.78)',
+  overlayLight: 'rgba(0,0,0,0.35)',
+  toastBg:      'rgba(17,17,17,0.88)',
+} as const;
+
+// ── Spacing & radius scale ──────────────────────────────────────────────────
+export const RADIUS = {
+  xs:   4,
+  sm:   8,
+  md:   12,
+  lg:   16,
+  xl:   20,
+  xxl:  24,
+  full: 9999,
+} as const;
+
+// ── Typography scale ────────────────────────────────────────────────────────
+export const FONT = {
+  // sizes
+  xs:      11,
+  sm:      13,
+  md:      15,
+  lg:      17,
+  xl:      20,
+  xxl:     24,
+  xxxl:    30,
+  display: 36,
+  // weights
+  regular:   '400' as const,
+  medium:    '500' as const,
+  semibold:  '600' as const,
+  bold:      '700' as const,
+  extrabold: '800' as const,
+  black:     '900' as const,
+} as const;
+
+// ── Shadow presets ──────────────────────────────────────────────────────────
+export const SHADOWS = {
+  sm: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  md: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  lg: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 14,
+    elevation: 7,
+  },
+  xl: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.20,
+    shadowRadius: 20,
+    elevation: 12,
+  },
 } as const;
 
 export const AFRICAN_COUNTRIES = [

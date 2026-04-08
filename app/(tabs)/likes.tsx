@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { User } from '@/types';
-import { COLORS, DEFAULT_AVATAR } from '@/constants';
+import { COLORS, FONT, DEFAULT_AVATAR } from '@/constants';
 import { MOCK_USERS } from '@/lib/mock-data';
 import { EmptyState } from '@/components/ui/EmptyState';
 
@@ -364,22 +364,22 @@ export default function LikesScreen() {
 }
 
 const s = StyleSheet.create({
-  header:   { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 0, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  title:    { fontSize: 24, fontWeight: '800', color: COLORS.text, marginBottom: 10 },
+  header:   { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 0, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  title:    { fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.text, marginBottom: 10 },
   tabBar:   { flexDirection: 'row' },
   tabBtn:   { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderBottomWidth: 2.5, borderBottomColor: 'transparent' },
   tabBtnOn: { borderBottomColor: COLORS.primary },
   badge:    { position: 'absolute', top: 4, right: '20%', minWidth: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   badgeOn:  { backgroundColor: COLORS.primary },
-  badgeTxt:    { fontSize: 9, fontWeight: '800', color: COLORS.textSecondary },
-  badgeTxtOn:  { color: '#FFF' },
+  badgeTxt:    { fontSize: 9, fontWeight: FONT.extrabold, color: COLORS.textSecondary },
+  badgeTxtOn:  { color: COLORS.white },
   // List rows
-  row:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', gap: 12 },
+  row:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: COLORS.white, gap: 12 },
   sep:      { height: 1, backgroundColor: COLORS.border, marginLeft: 76 },
   avatarWrap:{ position: 'relative' },
   avatar:   { width: 48, height: 48, borderRadius: 24 },
-  onlineDot:{ position: 'absolute', bottom: 1, right: 1, width: 11, height: 11, borderRadius: 6, borderWidth: 2, borderColor: '#FFF' },
-  rowName:  { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  onlineDot:{ position: 'absolute', bottom: 1, right: 1, width: 11, height: 11, borderRadius: 6, borderWidth: 2, borderColor: COLORS.white },
+  rowName:  { fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.text },
   rowLoc:   { fontSize: 12, color: COLORS.textSecondary, flex: 1 },
   inlineLoading: { paddingVertical: 48, alignItems: 'center', justifyContent: 'center' },
   footerLoading: { paddingVertical: 20, alignItems: 'center', justifyContent: 'center' },

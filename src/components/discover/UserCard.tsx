@@ -12,7 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { User } from '@/types';
-import { COLORS, DEFAULT_AVATAR } from '@/constants';
+import { COLORS, RADIUS, FONT, DEFAULT_AVATAR } from '@/constants';
 
 interface UserCardProps {
   user: User;
@@ -90,7 +90,7 @@ export function UserCard({ user, isLiked, onLike, onMessage, onOptions }: UserCa
         style={[s.heartBtn, isLiked && s.heartBtnActive]}
       >
         <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-          <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={17} color="#FFFFFF" />
+          <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={17} color={COLORS.white} />
         </Animated.View>
       </TouchableOpacity>
 
@@ -129,7 +129,7 @@ const s = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 20,
+    borderRadius: RADIUS.xl,
     overflow: 'hidden',
     marginBottom: 16,
     shadowColor: '#000',
@@ -161,7 +161,7 @@ const s = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: COLORS.online,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: COLORS.white,
   },
   heartBtn: {
     position: 'absolute',
@@ -185,13 +185,13 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingBottom: 12,
     paddingTop: 44,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    borderBottomLeftRadius: RADIUS.xl,
+    borderBottomRightRadius: RADIUS.xl,
   },
   name: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontSize: FONT.md,
+    fontWeight: FONT.extrabold,
+    color: COLORS.white,
     letterSpacing: 0.2,
     textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: { width: 0, height: 1 },
@@ -204,7 +204,7 @@ const s = StyleSheet.create({
     marginTop: 2,
   },
   locationText: {
-    fontSize: 11,
+    fontSize: FONT.xs,
     color: 'rgba(255,255,255,0.82)',
   },
   optionsBtn: {

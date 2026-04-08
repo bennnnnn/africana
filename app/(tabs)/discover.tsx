@@ -13,7 +13,7 @@ import { useChatStore } from '@/store/chat.store';
 import { UserCard } from '@/components/discover/UserCard';
 import { FilterSheet } from '@/components/discover/FilterSheet';
 import { MatchModal } from '@/components/ui/MatchModal';
-import { COLORS } from '@/constants';
+import { COLORS, RADIUS, FONT, SHADOWS } from '@/constants';
 import { User } from '@/types';
 
 const REPORT_REASONS = ['Fake profile', 'Scam', 'Harassment', 'Nudity', 'Underage', 'Other'] as const;
@@ -142,13 +142,13 @@ export default function DiscoverScreen() {
           paddingVertical: 14,
           borderBottomWidth: 1,
           borderBottomColor: COLORS.border,
-          backgroundColor: '#FFFFFF',
+          backgroundColor: COLORS.white,
           opacity: fadeAnim,
           transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }],
         }}
       >
         <View>
-          <Text style={{ fontSize: 24, fontWeight: '800', color: COLORS.text }}>
+          <Text style={{ fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.text }}>
             Discover
           </Text>
           <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 1 }}>
@@ -171,7 +171,7 @@ export default function DiscoverScreen() {
           }}
         >
           <Ionicons name="options-outline" size={18} color={activeFilterCount > 0 ? COLORS.primary : COLORS.earth} />
-          <Text style={{ fontSize: 13, fontWeight: '600', color: activeFilterCount > 0 ? COLORS.primary : COLORS.earth }}>
+          <Text style={{ fontSize: FONT.sm, fontWeight: FONT.semibold, color: activeFilterCount > 0 ? COLORS.primary : COLORS.earth }}>
             Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
           </Text>
         </TouchableOpacity>
@@ -226,9 +226,9 @@ export default function DiscoverScreen() {
               {activeFilterCount > 0 && (
                 <TouchableOpacity
                   onPress={() => { resetFilters(); if (user) fetchUsers(user.id, user.interested_in, true); }}
-                  style={{ marginTop: 8, backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 }}
+                  style={{ marginTop: 8, backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.xxl }}
                 >
-                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>Clear Filters</Text>
+                  <Text style={{ color: COLORS.white, fontWeight: FONT.bold, fontSize: 14 }}>Clear Filters</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -266,7 +266,7 @@ export default function DiscoverScreen() {
           { opacity: toastAnim, transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }] },
         ]}>
           <Text style={{ fontSize: 18 }}>{toast.icon}</Text>
-          <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600' }}>{toast.msg}</Text>
+          <Text style={{ color: COLORS.white, fontSize: 14, fontWeight: FONT.semibold }}>{toast.msg}</Text>
         </Animated.View>
       )}
 
@@ -277,16 +277,16 @@ export default function DiscoverScreen() {
           <View style={s.handle} />
           <Text style={s.sheetTitle}>{optionsUser?.full_name}</Text>
           <TouchableOpacity style={s.sheetItem} onPress={handleReport}>
-            <View style={[s.sheetIcon, { backgroundColor: '#FFF7E8' }]}>
-              <Ionicons name="flag-outline" size={18} color="#A06A00" />
+            <View style={[s.sheetIcon, { backgroundColor: `${COLORS.warning}20` }]}>
+              <Ionicons name="flag-outline" size={18} color={COLORS.earth} />
             </View>
             <Text style={s.sheetLabel}>Report</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.sheetItem} onPress={handleBlock}>
-            <View style={[s.sheetIcon, { backgroundColor: '#FFF0F0' }]}>
-              <Ionicons name="ban-outline" size={18} color="#E53E3E" />
+            <View style={[s.sheetIcon, { backgroundColor: `${COLORS.error}12` }]}>
+              <Ionicons name="ban-outline" size={18} color={COLORS.error} />
             </View>
-            <Text style={[s.sheetLabel, { color: '#E53E3E' }]}>Block</Text>
+            <Text style={[s.sheetLabel, { color: COLORS.error }]}>Block</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[s.sheetItem, { marginTop: 4 }]} onPress={() => setOptionsUser(null)}>
             <Text style={{ fontSize: 15, fontWeight: '600', color: COLORS.textSecondary, textAlign: 'center', flex: 1 }}>Cancel</Text>
@@ -300,7 +300,7 @@ export default function DiscoverScreen() {
         <View style={s.reportOverlay}>
           <View style={s.reportCard}>
             <Text style={s.reportTitle}>Report {optionsUser?.full_name}</Text>
-            <Text style={{ fontSize: 13, color: '#555', marginTop: 4, marginBottom: 14 }}>Select a reason</Text>
+            <Text style={{ fontSize: FONT.sm, color: COLORS.textSecondary, marginTop: 4, marginBottom: 14 }}>Select a reason</Text>
             <View style={{ gap: 8 }}>
               {REPORT_REASONS.map((r) => {
                 const on = selectedReason === r;
@@ -315,11 +315,11 @@ export default function DiscoverScreen() {
             </View>
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
               <TouchableOpacity style={s.reportCancel} onPress={() => { setReportVisible(false); setSelectedReason(null); }}>
-                <Text style={{ fontWeight: '700', color: '#111', fontSize: 15 }}>Cancel</Text>
+                <Text style={{ fontWeight: FONT.bold, color: COLORS.textStrong, fontSize: FONT.md }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[s.reportSubmit, !selectedReason && { opacity: 0.4 }]}
                 onPress={submitReport} disabled={!selectedReason}>
-                <Text style={{ fontWeight: '700', color: '#FFF', fontSize: 15 }}>Report</Text>
+                <Text style={{ fontWeight: FONT.bold, color: COLORS.white, fontSize: FONT.md }}>Report</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -330,20 +330,20 @@ export default function DiscoverScreen() {
 }
 
 const s = StyleSheet.create({
-  toast:        { position: 'absolute', top: 90, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(17,17,17,0.88)', paddingHorizontal: 18, paddingVertical: 11, borderRadius: 30 },
-  backdrop:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
-  sheet:        { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 36, paddingTop: 8, paddingHorizontal: 20 },
-  handle:       { width: 40, height: 4, borderRadius: 2, backgroundColor: '#DDD', alignSelf: 'center', marginBottom: 16 },
-  sheetTitle:   { fontSize: 17, fontWeight: '800', color: '#111', marginBottom: 14 },
+  toast:        { position: 'absolute', top: 90, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.toastBg, paddingHorizontal: 18, paddingVertical: 11, borderRadius: RADIUS.full },
+  backdrop:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: COLORS.overlayLight },
+  sheet:        { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: COLORS.white, borderTopLeftRadius: RADIUS.xxl, borderTopRightRadius: RADIUS.xxl, paddingBottom: 36, paddingTop: 8, paddingHorizontal: 20 },
+  handle:       { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: 16 },
+  sheetTitle:   { fontSize: FONT.lg, fontWeight: FONT.extrabold, color: COLORS.textStrong, marginBottom: 14 },
   sheetItem:    { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  sheetIcon:    { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  sheetLabel:   { fontSize: 16, fontWeight: '600', color: '#111' },
-  reportOverlay:{ flex: 1, backgroundColor: 'rgba(17,17,17,0.36)', justifyContent: 'center', padding: 24 },
-  reportCard:   { backgroundColor: '#FFF', borderRadius: 24, padding: 22 },
-  reportTitle:  { fontSize: 20, fontWeight: '800', color: '#111' },
-  reasonOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 46, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: '#E7E1DC', backgroundColor: '#FFF' },
+  sheetIcon:    { width: 38, height: 38, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
+  sheetLabel:   { fontSize: 16, fontWeight: FONT.semibold, color: COLORS.textStrong },
+  reportOverlay:{ flex: 1, backgroundColor: COLORS.overlayLight, justifyContent: 'center', padding: 24 },
+  reportCard:   { backgroundColor: COLORS.white, borderRadius: RADIUS.xxl, padding: 22 },
+  reportTitle:  { fontSize: FONT.xl, fontWeight: FONT.extrabold, color: COLORS.textStrong },
+  reasonOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 46, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white },
   reasonOptionOn:{ borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08` },
-  reasonTxt:    { fontSize: 14, fontWeight: '500', color: '#111' },
-  reportCancel: { flex: 1, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: '#E7E1DC', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
-  reportSubmit: { flex: 1, minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
+  reasonTxt:    { fontSize: 14, fontWeight: FONT.medium, color: COLORS.textStrong },
+  reportCancel: { flex: 1, minHeight: 48, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white },
+  reportSubmit: { flex: 1, minHeight: 48, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.textStrong },
 });

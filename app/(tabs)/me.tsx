@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import {
-  COLORS, DEFAULT_AVATAR,
+  COLORS, RADIUS, FONT, DEFAULT_AVATAR,
   GENDER_OPTIONS, INTERESTED_IN_OPTIONS,
   LOOKING_FOR_OPTIONS, RELIGION_OPTIONS, EDUCATION_OPTIONS,
   MARITAL_STATUS_OPTIONS, WANT_CHILDREN_YES_NO, PHYSICAL_CONDITION_OPTIONS,
@@ -42,10 +42,10 @@ function EditModal({ visible, title, onClose, onSave, saving, children }: {
 }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onClose}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.white }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={em.header}>
-            <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color="#111" /></TouchableOpacity>
+            <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={COLORS.textStrong} /></TouchableOpacity>
             <Text style={em.title}>{title}</Text>
             <TouchableOpacity onPress={onSave} disabled={saving} style={em.saveBtn}>
               <Text style={em.saveTxt}>{saving ? 'Saving…' : 'Save'}</Text>
@@ -69,7 +69,7 @@ function FieldRow({ icon, label, value, onEdit }: {
   return (
     <TouchableOpacity onPress={onEdit} activeOpacity={0.7} style={s.fieldRow}>
       <View style={[s.fieldIcon, !filled && s.fieldIconEmpty]}>
-        <Ionicons name={icon} size={15} color={filled ? '#111' : '#999'} />
+        <Ionicons name={icon} size={15} color={filled ? COLORS.textStrong : COLORS.textMuted} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={s.fieldLabel}>{label}</Text>
@@ -77,7 +77,7 @@ function FieldRow({ icon, label, value, onEdit }: {
           {filled ? value : `Add ${label.toLowerCase()}`}
         </Text>
       </View>
-      <Ionicons name={filled ? 'pencil' : 'add-circle-outline'} size={16} color={filled ? '#111' : '#999'} />
+      <Ionicons name={filled ? 'pencil' : 'add-circle-outline'} size={16} color={filled ? COLORS.textStrong : COLORS.textMuted} />
     </TouchableOpacity>
   );
 }
@@ -773,37 +773,37 @@ export default function MyProfileScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: '#111' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  headerTitle: { fontSize: 22, fontWeight: FONT.extrabold, color: COLORS.textStrong },
   iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
-  onlineBadge: { position: 'absolute', top: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  onlineDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#FFF' },
-  onlineText: { fontSize: 12, color: '#FFF', fontWeight: '600' },
+  onlineBadge: { position: 'absolute', top: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.xl },
+  onlineDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.white },
+  onlineText: { fontSize: 12, color: COLORS.white, fontWeight: FONT.semibold },
   cameraBtn: { position: 'absolute', bottom: 60, right: 14, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)' },
   heroInfo: { position: 'absolute', bottom: 16, left: 16, right: 60 },
-  heroName: { fontSize: 26, fontWeight: '800', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  heroLocation: { fontSize: 13, color: 'rgba(255,255,255,0.85)' },
-  statsBar: { flexDirection: 'row', backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: COLORS.border, marginBottom: 8 },
+  heroName: { fontSize: 26, fontWeight: FONT.extrabold, color: COLORS.white, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  heroLocation: { fontSize: FONT.sm, color: 'rgba(255,255,255,0.85)' },
+  statsBar: { flexDirection: 'row', backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border, marginBottom: 8 },
   statItem: { flex: 1, alignItems: 'center', paddingVertical: 14, gap: 3 },
-  statValue: { fontSize: 17, fontWeight: '700', color: '#111' },
-  statLabel: { fontSize: 11, color: COLORS.textSecondary },
-  completion: { margin: 12, marginBottom: 8, padding: 16, borderRadius: 16, backgroundColor: `${COLORS.primary}10`, borderWidth: 1.5, borderColor: `${COLORS.primary}30` },
-  section: { backgroundColor: '#FFF', marginBottom: 8, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 8 },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: '#111', letterSpacing: 0.2, marginBottom: 10 },
-  sectionEditBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#F0F0F0', alignItems: 'center', justifyContent: 'center' },
-  bioText: { flex: 1, fontSize: 15, color: '#111', lineHeight: 23 },
-  emptyPrompt: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08`, marginBottom: 8 },
+  statValue: { fontSize: FONT.lg, fontWeight: FONT.bold, color: COLORS.textStrong },
+  statLabel: { fontSize: FONT.xs, color: COLORS.textSecondary },
+  completion: { margin: 12, marginBottom: 8, padding: 16, borderRadius: RADIUS.lg, backgroundColor: `${COLORS.primary}10`, borderWidth: 1.5, borderColor: `${COLORS.primary}30` },
+  section: { backgroundColor: COLORS.white, marginBottom: 8, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 8 },
+  sectionTitle: { fontSize: FONT.md, fontWeight: FONT.extrabold, color: COLORS.textStrong, letterSpacing: 0.2, marginBottom: 10 },
+  sectionEditBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
+  bioText: { flex: 1, fontSize: FONT.md, color: COLORS.textStrong, lineHeight: 23 },
+  emptyPrompt: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADIUS.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08`, marginBottom: 8 },
   fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  fieldIcon: { width: 32, height: 32, borderRadius: 9, backgroundColor: '#F0F0F0', alignItems: 'center', justifyContent: 'center' },
-  fieldIconEmpty: { backgroundColor: '#F8F8F8' },
-  fieldLabel: { fontSize: 11, color: COLORS.textSecondary, fontWeight: '500', marginBottom: 1 },
-  fieldValue: { fontSize: 14, color: '#111', fontWeight: '600' },
-  fieldValueEmpty: { color: '#BBB', fontWeight: '400', fontStyle: 'italic' },
-  badge: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#F0F0F0', borderWidth: 1, borderColor: '#DDD' },
-  badgeText: { fontSize: 13, color: '#111', fontWeight: '600' },
+  fieldIcon: { width: 32, height: 32, borderRadius: 9, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
+  fieldIconEmpty: { backgroundColor: COLORS.surface },
+  fieldLabel: { fontSize: FONT.xs, color: COLORS.textSecondary, fontWeight: FONT.medium, marginBottom: 1 },
+  fieldValue: { fontSize: 14, color: COLORS.textStrong, fontWeight: FONT.semibold },
+  fieldValueEmpty: { color: COLORS.textMuted, fontWeight: FONT.regular, fontStyle: 'italic' },
+  badge: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.xl, backgroundColor: COLORS.savanna, borderWidth: 1, borderColor: COLORS.border },
+  badgeText: { fontSize: FONT.sm, color: COLORS.textStrong, fontWeight: FONT.semibold },
   addPhotoTile: { backgroundColor: `${COLORS.primary}08`, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  photoStrip:     { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  stripThumb:     { width: 56, height: 56, borderRadius: 10, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
+  photoStrip:     { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  stripThumb:     { width: 56, height: 56, borderRadius: RADIUS.md, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
   stripThumbActive:{ borderColor: COLORS.primary },
   stripImg:       { width: '100%', height: '100%' },
   stripCheck:     { position: 'absolute', bottom: 3, right: 3, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
@@ -811,23 +811,23 @@ const s = StyleSheet.create({
 
 const em = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  title: { fontSize: 17, fontWeight: '700', color: '#111' },
-  saveBtn: { backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
-  saveTxt: { color: '#FFF', fontWeight: '700', fontSize: 14 },
-  input: { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, fontSize: 15, color: '#111', backgroundColor: '#FFF' },
-  textArea: { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12, fontSize: 15, color: '#111', backgroundColor: '#FFF', minHeight: 140, textAlignVertical: 'top' },
-  searchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#FFF', marginBottom: 14 },
-  option: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF' },
+  title: { fontSize: FONT.lg, fontWeight: FONT.bold, color: COLORS.textStrong },
+  saveBtn: { backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: RADIUS.xl },
+  saveTxt: { color: COLORS.white, fontWeight: FONT.bold, fontSize: 14 },
+  input: { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 14, fontSize: FONT.md, color: COLORS.textStrong, backgroundColor: COLORS.white },
+  textArea: { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12, fontSize: FONT.md, color: COLORS.textStrong, backgroundColor: COLORS.white, minHeight: 140, textAlignVertical: 'top' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: COLORS.white, marginBottom: 14 },
+  option: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white },
   optionOn: { borderColor: COLORS.success, backgroundColor: `${COLORS.success}12` },
-  optionTxt: { fontSize: 15, color: '#111', fontWeight: '500' },
-  optionTxtOn: { color: COLORS.success, fontWeight: '700' },
-  bigChip: { flex: 1, paddingVertical: 16, borderRadius: 14, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF', alignItems: 'center' },
+  optionTxt: { fontSize: FONT.md, color: COLORS.textStrong, fontWeight: FONT.medium },
+  optionTxtOn: { color: COLORS.success, fontWeight: FONT.bold },
+  bigChip: { flex: 1, paddingVertical: 16, borderRadius: RADIUS.lg, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white, alignItems: 'center' },
   bigChipOn: { borderColor: COLORS.success, backgroundColor: `${COLORS.success}12` },
-  bigChipTxt: { fontSize: 15, color: COLORS.textSecondary, fontWeight: '500' },
-  bigChipTxtOn: { color: COLORS.success, fontWeight: '700' },
-  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF' },
+  bigChipTxt: { fontSize: FONT.md, color: COLORS.textSecondary, fontWeight: FONT.medium },
+  bigChipTxtOn: { color: COLORS.success, fontWeight: FONT.bold },
+  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white },
   chipOn: { borderColor: COLORS.success, backgroundColor: `${COLORS.success}12` },
-  chipTxt: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '500' },
-  chipTxtOn: { color: COLORS.success, fontWeight: '700' },
-  groupLabel: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  chipTxt: { fontSize: 14, color: COLORS.textSecondary, fontWeight: FONT.medium },
+  chipTxtOn: { color: COLORS.success, fontWeight: FONT.bold },
+  groupLabel: { fontSize: FONT.sm, fontWeight: FONT.bold, color: COLORS.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
 });

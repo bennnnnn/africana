@@ -11,7 +11,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { COLORS, DEFAULT_AVATAR } from '@/constants';
+import { COLORS, RADIUS, FONT, SHADOWS, DEFAULT_AVATAR } from '@/constants';
 import { User } from '@/types';
 import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
@@ -33,7 +33,6 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const heartAnim   = useRef(new Animated.Value(1)).current;
 
-  // Heartbeat loop
   const startHeartbeat = () => {
     Animated.loop(
       Animated.sequence([
@@ -53,7 +52,12 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
         Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 55, friction: 7 }),
         Animated.timing(opacityAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
       ]).start(startHeartbeat);
-      sendLocalNotification('🔥 It\'s a Match!', `You and ${matchedUser.full_name} liked each other.`, 'match', { userId: matchedUser.id });
+      sendLocalNotification(
+        '🔥 It\'s a Match!',
+        `You and ${matchedUser.full_name} liked each other.`,
+        'match',
+        { userId: matchedUser.id },
+      );
     } else if (!visible) {
       scaleAnim.setValue(0);
       opacityAnim.setValue(0);
@@ -70,7 +74,7 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
 
   if (!matchedUser) return null;
 
-  const myAvatar = user?.avatar_url || `${DEFAULT_AVATAR}${encodeURIComponent((user?.full_name ?? '?').charAt(0))}`;
+  const myAvatar    = user?.avatar_url || `${DEFAULT_AVATAR}${encodeURIComponent((user?.full_name ?? '?').charAt(0))}`;
   const theirAvatar = matchedUser.avatar_url || (matchedUser.profile_photos ?? [])[0]
     || `${DEFAULT_AVATAR}${encodeURIComponent(matchedUser.full_name.charAt(0))}`;
 
@@ -79,32 +83,29 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
       <Animated.View style={[s.overlay, { opacity: opacityAnim }]}>
         <Animated.View style={[s.card, { transform: [{ scale: scaleAnim }] }]}>
 
-          {/* Animated flame */}
           <Animated.Text style={[s.flame, { transform: [{ scale: heartAnim }] }]}>🔥</Animated.Text>
 
           <Text style={s.title}>It's a Match!</Text>
           <Text style={s.subtitle}>
             You and{' '}
-            <Text style={{ fontWeight: '700', color: COLORS.text }}>{matchedUser.full_name}</Text>
+            <Text style={{ fontWeight: FONT.bold, color: COLORS.text }}>{matchedUser.full_name}</Text>
             {'\n'}liked each other
           </Text>
 
-          {/* Overlapping avatars */}
           <View style={s.avatars}>
             <View style={[s.avatarWrap, { zIndex: 2, marginRight: -18 }]}>
               <Image source={{ uri: myAvatar }} style={s.avatar} contentFit="cover" />
             </View>
             <Animated.View style={[s.heartCenter, { transform: [{ scale: heartAnim }] }]}>
-              <Ionicons name="heart" size={22} color="#FFF" />
+              <Ionicons name="heart" size={22} color={COLORS.white} />
             </Animated.View>
             <View style={[s.avatarWrap, { zIndex: 2, marginLeft: -18 }]}>
               <Image source={{ uri: theirAvatar }} style={s.avatar} contentFit="cover" />
             </View>
           </View>
 
-          {/* CTA */}
           <TouchableOpacity style={s.msgBtn} onPress={handleMessage} activeOpacity={0.85}>
-            <Ionicons name="chatbubble-outline" size={18} color="#FFF" />
+            <Ionicons name="chatbubble-outline" size={18} color={COLORS.white} />
             <Text style={s.msgBtnText}>Send a Message</Text>
           </TouchableOpacity>
 
@@ -120,67 +121,41 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
 const s = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.78)',
+    backgroundColor: COLORS.overlay,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
   card: {
     width: '100%',
-    backgroundColor: '#FFF',
-    borderRadius: 28,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.xxl,
     padding: 32,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 12,
+    ...SHADOWS.xl,
   },
-  flame: { fontSize: 52, marginBottom: 8 },
-  title: {
-    fontSize: 30,
-    fontWeight: '900',
-    color: COLORS.primary,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginBottom: 28,
-    lineHeight: 22,
-  },
-  avatars: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
-  },
-  avatarWrap: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-  },
+  flame:    { fontSize: 52, marginBottom: 8 },
+  title:    { fontSize: FONT.xxxl, fontWeight: FONT.black, color: COLORS.primary, marginBottom: 6 },
+  subtitle: { fontSize: FONT.md, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 28, lineHeight: 22 },
+  avatars:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 32 },
+  avatarWrap: { ...SHADOWS.md },
   avatar: {
     width: width * 0.28,
     height: width * 0.28,
     borderRadius: width * 0.14,
     borderWidth: 4,
-    borderColor: '#FFF',
+    borderColor: COLORS.white,
   },
   heartCenter: {
     zIndex: 3,
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: RADIUS.full,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
-    borderColor: '#FFF',
+    borderColor: COLORS.white,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
@@ -194,7 +169,7 @@ const s = StyleSheet.create({
     backgroundColor: COLORS.primary,
     paddingVertical: 16,
     paddingHorizontal: 36,
-    borderRadius: 18,
+    borderRadius: RADIUS.lg,
     width: '100%',
     justifyContent: 'center',
     marginBottom: 12,
@@ -204,7 +179,7 @@ const s = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
-  msgBtnText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
-  laterBtn: { paddingVertical: 12 },
-  laterText: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '600' },
+  msgBtnText: { fontSize: FONT.lg, fontWeight: FONT.bold, color: COLORS.white },
+  laterBtn:   { paddingVertical: 12 },
+  laterText:  { fontSize: FONT.sm, color: COLORS.textSecondary, fontWeight: FONT.semibold },
 });

@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/auth.store';
-import { COLORS, APP_NAME } from '@/constants';
+import { COLORS, FONT, APP_NAME } from '@/constants';
 
 interface SettingRowProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -55,7 +55,7 @@ function SettingRow({ icon, iconColor, label, description, value, onToggle, onPr
         <Ionicons name={icon} size={18} color={danger ? COLORS.error : (iconColor ?? COLORS.primary)} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 15, fontWeight: '500', color: danger ? COLORS.error : COLORS.text }}>
+        <Text style={{ fontSize: FONT.md, fontWeight: FONT.medium, color: danger ? COLORS.error : COLORS.text }}>
           {label}
         </Text>
         {description && (
@@ -130,7 +130,7 @@ export default function SettingsScreen() {
           alignItems: 'center',
           paddingHorizontal: 20,
           paddingVertical: 14,
-          backgroundColor: '#FFFFFF',
+          backgroundColor: COLORS.white,
           borderBottomWidth: 1,
           borderBottomColor: COLORS.border,
           gap: 12,
@@ -139,13 +139,13 @@ export default function SettingsScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>Settings</Text>
+        <Text style={{ fontSize: FONT.lg, fontWeight: FONT.bold, color: COLORS.text }}>Settings</Text>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile */}
         <SectionHeader label="Profile" />
-        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 0 }}>
+        <View style={{ backgroundColor: COLORS.white, borderRadius: 0 }}>
           <SettingRow
             icon="person-outline"
             label="Edit Profile"
@@ -162,7 +162,7 @@ export default function SettingsScreen() {
 
         {/* Privacy */}
         <SectionHeader label="Privacy & Safety" />
-        <View style={{ backgroundColor: '#FFFFFF' }}>
+        <View style={{ backgroundColor: COLORS.white }}>
           <SettingRow
             icon="chatbubble-outline"
             iconColor={COLORS.success}
@@ -198,7 +198,7 @@ export default function SettingsScreen() {
 
         {/* Notifications */}
         <SectionHeader label="Notifications" />
-        <View style={{ backgroundColor: '#FFFFFF' }}>
+        <View style={{ backgroundColor: COLORS.white }}>
           <SettingRow
             icon="chatbubble-ellipses-outline"
             iconColor="#3B82F6"
@@ -243,7 +243,7 @@ export default function SettingsScreen() {
 
         {/* Legal */}
         <SectionHeader label="Legal" />
-        <View style={{ backgroundColor: '#FFFFFF' }}>
+        <View style={{ backgroundColor: COLORS.white }}>
           <SettingRow
             icon="document-text-outline"
             iconColor={COLORS.earth}
@@ -255,7 +255,7 @@ export default function SettingsScreen() {
 
         {/* Account */}
         <SectionHeader label="Account" />
-        <View style={{ backgroundColor: '#FFFFFF' }}>
+        <View style={{ backgroundColor: COLORS.white }}>
           <SettingRow
             icon="information-circle-outline"
             iconColor={COLORS.earth}

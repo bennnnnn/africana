@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
-import { COLORS } from '@/constants';
+import { COLORS, RADIUS, FONT } from '@/constants';
 
 interface ButtonProps {
   title: string;
@@ -28,37 +28,33 @@ export function Button({
   const isDisabled = disabled || loading;
 
   const containerStyles: ViewStyle = {
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
     opacity: isDisabled ? 0.6 : 1,
     ...(fullWidth && { width: '100%' }),
-    ...(size === 'sm' && { paddingVertical: 8, paddingHorizontal: 16 }),
+    ...(size === 'sm' && { paddingVertical: 8,  paddingHorizontal: 16 }),
     ...(size === 'md' && { paddingVertical: 14, paddingHorizontal: 24 }),
     ...(size === 'lg' && { paddingVertical: 18, paddingHorizontal: 32 }),
-    ...(variant === 'primary' && { backgroundColor: COLORS.primary }),
+    ...(variant === 'primary'   && { backgroundColor: COLORS.primary }),
     ...(variant === 'secondary' && { backgroundColor: COLORS.earth }),
-    ...(variant === 'outline' && {
-      backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      borderColor: COLORS.primary,
-    }),
-    ...(variant === 'ghost' && { backgroundColor: 'transparent' }),
-    ...(variant === 'danger' && { backgroundColor: COLORS.error }),
+    ...(variant === 'outline'   && { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: COLORS.primary }),
+    ...(variant === 'ghost'     && { backgroundColor: 'transparent' }),
+    ...(variant === 'danger'    && { backgroundColor: COLORS.error }),
   };
 
   const textStyles: TextStyle = {
-    fontWeight: '600',
-    ...(size === 'sm' && { fontSize: 13 }),
-    ...(size === 'md' && { fontSize: 15 }),
-    ...(size === 'lg' && { fontSize: 17 }),
-    ...(variant === 'primary' && { color: '#FFFFFF' }),
-    ...(variant === 'secondary' && { color: '#FFFFFF' }),
-    ...(variant === 'outline' && { color: COLORS.primary }),
-    ...(variant === 'ghost' && { color: COLORS.primary }),
-    ...(variant === 'danger' && { color: '#FFFFFF' }),
+    fontWeight: FONT.semibold,
+    ...(size === 'sm' && { fontSize: FONT.sm }),
+    ...(size === 'md' && { fontSize: FONT.md }),
+    ...(size === 'lg' && { fontSize: FONT.lg }),
+    ...(variant === 'primary'   && { color: COLORS.textInverse }),
+    ...(variant === 'secondary' && { color: COLORS.textInverse }),
+    ...(variant === 'outline'   && { color: COLORS.primary }),
+    ...(variant === 'ghost'     && { color: COLORS.primary }),
+    ...(variant === 'danger'    && { color: COLORS.textInverse }),
   };
 
   return (
@@ -71,7 +67,7 @@ export function Button({
       {loading && (
         <ActivityIndicator
           size="small"
-          color={variant === 'outline' || variant === 'ghost' ? COLORS.primary : '#FFFFFF'}
+          color={variant === 'outline' || variant === 'ghost' ? COLORS.primary : COLORS.textInverse}
         />
       )}
       <Text style={[textStyles, textStyle]}>{title}</Text>
