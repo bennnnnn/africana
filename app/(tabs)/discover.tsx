@@ -132,7 +132,7 @@ export default function DiscoverScreen() {
                 const isMatch = await toggleLike(user.id, id);
                 if (isMatch && !wasLiked) {
                   setMatchUser(users.find((u) => u.id === id) ?? null);
-                  showToast('🔥', 'It's a match!');
+                  showToast('🔥', "It's a match!");
                 } else {
                   showToast(wasLiked ? '💔' : '❤️', wasLiked ? 'Unliked' : 'Liked!');
                 }
