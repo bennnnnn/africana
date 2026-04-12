@@ -1,10 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ThemePreference, UserSettings } from '@/types';
-
-function normalizeTheme(v: unknown): ThemePreference {
-  if (v === 'dark') return 'dark';
-  return 'light';
-}
+import type { UserSettings } from '@/types';
 
 /** DB payload for user_settings — columns PostgREST should receive on insert/update. */
 export function mergeUserSettingsRow(
@@ -23,7 +18,6 @@ export function mergeUserSettingsRow(
     notify_matches: patch.notify_matches ?? prev?.notify_matches ?? true,
     notify_views: patch.notify_views ?? prev?.notify_views ?? true,
     push_token: patch.push_token !== undefined ? patch.push_token : (prev?.push_token ?? null),
-    theme: patch.theme ?? prev?.theme ?? 'light',
   };
 }
 
@@ -73,6 +67,5 @@ export function rowToUserSettings(row: Record<string, unknown>): UserSettings {
     likes_seen_at: (row.likes_seen_at as string | null) ?? null,
     views_seen_at: (row.views_seen_at as string | null) ?? null,
     favourites_seen_at: (row.favourites_seen_at as string | null) ?? null,
-    theme: normalizeTheme(row.theme),
   };
 }

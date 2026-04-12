@@ -13,6 +13,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@/lib/supabase';
 import { createSessionFromUrl } from '@/lib/google-auth';
 import { useAuthStore } from '@/store/auth.store';
+import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { DialogProvider } from '@/components/ui/DialogProvider';
 
@@ -28,23 +29,20 @@ async function setOnlineStatus(userId: string, status: 'online' | 'offline') {
 }
 
 export default function RootLayout() {
-  const { setSession, fetchProfile, fetchSettings, profileExists, setInitialized } = useAuthStore();
+  const { setSession, fetchProfile, fetchSettings, setInitialized } = useAuthStore();
   const router = useRouter();
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const notifResponseSub = useRef<any>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       if (session?.user?.id) {
-        fetchProfile(session.user.id);
-        fetchSettings(session.user.id).then(() => {
-          const { settings } = useAuthStore.getState();
-          if (settings?.show_online_status !== false) {
-            setOnlineStatus(session.user.id, 'online');
-          }
-          registerForPushNotifications(session.user.id);
-        });
+        await fetchProfile(session.user.id);
+        await fetchSettings(session.user.id);
+        await setOnlineStatus(session.user.id, 'online');
+        useAuthStore.getState().patchUser({ online_status: 'online' });
+        registerForPushNotifications(session.user.id);
       }
       // Mark auth as resolved — index.tsx waits for this before routing
       setInitialized();
@@ -69,15 +67,12 @@ export default function RootLayout() {
       appState.current = nextState;
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (!session?.user?.id) return;
-        const { settings } = useAuthStore.getState();
         if (nextState === 'active' && prev !== 'active') {
-          if (settings?.show_online_status !== false) {
-            setOnlineStatus(session.user.id, 'online');
-          }
+          void setOnlineStatus(session.user.id, 'online');
+          useAuthStore.getState().patchUser({ online_status: 'online' });
         } else if (nextState === 'background' || nextState === 'inactive') {
-          // Always mark offline on background regardless of show_online_status
-          // so stale "online" pins don't persist after the user leaves the app
-          setOnlineStatus(session.user.id, 'offline');
+          void setOnlineStatus(session.user.id, 'offline');
+          useAuthStore.getState().patchUser({ online_status: 'offline' });
         }
       });
     });
@@ -87,6 +82,7 @@ export default function RootLayout() {
       if (session?.user?.id) {
         fetchProfile(session.user.id);
         fetchSettings(session.user.id);
+        registerForPushNotifications(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         // Only redirect on explicit sign-out, not on initial load
         router.replace('/(auth)/welcome');
@@ -105,16 +101,14 @@ export default function RootLayout() {
           const session = await createSessionFromUrl(url);
           if (session?.user) {
             setSession(session);
-            const hasProfile = await profileExists(session.user.id);
-            if (hasProfile) {
-              await fetchProfile(session.user.id);
-              await fetchSettings(session.user.id);
+            await fetchProfile(session.user.id);
+            await fetchSettings(session.user.id);
+            registerForPushNotifications(session.user.id);
+            const { user } = useAuthStore.getState();
+            if (isProfileCompleteForDiscover(user)) {
               router.replace('/(tabs)/discover');
             } else {
-              router.replace({
-                pathname: '/(auth)/onboarding',
-                params: { userId: session.user.id, email: session.user.email ?? '' },
-              });
+              router.replace(onboardingHrefFromSession(session));
             }
           }
         } catch (e) {
@@ -144,7 +138,12 @@ export default function RootLayout() {
               <Stack.Screen name="index" />
               <Stack.Screen name="(auth)" />
               <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="(profile)" />
+              <Stack.Screen
+                name="(profile)"
+                options={{
+                  contentStyle: { backgroundColor: 'transparent' },
+                }}
+              />
               <Stack.Screen name="(chat)" />
               <Stack.Screen name="(settings)" />
             </Stack>

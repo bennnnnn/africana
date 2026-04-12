@@ -12,6 +12,7 @@ import {
 import { useDialog } from '@/components/ui/DialogProvider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
@@ -33,12 +34,7 @@ export default function MessagesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const conversationIdsRef = useRef<Set<string>>(new Set());
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    conversationIdsRef.current = new Set(conversations.map((c) => c.id));
-  }, [conversations]);
 
   const scheduleRefresh = useCallback(() => {
     if (!user) return;
@@ -57,7 +53,8 @@ export default function MessagesScreen() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const message = payload.new as { conversation_id?: string; sender_id?: string };
         if (!message.conversation_id || message.sender_id === user.id) return;
-        if (conversationIdsRef.current.has(message.conversation_id)) scheduleRefresh();
+        // Always refresh: new threads won’t be in local list until fetch runs.
+        scheduleRefresh();
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, (payload) => {
         const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
@@ -74,6 +71,12 @@ export default function MessagesScreen() {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
   }, [scheduleRefresh, user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user) fetchConversations(user.id);
+    }, [fetchConversations, user?.id]),
+  );
 
   const handleRefresh = async () => {
     if (!user) return;

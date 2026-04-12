@@ -14,6 +14,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
+import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useChatStore } from '@/store/chat.store';
 import { User } from '@/types';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
@@ -44,6 +45,8 @@ export default function OnlineScreen() {
       .from('profiles')
       .select('*')
       .neq('id', user.id)
+      .eq('show_in_discover', true)
+      .eq('online_visible', true)
       .eq('online_status', 'online')
       .order('online_status', { ascending: true })
       .order('last_seen', { ascending: false });
@@ -139,7 +142,10 @@ export default function OnlineScreen() {
 
           return (
             <TouchableOpacity
-              onPress={() => router.push(`/(profile)/${item.id}`)}
+              onPress={() => {
+                useProfileBrowseStore.getState().setOrderedUserIds(onlineUsers.map((u) => u.id));
+                router.push(`/(profile)/${item.id}`);
+              }}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',

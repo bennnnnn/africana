@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   Modal, Animated, KeyboardAvoidingView, Platform,
@@ -7,10 +7,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
-import { useChatStore } from '@/store/chat.store';
+import {
+  useChatStore,
+  ERROR_RECIPIENT_MESSAGES_DISABLED,
+  ERROR_SENDER_MESSAGES_DISABLED,
+} from '@/store/chat.store';
 import { useDiscoverStore } from '@/store/discover.store';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { User, Message } from '@/types';
@@ -30,7 +35,8 @@ const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
-  const { user } = useAuthStore();
+  const { user, settings } = useAuthStore();
+  const outgoingMessagingDisabled = settings?.receive_messages === false;
   const { conversations, messages, fetchMessages, sendMessage, deleteMessage, markMessagesRead, addMessage } = useChatStore();
   const { likedUserIds, toggleLike, fetchLikedUserIds } = useDiscoverStore();
   const { showDialog, showToast } = useDialog();
@@ -97,14 +103,17 @@ export default function ChatScreen() {
           fetchMessages(conversationId),
           markMessagesRead(conversationId, user.id),
         ]);
-        supabase
-          .from('user_settings')
-          .select('receive_messages')
-          .eq('user_id', otherId)
-          .single()
-          .then(({ data }) => {
-            if (data && !data.receive_messages) setMessagingDisabled(true);
-          });
+        const { data: privacy } = await supabase
+          .from('profiles')
+          .select('accepts_messages, online_visible, online_status')
+          .eq('id', otherId)
+          .maybeSingle();
+        if (privacy?.accepts_messages === false) setMessagingDisabled(true);
+        if (privacy && seeded.other_user) {
+          const effectiveOnline =
+            privacy.online_visible === false ? 'offline' : (seeded.other_user.online_status ?? privacy.online_status ?? 'offline');
+          setOtherUser({ ...seeded.other_user, online_status: effectiveOnline });
+        }
         return;
       }
 
@@ -117,12 +126,13 @@ export default function ChatScreen() {
       if (convResult.data) {
         const otherId = convResult.data.participant_ids.find((id: string) => id !== user.id);
         if (otherId) {
-          const [profileResult, settingsResult] = await Promise.all([
-            supabase.from('profiles').select('*').eq('id', otherId).single(),
-            supabase.from('user_settings').select('receive_messages').eq('user_id', otherId).single(),
-          ]);
-          setOtherUser(profileResult.data);
-          if (settingsResult.data && !settingsResult.data.receive_messages) setMessagingDisabled(true);
+          const { data: raw } = await supabase.from('profiles').select('*').eq('id', otherId).single();
+          if (raw) {
+            const effectiveOnline =
+              raw.online_visible === false ? 'offline' : (raw.online_status ?? 'offline');
+            setOtherUser({ ...raw, online_status: effectiveOnline });
+            if (raw.accepts_messages === false) setMessagingDisabled(true);
+          }
         }
       }
       setLoading(false);
@@ -164,6 +174,13 @@ export default function ChatScreen() {
     return () => { supabase.removeChannel(channel); };
   }, [conversationId, user?.id]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!conversationId || !user || conversationId.startsWith('mock-conv-')) return;
+      void fetchMessages(conversationId);
+    }, [conversationId, fetchMessages, user?.id]),
+  );
+
   // Inverted FlatList handles scroll position automatically — no manual scrollToEnd needed
 
   // ── Menus ────────────────────────────────────────────────────────────────────
@@ -177,14 +194,24 @@ export default function ChatScreen() {
   // ── Actions ──────────────────────────────────────────────────────────────────
   const handleSend = async () => {
     if (!text.trim() || !user) return;
-    if (messagingDisabled) return;
+    if (outgoingMessagingDisabled || messagingDisabled) return;
     const content = text.trim();
     setText('');
     inputRef.current?.focus();
     const { error } = await sendMessage(conversationId, user.id, content, user.full_name);
     if (error) {
       setText(content);
-      showToast({ message: 'Message failed to send' });
+      let toastMessage: string;
+      if (error === ERROR_RECIPIENT_MESSAGES_DISABLED || error === ERROR_SENDER_MESSAGES_DISABLED) {
+        toastMessage = error;
+      } else if (/sender does not accept/i.test(error)) {
+        toastMessage = ERROR_SENDER_MESSAGES_DISABLED;
+      } else if (/recipient does not accept/i.test(error)) {
+        toastMessage = ERROR_RECIPIENT_MESSAGES_DISABLED;
+      } else {
+        toastMessage = 'Message failed to send. Please try again.';
+      }
+      showToast({ message: toastMessage });
       console.error('[Chat] send error:', error);
     }
   };
@@ -441,9 +468,17 @@ export default function ChatScreen() {
         />
 
         {/* ── Input ── */}
-        {messagingDisabled ? (
+        {outgoingMessagingDisabled ? (
           <View style={s.disabledBar}>
-            <Text style={{ fontSize: 13, color: COLORS.textSecondary }}>This user has disabled messages.</Text>
+            <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}>
+              Your messages are turned off. Open Settings → Privacy and turn on Receive messages to send.
+            </Text>
+          </View>
+        ) : messagingDisabled ? (
+          <View style={s.disabledBar}>
+            <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}>
+              This person has turned off receiving messages in their settings.
+            </Text>
           </View>
         ) : (
           <View style={s.inputRow}>

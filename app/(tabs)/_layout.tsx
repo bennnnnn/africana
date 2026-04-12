@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { COLORS } from '@/constants';
+import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
 
 function TabIcon({
   name,
@@ -50,7 +51,8 @@ function TabIcon({
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuthStore();
+  const router = useRouter();
+  const { session, user, isInitialized } = useAuthStore();
   const { conversations, fetchConversations } = useChatStore();
   const [unreadMessages, setUnreadMessages] = useState(0);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -61,6 +63,13 @@ export default function TabLayout() {
       conversations.reduce((sum, conversation) => sum + (conversation.unread_count ?? 0), 0)
     );
   }, [conversations]);
+
+  useEffect(() => {
+    if (!isInitialized || !session?.user) return;
+    if (!isProfileCompleteForDiscover(user)) {
+      router.replace(onboardingHrefFromSession(session));
+    }
+  }, [isInitialized, session, user, router]);
 
   useEffect(() => {
     if (!user) return;

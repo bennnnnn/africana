@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { isUserEffectivelyOnline } from '@/lib/utils';
 import { DEFAULT_AVATAR } from '@/constants';
 import { User } from '@/types';
 import { filterVisibleUserEntities } from '@/lib/social-visibility';
+import { useProfileBrowseStore } from '@/store/profile-browse.store';
 
 interface ViewerRow {
   id: string;
@@ -79,6 +80,8 @@ export default function ViewersScreen() {
     setRefreshing(false);
   };
 
+  const viewerBrowseIds = useMemo(() => viewers.map((r) => r.viewer.id), [viewers]);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }}>
       {/* Header */}
@@ -124,7 +127,10 @@ export default function ViewersScreen() {
             const location = [v.city, v.country].filter(Boolean).join(', ');
             return (
               <TouchableOpacity
-                onPress={() => router.push(`/(profile)/${v.id}`)}
+                onPress={() => {
+                  useProfileBrowseStore.getState().setOrderedUserIds(viewerBrowseIds);
+                  router.push(`/(profile)/${v.id}`);
+                }}
                 activeOpacity={0.8}
                 style={{
                   flexDirection: 'row', alignItems: 'center', gap: 14,

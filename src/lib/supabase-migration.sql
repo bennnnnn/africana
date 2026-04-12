@@ -238,3 +238,209 @@ GRANT  EXECUTE ON FUNCTION public.delete_user() TO authenticated;
 -- Disable email confirmation rate limit in Supabase dashboard:
 -- Dashboard → Authentication → Settings → "Enable email confirmations" → OFF
 -- This prevents the "rate limit exceeded" error during development
+
+-- ── Realtime (required for live messages / likes / favourites in the app) ─────
+-- Also in supabase/migrations/20260104120000_enable_realtime.sql for CLI deploys.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'messages'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'conversations'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.conversations;
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'likes'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.likes;
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'favourites'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.favourites;
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'profile_views'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.profile_views;
+  END IF;
+END $$;
+
+-- ── Public prefs RPC + message guard (settings work across RLS) ───────────────
+-- Mirrors supabase/migrations/20260105100000_public_user_prefs_and_message_guard.sql
+CREATE OR REPLACE FUNCTION public.get_public_user_prefs_batch(p_ids uuid[])
+RETURNS TABLE(
+  user_id uuid,
+  receive_messages boolean,
+  show_online_status boolean,
+  profile_visible boolean
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT
+    t.uid,
+    COALESCE(s.receive_messages, true),
+    COALESCE(s.show_online_status, true),
+    COALESCE(s.profile_visible, true)
+  FROM unnest(p_ids) AS t(uid)
+  LEFT JOIN public.user_settings s ON s.user_id = t.uid;
+$$;
+REVOKE ALL ON FUNCTION public.get_public_user_prefs_batch(uuid[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_public_user_prefs_batch(uuid[]) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.enforce_recipient_accepts_messages()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  recipient uuid;
+BEGIN
+  SELECT x.pid INTO recipient
+  FROM public.conversations c
+  CROSS JOIN LATERAL (
+    SELECT pid FROM unnest(c.participant_ids) AS pid WHERE pid <> NEW.sender_id LIMIT 1
+  ) x
+  WHERE c.id = NEW.conversation_id;
+
+  IF recipient IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.user_settings
+    WHERE user_id = recipient AND receive_messages = false
+  ) THEN
+    RAISE EXCEPTION 'recipient does not accept messages'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.user_settings
+    WHERE user_id = NEW.sender_id AND receive_messages = false
+  ) THEN
+    RAISE EXCEPTION 'sender does not accept messages'
+      USING ERRCODE = '23514';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS messages_enforce_receive_messages ON public.messages;
+CREATE TRIGGER messages_enforce_receive_messages
+  BEFORE INSERT ON public.messages
+  FOR EACH ROW
+  EXECUTE FUNCTION public.enforce_recipient_accepts_messages();
+
+-- Profile privacy mirrors (readable by any authenticated user via profiles SELECT)
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS show_in_discover boolean NOT NULL DEFAULT true;
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS accepts_messages boolean NOT NULL DEFAULT true;
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS online_visible boolean NOT NULL DEFAULT true;
+
+COMMENT ON COLUMN public.profiles.show_in_discover IS 'Mirrors user_settings.profile_visible; maintained by triggers.';
+COMMENT ON COLUMN public.profiles.accepts_messages IS 'Mirrors user_settings.receive_messages; maintained by triggers.';
+COMMENT ON COLUMN public.profiles.online_visible IS 'Mirrors user_settings.show_online_status; when false, clients show user as offline to others.';
+
+UPDATE public.profiles p
+SET
+  show_in_discover = COALESCE(s.profile_visible, true),
+  accepts_messages = COALESCE(s.receive_messages, true),
+  online_visible = COALESCE(s.show_online_status, true)
+FROM public.user_settings s
+WHERE s.user_id = p.id;
+
+CREATE OR REPLACE FUNCTION public.sync_profile_privacy_from_user_settings()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.profiles
+  SET
+    show_in_discover = COALESCE(NEW.profile_visible, true),
+    accepts_messages = COALESCE(NEW.receive_messages, true),
+    online_visible = COALESCE(NEW.show_online_status, true)
+  WHERE id = NEW.user_id;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS user_settings_sync_show_in_discover ON public.user_settings;
+DROP TRIGGER IF EXISTS user_settings_sync_profile_privacy ON public.user_settings;
+CREATE TRIGGER user_settings_sync_profile_privacy
+  AFTER INSERT OR UPDATE OF profile_visible, receive_messages, show_online_status ON public.user_settings
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sync_profile_privacy_from_user_settings();
+
+CREATE OR REPLACE FUNCTION public.enforce_profile_privacy_columns()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  vis boolean;
+  acc boolean;
+  onl boolean;
+BEGIN
+  SELECT
+    COALESCE(s.profile_visible, true),
+    COALESCE(s.receive_messages, true),
+    COALESCE(s.show_online_status, true)
+  INTO vis, acc, onl
+  FROM public.user_settings s
+  WHERE s.user_id = NEW.id;
+  IF FOUND THEN
+    NEW.show_in_discover := vis;
+    NEW.accepts_messages := acc;
+    NEW.online_visible := onl;
+  ELSE
+    NEW.show_in_discover := true;
+    NEW.accepts_messages := true;
+    NEW.online_visible := true;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS profiles_enforce_show_in_discover ON public.profiles;
+DROP TRIGGER IF EXISTS profiles_enforce_privacy_columns ON public.profiles;
+CREATE TRIGGER profiles_enforce_privacy_columns
+  BEFORE INSERT OR UPDATE ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.enforce_profile_privacy_columns();
+
+DROP FUNCTION IF EXISTS public.sync_profile_show_in_discover();
+DROP FUNCTION IF EXISTS public.enforce_profile_show_in_discover();

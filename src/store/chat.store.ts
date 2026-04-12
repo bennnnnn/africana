@@ -10,6 +10,38 @@ import {
   replaceCachedConversations,
   replaceCachedMessages,
 } from '@/lib/chat-cache';
+import { useAuthStore } from '@/store/auth.store';
+
+/** Shown to the sender when the recipient has turned off receiving messages. */
+export const ERROR_RECIPIENT_MESSAGES_DISABLED =
+  'This person has turned off receiving messages in their settings.';
+
+/** Shown when your own Receive messages is off (nothing in or out until you turn it on). */
+export const ERROR_SENDER_MESSAGES_DISABLED =
+  'Your messages are turned off. Open Settings → Privacy and turn on Receive messages to send.';
+
+function pgErrorBlob(err: { message?: string; details?: string; hint?: string } | null): string {
+  if (!err) return '';
+  return `${err.message ?? ''} ${err.details ?? ''} ${err.hint ?? ''}`.toLowerCase();
+}
+
+function isRecipientMessagesDisabledDbError(err: { message?: string; code?: string; details?: string; hint?: string } | null): boolean {
+  const b = pgErrorBlob(err);
+  return b.includes('recipient') && b.includes('not accept');
+}
+
+function isSenderMessagesDisabledDbError(err: { message?: string; code?: string; details?: string; hint?: string } | null): boolean {
+  const b = pgErrorBlob(err);
+  return b.includes('sender') && b.includes('not accept');
+}
+
+/** Maps raw PostgREST errors so the UI never shows a vague insert failure for prefs guards. */
+function mapMessagesInsertError(err: { message?: string; code?: string; details?: string; hint?: string } | null): string | null {
+  if (!err) return null;
+  if (isRecipientMessagesDisabledDbError(err)) return ERROR_RECIPIENT_MESSAGES_DISABLED;
+  if (isSenderMessagesDisabledDbError(err)) return ERROR_SENDER_MESSAGES_DISABLED;
+  return null;
+}
 
 const MOCK_CONVERSATIONS: Conversation[] = [
   {
@@ -164,17 +196,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
     }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('messages')
-      .select('*, sender:profiles(*)')
+      .select('*')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
 
-    if (data) {
+    if (error) {
+      console.error('[fetchMessages]', conversationId, error.message);
+      return;
+    }
+    if (data !== null && data !== undefined) {
+      const rows = data as Message[];
       set((state) => ({
-        messages: { ...state.messages, [conversationId]: data },
+        messages: { ...state.messages, [conversationId]: rows },
       }));
-      await replaceCachedMessages(conversationId, data as Message[]);
+      await replaceCachedMessages(conversationId, rows);
     }
   },
 
@@ -198,6 +235,55 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       }));
       return { error: null };
+    }
+
+    const { user: authUser, settings: authSettings } = useAuthStore.getState();
+    const isOwnAccount = authUser?.id === senderId;
+
+    if (isOwnAccount && authSettings?.receive_messages === false) {
+      return { error: ERROR_SENDER_MESSAGES_DISABLED };
+    }
+
+    if (isOwnAccount) {
+      const { data: ownSettings } = await supabase
+        .from('user_settings')
+        .select('receive_messages')
+        .eq('user_id', senderId)
+        .maybeSingle();
+      if (ownSettings && ownSettings.receive_messages === false) {
+        return { error: ERROR_SENDER_MESSAGES_DISABLED };
+      }
+    } else {
+      const { data: senderProfile } = await supabase
+        .from('profiles')
+        .select('accepts_messages')
+        .eq('id', senderId)
+        .maybeSingle();
+      if (senderProfile && senderProfile.accepts_messages === false) {
+        return { error: ERROR_SENDER_MESSAGES_DISABLED };
+      }
+    }
+
+    let recipientId = get().conversations.find((c) => c.id === conversationId)?.participant_ids
+      ?.find((pid) => pid !== senderId);
+    if (!recipientId) {
+      const { data: convRow } = await supabase
+        .from('conversations')
+        .select('participant_ids')
+        .eq('id', conversationId)
+        .maybeSingle();
+      recipientId = convRow?.participant_ids?.find((pid: string) => pid !== senderId);
+    }
+
+    if (recipientId) {
+      const { data: recipientProfile } = await supabase
+        .from('profiles')
+        .select('accepts_messages')
+        .eq('id', recipientId)
+        .maybeSingle();
+      if (recipientProfile && recipientProfile.accepts_messages === false) {
+        return { error: ERROR_RECIPIENT_MESSAGES_DISABLED };
+      }
     }
 
     // ━━ Optimistic UI: show message instantly before DB confirms ━━
@@ -242,6 +328,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         conversationId,
         (get().messages[conversationId] ?? []).filter((m) => m.id !== tempId),
       );
+      const mapped = mapMessagesInsertError(error);
+      if (mapped) return { error: mapped };
       return { error: error?.message ?? 'Failed to send message' };
     }
 
@@ -260,13 +348,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     );
 
     // Update conversation last_message (participants can update — see migration)
-    supabase.from('conversations')
+    const { error: convErr } = await supabase
+      .from('conversations')
       .update({ last_message: content, last_message_at: data.created_at })
       .eq('id', conversationId);
+    if (convErr) console.error('[sendMessage] conversation update:', convErr.message);
 
-    const conv = get().conversations.find((c) => c.id === conversationId);
-    const recipientId = conv?.participant_ids?.find((id) => id !== senderId);
-    if (recipientId) notifyUser({ type: 'message', recipientId, senderId, senderName, extra: { conversationId } });
+    if (recipientId) {
+      notifyUser({ type: 'message', recipientId, senderId, senderName, extra: { conversationId } });
+    }
 
     return { error: null };
   },
@@ -373,11 +463,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   addMessage: (conversationId, message) => {
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [conversationId]: [...(state.messages[conversationId] ?? []), message],
-      },
-    }));
+    set((state) => {
+      const list = state.messages[conversationId] ?? [];
+      if (list.some((m) => m.id === message.id)) return state;
+      return {
+        messages: {
+          ...state.messages,
+          [conversationId]: [...list, message],
+        },
+      };
+    });
   },
 }));

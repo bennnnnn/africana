@@ -5,10 +5,12 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
+import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useChatStore } from '@/store/chat.store';
 import { User } from '@/types';
 import { COLORS, FONT, DEFAULT_AVATAR } from '@/constants';
@@ -69,6 +71,10 @@ export default function LikesScreen() {
     matches: true, received: true, sent: true, viewers: true, favourites: true,
   });
   const blockedIdsRef = useRef<Set<string> | null>(null);
+  const loadedTabsRef = useRef(loadedTabs);
+  const pagesRef = useRef(pages);
+  loadedTabsRef.current = loadedTabs;
+  pagesRef.current = pages;
 
   const profileSelect = 'id, full_name, birthdate, city, country, avatar_url, profile_photos, online_status';
 
@@ -88,14 +94,14 @@ export default function LikesScreen() {
   }, [user]);
 
   const loadTab = useCallback(async (targetTab: Tab, force = false, loadMore = false) => {
-    if (!user || (!force && !loadMore && loadedTabs[targetTab])) return;
+    if (!user || (!force && !loadMore && loadedTabsRef.current[targetTab])) return;
 
     setLoadingTabs((state) => ({ ...state, [targetTab]: true }));
 
     try {
       const blockedSetPromise = fetchBlockedSet(force);
       let nextList: User[] = [];
-      const currentPage = force ? 0 : (loadMore ? pages[targetTab] : 0);
+      const currentPage = force ? 0 : (loadMore ? pagesRef.current[targetTab] : 0);
       const from = currentPage * PAGE_SIZE;
       const to   = from + PAGE_SIZE - 1;
 
@@ -191,7 +197,7 @@ export default function LikesScreen() {
     } finally {
       setLoadingTabs((state) => ({ ...state, [targetTab]: false }));
     }
-  }, [fetchBlockedSet, loadedTabs, profileSelect, tab, user]);
+  }, [fetchBlockedSet, profileSelect, user]);
 
   // Mark the current tab as seen — resets its badge to 0 and persists the timestamp
   const markTabSeen = useCallback(async (t: Tab) => {
@@ -228,43 +234,79 @@ export default function LikesScreen() {
     if (counts[tab] > 0) markTabSeen(tab);
   }, [tab, user?.id]);
 
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+
+  const sentIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    sentIdsRef.current = new Set((lists.sent ?? []).map((u) => u.id));
+  }, [lists.sent]);
+
+  const loadTabRef = useRef(loadTab);
+  loadTabRef.current = loadTab;
+
   useEffect(() => {
     if (!user) return;
 
+    const debouncers: Partial<Record<Tab, ReturnType<typeof setTimeout>>> = {};
+    const scheduleReload = (t: Tab) => {
+      const prev = debouncers[t];
+      if (prev) clearTimeout(prev);
+      debouncers[t] = setTimeout(() => {
+        loadTabRef.current(t, true);
+      }, 200);
+    };
+
     const incrementIfHidden = (targetTab: Tab) => {
-      if (tab === targetTab) return;
+      if (tabRef.current === targetTab) return;
       setCounts((state) => ({ ...state, [targetTab]: state[targetTab] + 1 }));
     };
 
-    const isKnownMatch = (otherUserId: string) => {
-      const sent = lists.sent ?? [];
-      const matches = lists.matches ?? [];
-      return sent.some((entry) => entry.id === otherUserId) || matches.some((entry) => entry.id === otherUserId);
-    };
-
     const channel = supabase
-      .channel(`likes-badges-${user.id}`)
+      .channel(`likes-live-${user.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'likes' }, (payload) => {
         const row = payload.new as { from_user_id?: string; to_user_id?: string };
-        if (row.to_user_id !== user.id || !row.from_user_id) return;
-        incrementIfHidden(isKnownMatch(row.from_user_id) ? 'matches' : 'received');
+        if (!row.from_user_id || !row.to_user_id) return;
+
+        if (row.to_user_id === user.id) {
+          const isMatch = sentIdsRef.current.has(row.from_user_id);
+          incrementIfHidden(isMatch ? 'matches' : 'received');
+          scheduleReload('received');
+          scheduleReload('matches');
+        }
+        if (row.from_user_id === user.id) {
+          incrementIfHidden('sent');
+          sentIdsRef.current.add(row.to_user_id);
+          scheduleReload('sent');
+          scheduleReload('matches');
+        }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'profile_views' }, (payload) => {
         const row = payload.new as { viewed_id?: string };
         if (row.viewed_id !== user.id) return;
         incrementIfHidden('viewers');
+        scheduleReload('viewers');
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'favourites' }, (payload) => {
         const row = payload.new as { favourited_id?: string };
         if (row.favourited_id !== user.id) return;
         incrementIfHidden('favourites');
+        scheduleReload('favourites');
       })
       .subscribe();
 
     return () => {
+      Object.values(debouncers).forEach((id) => id && clearTimeout(id));
       supabase.removeChannel(channel);
     };
-  }, [lists.matches, lists.sent, tab, user?.id]);
+  }, [user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      loadTab(tab, true);
+    }, [loadTab, tab, user?.id]),
+  );
 
   const handleRefresh = async () => {
     if (!user) return;
@@ -364,7 +406,14 @@ export default function LikesScreen() {
             const location = [item.city, item.country].filter(Boolean).join(', ');
             const isOnline = item.online_status === 'online';
             return (
-              <TouchableOpacity onPress={() => router.push(`/(profile)/${item.id}`)} style={s.row} activeOpacity={0.82}>
+              <TouchableOpacity
+                onPress={() => {
+                  useProfileBrowseStore.getState().setOrderedUserIds(list.map((u) => u.id));
+                  router.push(`/(profile)/${item.id}`);
+                }}
+                style={s.row}
+                activeOpacity={0.82}
+              >
                 <View style={s.avatarWrap}>
                   <Image source={{ uri: avatar }} style={s.avatar} contentFit="cover" />
                   <View style={[s.onlineDot, { backgroundColor: isOnline ? COLORS.online : COLORS.offline }]} />

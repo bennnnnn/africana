@@ -16,19 +16,18 @@ export async function fetchBlockedUserIdSet(userId: string): Promise<Set<string>
   );
 }
 
+/** Users hidden from discovery (mirrors profile_visible via show_in_discover). */
 export async function fetchHiddenUserIdSet(candidateIds: string[]): Promise<Set<string>> {
   if (candidateIds.length === 0) return new Set();
 
-  const { data: settingsRows } = await supabase
-    .from('user_settings')
-    .select('user_id, profile_visible')
-    .in('user_id', candidateIds);
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .in('id', candidateIds)
+    .eq('show_in_discover', false);
 
-  return new Set(
-    (settingsRows ?? [])
-      .filter((row) => row.profile_visible === false)
-      .map((row) => String(row.user_id)),
-  );
+  if (error || !data) return new Set();
+  return new Set(data.map((r) => String(r.id)));
 }
 
 export async function fetchSocialVisibilityContext(

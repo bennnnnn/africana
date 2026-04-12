@@ -74,8 +74,3 @@ export const lightColors: ThemeColors = {
   green: '#111111',
   ...monochromeExtras,
 };
-
-/** Dark surfaces; brand accents unchanged for recognition */
-export const darkColors: ThemeColors = {
-  ...lightColors,
-};

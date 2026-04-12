@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
+import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -189,6 +190,18 @@ export default function ActivityScreen() {
     setRefreshing(false);
   };
 
+  const activityProfileBrowseIds = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const i of items) {
+      if (!i.navTarget.startsWith('/(profile)/')) continue;
+      if (seen.has(i.userId)) continue;
+      seen.add(i.userId);
+      out.push(i.userId);
+    }
+    return out;
+  }, [items]);
+
   if (loading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -228,7 +241,12 @@ export default function ActivityScreen() {
           return (
             <TouchableOpacity
               style={s.card}
-              onPress={() => router.push(item.navTarget as any)}
+              onPress={() => {
+                if (item.navTarget.startsWith('/(profile)/')) {
+                  useProfileBrowseStore.getState().setOrderedUserIds(activityProfileBrowseIds);
+                }
+                router.push(item.navTarget as any);
+              }}
               activeOpacity={0.85}
             >
               <View style={{ position: 'relative' }}>

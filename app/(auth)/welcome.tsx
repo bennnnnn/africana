@@ -14,11 +14,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { signInWithGoogle } from '@/lib/google-auth';
 import { useAuthStore } from '@/store/auth.store';
 import { COLORS } from '@/constants';
+import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
 
 const { height } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
-  const { fetchProfile, fetchSettings, profileExists } = useAuthStore();
+  const { fetchProfile, fetchSettings } = useAuthStore();
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleGoogle = async () => {
@@ -26,17 +27,13 @@ export default function WelcomeScreen() {
     try {
       const session = await signInWithGoogle();
       if (session?.user) {
-        const hasProfile = await profileExists(session.user.id);
-        if (hasProfile) {
-          await fetchProfile(session.user.id);
-          await fetchSettings(session.user.id);
+        await fetchProfile(session.user.id);
+        await fetchSettings(session.user.id);
+        const { user } = useAuthStore.getState();
+        if (isProfileCompleteForDiscover(user)) {
           router.replace('/(tabs)/discover');
         } else {
-          // New Google user — send to onboarding
-          router.replace({
-            pathname: '/(auth)/onboarding',
-            params: { userId: session.user.id, email: session.user.email ?? '' },
-          });
+          router.replace(onboardingHrefFromSession(session));
         }
       }
     } catch (e: any) {

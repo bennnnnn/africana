@@ -4,7 +4,7 @@
  */
 
 import { Platform } from 'react-native';
-import * as Constants from 'expo-constants';
+import Constants from 'expo-constants';
 import { supabase } from './supabase';
 
 // Lazy-load expo-notifications so Expo Go doesn't crash on import

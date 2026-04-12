@@ -1,24 +1,17 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import { useAuthStore } from '@/store/auth.store';
-import { darkColors, lightColors, ThemeColors } from '@/theme/palette';
-import type { ThemePreference } from '@/types';
+import { lightColors, ThemeColors } from '@/theme/palette';
 
-export type ResolvedTheme = 'light' | 'dark';
+export type ResolvedTheme = 'light';
 
 type ThemeContextValue = {
   colors: ThemeColors;
   resolved: ResolvedTheme;
-  preference: ThemePreference;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const preference: ThemePreference = useAuthStore((s) => s.settings?.theme ?? 'light');
-  const resolved: ResolvedTheme = preference === 'dark' ? 'dark' : 'light';
-  const colors = resolved === 'dark' ? darkColors : lightColors;
-
-  const value = useMemo(() => ({ colors, resolved, preference }), [colors, resolved, preference]);
+  const value = useMemo(() => ({ colors: lightColors, resolved: 'light' as const }), []);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

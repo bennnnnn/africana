@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Modal,
   TextInput, Pressable, Alert, ActivityIndicator,
@@ -7,6 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -84,7 +85,7 @@ function FieldRow({ icon, label, value, onEdit }: {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function MyProfileScreen() {
-  const { user, updateProfile } = useAuthStore();
+  const { user, updateProfile, fetchProfile } = useAuthStore();
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -106,6 +107,13 @@ export default function MyProfileScreen() {
 
   // Search within long lists
   const [listSearch, setListSearch] = useState('');
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.id) return;
+      void fetchProfile(user.id);
+    }, [fetchProfile, user?.id]),
+  );
 
   if (!user) return (
     <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -251,7 +259,10 @@ export default function MyProfileScreen() {
   const wantChildrenLabel = user.want_children  ? WANT_CHILDREN_YES_NO.find(o => o.value === user.want_children)?.label   ?? user.want_children  : null;
   const bodyTypeLabel     = user.body_type      ? PHYSICAL_CONDITION_OPTIONS.find(o => o.value === user.body_type)?.label ?? user.body_type : null;
   const occupationLabel   = user.occupation     ? OCCUPATION_OPTIONS.find(o => o.value === user.occupation)?.label ?? user.occupation  : null;
-  const interestedInLabel  = INTERESTED_IN_OPTIONS.find(o => o.value === user.interested_in)?.label ?? null;
+  const interestedInLabel =
+    user.interested_in === 'everyone'
+      ? 'Everyone'
+      : INTERESTED_IN_OPTIONS.find((o) => o.value === user.interested_in)?.label ?? user.interested_in ?? null;
   const locationDisplay    = [user.city, user.state, user.country].filter(Boolean).join(', ');
   const originDisplay      = [user.origin_city, user.origin_state, user.origin_country].filter(Boolean).join(', ');
 

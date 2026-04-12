@@ -1,13 +1,15 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity,
   ActivityIndicator, RefreshControl, Animated, StyleSheet,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useDiscoverStore } from '@/store/discover.store';
+import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useChatStore } from '@/store/chat.store';
 import { UserCard } from '@/components/discover/UserCard';
 import { FilterSheet } from '@/components/discover/FilterSheet';
@@ -72,6 +74,12 @@ export default function DiscoverScreen() {
     return () => { unsubscribeFromOnlineStatus(); };
   }, [user?.id]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (user) fetchLikedUserIds(user.id);
+    }, [fetchLikedUserIds, user?.id]),
+  );
+
   const handleRefresh = useCallback(async () => {
     if (!user) return;
     setRefreshing(true);
@@ -88,6 +96,12 @@ export default function DiscoverScreen() {
     const convId = await getOrCreateConversation(user.id, toUserId);
     if (convId) router.push(`/(chat)/${convId}`);
   };
+
+  const browseOrderIds = useMemo(
+    () => users.filter((u) => !localBlocked.has(u.id)).map((u) => u.id),
+    [users, localBlocked],
+  );
+  const setProfileBrowseOrder = useProfileBrowseStore((s) => s.setOrderedUserIds);
 
   const activeFilterCount = Object.entries(filters).filter(([k, v]) => {
     if (k === 'min_age') return v !== 18;
@@ -137,6 +151,7 @@ export default function DiscoverScreen() {
           localBlocked.has(item.id) ? null : (
             <UserCard
               user={item}
+              beforeNavigate={() => setProfileBrowseOrder(browseOrderIds)}
               isLiked={likedUserIds.has(item.id)}
               onLike={async (id) => {
                 if (!user) return;

@@ -53,7 +53,7 @@ const ACTIVE_COLOR = COLORS.success;
 const STEPS = [
   { title: "What's your name?",         subtitle: 'Share your name and a little about yourself.',        bg: '#FFF3E0' },
   { title: 'Tell us about yourself',    subtitle: 'Help others understand who you are.',                 bg: '#E8F5E9' },
-  { title: 'What are you looking for?', subtitle: 'Choose your relationship goals.',                      bg: '#FCE4EC' },
+  { title: 'What are you looking for?', subtitle: 'Optional — you can skip and set this later in your profile.', bg: '#FCE4EC' },
   { title: 'Work & study',              subtitle: 'Share your education and occupation.',                bg: '#E3F2FD' },
   { title: 'Your preferences',          subtitle: 'Age range and marital status help guide matching.',   bg: '#F3E5F5' },
   { title: 'More about you',            subtitle: 'Help others get to know you better.',              bg: '#EDE7F6' },
@@ -156,8 +156,6 @@ export default function OnboardingScreen() {
   // Step 1
   const [fullName, setFullName] = useState('');
   const [bio, setBio]           = useState('');
-  const [bioFocused, setBioFocused] = useState(false);
-  const BIO_MIN = 20;
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   // Step 2
@@ -420,7 +418,7 @@ export default function OnboardingScreen() {
   const canProceed = () => {
     if (step === 1) return firstNameValidation.valid;
     if (step === 2) return birthdate !== null && gender !== null && interestedIn !== null;
-    if (step === 3) return lookingFor.length > 0;
+    if (step === 3) return true;
     if (step === 4) return true;
     if (step === 5) return true;
     if (step === 6) return heightValidation.valid;
@@ -482,28 +480,19 @@ export default function OnboardingScreen() {
                 autoFocus
               />
               <Input
-                label="Tell us about you"
+                label="Tell us about you (optional)"
                 value={bio}
                 onChangeText={setBio}
-                onFocus={() => setBioFocused(true)}
-                onBlur={() => setBioFocused(false)}
                 placeholder="Share something about yourself..."
                 multiline
                 numberOfLines={4}
                 maxLength={300}
-                leftIcon={bio.length === 0 && !bioFocused ? 'create-outline' : undefined}
-                validationState={bio.length >= BIO_MIN ? 'success' : 'default'}
+                leftIcon="create-outline"
+                validationState={bio.trim() ? 'success' : 'default'}
               />
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: -10 }}>
-                {bio.length > 0 && bio.length < BIO_MIN ? (
-                  <Text style={{ fontSize: 11, color: COLORS.textMuted }}>
-                    {BIO_MIN - bio.length} more to go
-                  </Text>
-                ) : <View />}
-                <Text style={{ fontSize: 11, color: bio.length >= BIO_MIN ? COLORS.success : COLORS.textMuted }}>
-                  {bio.length}/300
-                </Text>
-              </View>
+              <Text style={{ fontSize: 11, color: COLORS.textMuted, marginTop: -6, textAlign: 'right' }}>
+                {bio.length}/300
+              </Text>
             </View>
           )}
 
@@ -829,6 +818,9 @@ export default function OnboardingScreen() {
               loading={loading}
               disabled={!canProceed()}
             />
+            {step === 3 && (
+              <Button title="Skip for now" variant="ghost" onPress={() => setStep(step + 1)} fullWidth />
+            )}
             {step === 6 && (
               <Button title="Skip for now" variant="ghost" onPress={() => setStep(step + 1)} fullWidth />
             )}

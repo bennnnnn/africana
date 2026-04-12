@@ -82,7 +82,9 @@ Deno.serve(async (req) => {
     // Fetch recipient's push token, email, and notification preferences
     const { data: settings } = await supabase
       .from('user_settings')
-      .select('push_token, notify_messages, notify_likes, notify_matches, notify_views, email_notifications')
+      .select(
+        'push_token, receive_messages, notify_messages, notify_likes, notify_matches, notify_views, email_notifications',
+      )
       .eq('user_id', recipientId)
       .single();
 
@@ -91,6 +93,13 @@ Deno.serve(async (req) => {
       .select('email, full_name')
       .eq('id', recipientId)
       .single();
+
+    if (type === 'message' && settings?.receive_messages === false) {
+      return new Response(JSON.stringify({ ok: false, reason: 'recipient_not_accepting_messages' }), {
+        status: 200,
+        headers: CORS_HEADERS,
+      });
+    }
 
     // Check per-type push preference (explicit conditionals avoid TS index issues)
     const pushPrefEnabled =

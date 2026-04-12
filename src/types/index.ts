@@ -11,7 +11,6 @@ export type Education =
   | 'high_school' | 'some_college' | 'vocational' | 'bachelors'
   | 'masters' | 'phd' | 'other';
 export type WantChildren = 'yes' | 'no' | 'open';
-export type ThemePreference = 'light' | 'dark';
 export type VerificationStatus = 'pending' | 'approved' | 'rejected';
 export type PhysicalCondition =
   | 'slim'
@@ -59,6 +58,12 @@ export interface User extends OriginLocationFields {
   profile_photos: string[];
   avatar_url: string | null;
   online_status: OnlineStatus;
+  /** Mirrored from user_settings.profile_visible; used for Discover / online queries */
+  show_in_discover?: boolean;
+  /** Mirrored from user_settings.receive_messages */
+  accepts_messages?: boolean;
+  /** Mirrored from user_settings.show_online_status; when false, others should show you as offline */
+  online_visible?: boolean;
   last_seen: string;
   created_at: string;
   updated_at: string;
@@ -82,7 +87,6 @@ export interface UserSettings {
   likes_seen_at?: string | null;
   views_seen_at?: string | null;
   favourites_seen_at?: string | null;
-  theme?: ThemePreference;
 }
 
 export interface Like {

@@ -31,13 +31,15 @@ interface UserCardProps {
   isLiked: boolean;
   onLike: (userId: string) => void;
   onMessage: (userId: string) => void;
+  /** Runs before navigating to profile (e.g. set fullscreen browse order). */
+  beforeNavigate?: () => void;
 }
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH  = (width - 48) / 2;
 const CARD_HEIGHT = CARD_WIDTH * 1.45;
 
-export function UserCard({ user, isLiked, onLike, onMessage }: UserCardProps) {
+export function UserCard({ user, isLiked, onLike, onMessage, beforeNavigate }: UserCardProps) {
   const photoUrl     = user.profile_photos?.[0] || user.avatar_url || null;
   const hasPhoto     = !!photoUrl;
   const initial      = (user.full_name || 'U').charAt(0).toUpperCase();
@@ -70,7 +72,10 @@ export function UserCard({ user, isLiked, onLike, onMessage }: UserCardProps) {
 
   return (
     <TouchableOpacity
-      onPress={() => router.push(`/(profile)/${user.id}`)}
+      onPress={() => {
+        beforeNavigate?.();
+        router.push(`/(profile)/${user.id}`);
+      }}
       activeOpacity={0.92}
       style={s.card}
     >
@@ -134,11 +139,6 @@ export function UserCard({ user, isLiked, onLike, onMessage }: UserCardProps) {
             <Text style={s.locationText} numberOfLines={1}>{shortLocation}</Text>
           </View>
         ) : null}
-        {user.looking_for?.length > 0 && (
-          <Text style={s.lookingFor} numberOfLines={1}>
-            {user.looking_for[0].replace('_', ' ')}
-          </Text>
-        )}
       </LinearGradient>
     </TouchableOpacity>
   );
@@ -256,13 +256,5 @@ const s = StyleSheet.create({
   locationText: {
     fontSize: FONT.xs,
     color: 'rgba(255,255,255,0.82)',
-  },
-  lookingFor: {
-    marginTop: 4,
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.6)',
-    fontWeight: FONT.semibold,
-    textTransform: 'capitalize',
-    letterSpacing: 0.3,
   },
 });

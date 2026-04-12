@@ -12,11 +12,12 @@ interface AuthState {
   isInitialized: boolean;
   setSession: (session: Session | null) => void;
   setUser: (user: User | null) => void;
+  /** Merge into current user (e.g. after presence update without full refetch) */
+  patchUser: (partial: Partial<User>) => void;
   setSettings: (settings: UserSettings | null) => void;
   setInitialized: () => void;
   fetchProfile: (userId: string) => Promise<void>;
   fetchSettings: (userId: string) => Promise<void>;
-  profileExists: (userId: string) => Promise<boolean>;
   updateProfile: (updates: Partial<User>) => Promise<void>;
   updateSettings: (updates: Partial<UserSettings>) => Promise<void>;
   signOut: () => Promise<void>;
@@ -31,6 +32,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setSession: (session) => set({ session }),
   setUser: (user) => set({ user }),
+  patchUser: (partial) => {
+    const { user } = get();
+    if (!user) return;
+    set({ user: { ...user, ...partial } });
+  },
   setSettings: (settings) => set({ settings }),
   setInitialized: () => set({ isInitialized: true }),
 
@@ -39,17 +45,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
-    if (!error && data) {
-      const today = new Date();
-      const bday  = data.birthdate ? new Date(data.birthdate) : null;
-      const age   = bday
-        ? today.getFullYear() - bday.getFullYear()
-          - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
-        : undefined;
-      set({ user: { ...data, age, profile_photos: data.profile_photos ?? [], languages: data.languages ?? [], hobbies: data.hobbies ?? [] } });
+    if (error || !data) {
+      set({ user: null });
+      return;
     }
+
+    const today = new Date();
+    const bday  = data.birthdate ? new Date(data.birthdate) : null;
+    const age   = bday
+      ? today.getFullYear() - bday.getFullYear()
+        - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
+      : undefined;
+    set({ user: { ...data, age, profile_photos: data.profile_photos ?? [], languages: data.languages ?? [], hobbies: data.hobbies ?? [] } });
   },
 
   fetchSettings: async (userId) => {
@@ -77,7 +86,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         likes_seen_at: null,
         views_seen_at: null,
         favourites_seen_at: null,
-        theme: 'light' as const,
       };
       const { data: created } = await supabase
         .from('user_settings')
@@ -86,15 +94,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .single();
       if (created) set({ settings: created });
     }
-  },
-
-  profileExists: async (userId) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', userId)
-      .maybeSingle();
-    return !!data;
   },
 
   updateProfile: async (updates) => {
@@ -118,15 +117,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { user, settings } = get();
     if (!user) return;
 
+    const previous = settings;
     const merged = { ...(settings ?? {}), ...updates, user_id: user.id };
+    set({ settings: merged as UserSettings });
+
     const { data, error } = await supabase
       .from('user_settings')
       .upsert(merged, { onConflict: 'user_id' })
       .select()
       .single();
 
-    if (!error && data) {
+    if (error) {
+      console.error('[updateSettings]', error.message);
+      set({ settings: previous });
+      await get().fetchSettings(user.id);
+      return;
+    }
+    if (data) {
       set({ settings: data });
+      if (
+        'profile_visible' in updates ||
+        'receive_messages' in updates ||
+        'show_online_status' in updates
+      ) {
+        void get().fetchProfile(user.id);
+      }
     }
   },
 

@@ -3,7 +3,6 @@ import { User, FilterOptions, InterestedIn } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { notifyUser } from '@/lib/notifications';
 import { MOCK_USERS } from '@/lib/mock-data';
-
 const interestedInToGender = (v: InterestedIn | undefined): string | null => {
   if (v === 'men')   return 'male';
   if (v === 'women') return 'female';
@@ -100,8 +99,9 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       // ── Build main query ───────────────────────────────────────────────────
       let query = supabase
         .from('profiles')
-        .select('*, user_settings(profile_visible, show_online_status)')
+        .select('*')
         .neq('id', userId)
+        .eq('show_in_discover', true)
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       // Exclude blocked
@@ -142,29 +142,22 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       const processRaw = (rows: any[]): User[] =>
         rows
           .map((u) => {
-            const settings = (u as any).user_settings as
-              | { profile_visible?: boolean; show_online_status?: boolean }
-              | null;
             const bday = u.birthdate ? new Date(u.birthdate) : null;
             const age = bday
               ? today.getFullYear() - bday.getFullYear()
                 - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
               : 0;
             const effectiveOnlineStatus =
-              settings?.show_online_status === false ? 'offline' : u.online_status;
+              u.online_visible === false ? 'offline' : u.online_status;
             return {
               ...u,
               age,
               online_status: effectiveOnlineStatus,
-              user_settings: undefined,
               profile_photos: u.profile_photos ?? [],
               languages: u.languages ?? [],
             };
           })
           .filter((u) => {
-            const raw = rows.find((d) => d.id === u.id);
-            const settings = (raw as any)?.user_settings as { profile_visible?: boolean } | null;
-            if (settings?.profile_visible === false) return false;
             if (filters.min_age && u.age < filters.min_age) return false;
             if (filters.max_age && u.age > filters.max_age) return false;
             return true;
@@ -186,11 +179,38 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
             const needed = PAGE_SIZE - result.length;
             const { data: likedData } = await supabase
               .from('profiles')
-              .select('*, user_settings(profile_visible, show_online_status)')
+              .select('*')
               .in('id', likedIdsArr)
+              .eq('show_in_discover', true)
               .limit(needed);
             if (likedData) {
-              const likedUsers = processRaw(likedData);
+              const likedProcessed = (() => {
+                const rows = likedData;
+                return rows
+                  .map((u: any) => {
+                    const bday = u.birthdate ? new Date(u.birthdate) : null;
+                    const age = bday
+                      ? today.getFullYear() - bday.getFullYear()
+                        - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
+                      : 0;
+                    const effectiveOnlineStatus =
+                      u.online_visible === false ? 'offline' : u.online_status;
+                    return {
+                      ...u,
+                      age,
+                      online_status: effectiveOnlineStatus,
+                      profile_photos: u.profile_photos ?? [],
+                      languages: u.languages ?? [],
+                    };
+                  })
+                  .filter((u: User) => {
+                    const a = u.age ?? 0;
+                    if (filters.min_age && a < filters.min_age) return false;
+                    if (filters.max_age && a > filters.max_age) return false;
+                    return true;
+                  });
+              })();
+              const likedUsers = likedProcessed;
               shuffleArray(likedUsers);
               result = [...result, ...likedUsers];
             }

@@ -20,9 +20,10 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { COLORS } from '@/constants';
 import { getValidationState, validateEmail } from '@/lib/validation';
+import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
 
 export default function LoginScreen() {
-  const { fetchProfile, fetchSettings, profileExists } = useAuthStore();
+  const { fetchProfile, fetchSettings } = useAuthStore();
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -47,13 +48,25 @@ export default function LoginScreen() {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     setLoading(false);
     if (error) {
       Alert.alert('Sign In Failed', error.message);
       return;
     }
-    router.replace('/(tabs)/discover');
+    const session = data.session;
+    if (!session?.user) {
+      Alert.alert('Check your email', 'Confirm your email address, then sign in again.');
+      return;
+    }
+    await fetchProfile(session.user.id);
+    await fetchSettings(session.user.id);
+    const { user } = useAuthStore.getState();
+    if (isProfileCompleteForDiscover(user)) {
+      router.replace('/(tabs)/discover');
+    } else {
+      router.replace(onboardingHrefFromSession(session));
+    }
   };
 
   const handleForgotPassword = () => {
@@ -65,16 +78,13 @@ export default function LoginScreen() {
     try {
       const session = await signInWithGoogle();
       if (session?.user) {
-        const hasProfile = await profileExists(session.user.id);
-        if (hasProfile) {
-          await fetchProfile(session.user.id);
-          await fetchSettings(session.user.id);
+        await fetchProfile(session.user.id);
+        await fetchSettings(session.user.id);
+        const { user } = useAuthStore.getState();
+        if (isProfileCompleteForDiscover(user)) {
           router.replace('/(tabs)/discover');
         } else {
-          router.replace({
-            pathname: '/(auth)/onboarding',
-            params: { userId: session.user.id, email: session.user.email ?? '' },
-          });
+          router.replace(onboardingHrefFromSession(session));
         }
       }
     } catch (e: any) {

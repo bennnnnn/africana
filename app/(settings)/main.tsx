@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,9 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useDialog } from '@/components/ui/DialogProvider';
-import { COLORS, FONT, APP_NAME } from '@/constants';
+import { COLORS, FONT } from '@/constants';
+import { registerForPushNotifications } from '@/lib/notifications';
+import type { UserSettings } from '@/types';
 
 interface SettingRowProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -100,6 +102,12 @@ export default function SettingsScreen() {
   const { user, settings, updateSettings, signOut } = useAuthStore();
   const { showDialog } = useDialog();
 
+  const notifyToggle =
+    (key: 'notify_messages' | 'notify_likes' | 'notify_matches' | 'notify_views') => async (v: boolean) => {
+      await updateSettings({ [key]: v } as Partial<UserSettings>);
+      if (v && user?.id) void registerForPushNotifications(user.id);
+    };
+
   const handleSignOut = () => {
     showDialog({
       title: 'Sign Out',
@@ -143,99 +151,93 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Profile */}
-        <SectionHeader label="Profile" />
-        <View style={{ backgroundColor: COLORS.white, borderRadius: 0 }}>
-          <SettingRow
-            icon="person-outline"
-            label="Edit Profile"
-            description="Update your name, bio, photos"
-            onPress={() => router.push('/(profile)/edit')}
-          />
-          <SettingRow
-            icon="images-outline"
-            label="Manage Photos"
-            description={`${user?.profile_photos.length ?? 0} photos uploaded`}
-            onPress={() => router.push('/(profile)/photos')}
-          />
-        </View>
-
         {/* Privacy */}
-        <SectionHeader label="Privacy & Safety" />
+        <SectionHeader label="Privacy" />
         <View style={{ backgroundColor: COLORS.white }}>
           <SettingRow
             icon="chatbubble-outline"
             iconColor={COLORS.success}
-            label="Receive Messages"
-            description="Allow other members to message you"
+            label="Messages"
+            description="Turn off to pause incoming and outgoing messages"
             value={settings?.receive_messages ?? true}
             onToggle={(v) => updateSettings({ receive_messages: v })}
           />
           <SettingRow
             icon="radio-outline"
             iconColor={COLORS.online}
-            label="Show Online Status"
-            description="Let others see when you're online"
+            label="Online status"
+            description="Show as online when you’re using the app"
             value={settings?.show_online_status ?? true}
             onToggle={(v) => updateSettings({ show_online_status: v })}
           />
           <SettingRow
             icon="eye-outline"
             iconColor={COLORS.earth}
-            label="Profile Visible"
-            description="Allow your profile to appear in discover"
+            label="Show my profile"
+            description="Appear in Discover and Online. Chats you already have stay open"
             value={settings?.profile_visible ?? true}
             onToggle={(v) => updateSettings({ profile_visible: v })}
           />
           <SettingRow
             icon="ban-outline"
             iconColor={COLORS.warning}
-            label="Blocked Users"
-            description="Manage people you've blocked"
+            label="Blocked people"
+            description="Unblock or review who you’ve blocked"
             onPress={() => router.push('/(settings)/blocked')}
           />
         </View>
 
         {/* Notifications */}
         <SectionHeader label="Notifications" />
+        <Text
+          style={{
+            fontSize: 12,
+            color: COLORS.textSecondary,
+            paddingHorizontal: 16,
+            paddingBottom: 8,
+            lineHeight: 17,
+          }}
+        >
+          Choose what you want to hear about. Allow notifications for Africana in your phone settings if alerts are quiet.
+        </Text>
         <View style={{ backgroundColor: COLORS.white }}>
           <SettingRow
             icon="chatbubble-ellipses-outline"
             iconColor="#3B82F6"
-            label="New Messages"
-            description="Notify when someone messages you"
+            label="Messages"
+            description="New messages from people you chat with"
             value={settings?.notify_messages ?? true}
-            onToggle={(v) => updateSettings({ notify_messages: v })}
+            onToggle={notifyToggle('notify_messages')}
           />
           <SettingRow
             icon="heart-outline"
             iconColor="#EF4444"
-            label="New Likes"
-            description="Notify when someone likes your profile"
+            label="Likes"
+            description="Someone likes your profile"
             value={settings?.notify_likes ?? true}
-            onToggle={(v) => updateSettings({ notify_likes: v })}
+            onToggle={notifyToggle('notify_likes')}
           />
           <SettingRow
             icon="flame-outline"
             iconColor={COLORS.primary}
             label="Matches"
-            description="Notify when you get a mutual match"
+            description="You and someone else like each other"
             value={settings?.notify_matches ?? true}
-            onToggle={(v) => updateSettings({ notify_matches: v })}
+            onToggle={notifyToggle('notify_matches')}
           />
           <SettingRow
             icon="eye-outline"
             iconColor={COLORS.earth}
-            label="Profile Views"
-            description="Notify when someone views your profile"
+            label="Profile views"
+            description="Someone opens your profile"
             value={settings?.notify_views ?? false}
-            onToggle={(v) => updateSettings({ notify_views: v })}
+            onToggle={notifyToggle('notify_views')}
           />
           <SettingRow
             icon="mail-outline"
             iconColor={COLORS.textSecondary}
-            label="Email Notifications"
-            description="Receive re-engagement emails"
+            label="Email updates"
+            description="Occasional emails for likes and matches (not every message)"
             value={settings?.email_notifications ?? true}
             onToggle={(v) => updateSettings({ email_notifications: v })}
           />
@@ -247,8 +249,8 @@ export default function SettingsScreen() {
           <SettingRow
             icon="document-text-outline"
             iconColor={COLORS.earth}
-            label="Privacy Policy & Terms"
-            description="Read our privacy policy and terms of service"
+            label="Privacy & terms"
+            description="Policies for using Africana"
             onPress={() => router.push('/(settings)/legal')}
           />
         </View>
@@ -259,7 +261,7 @@ export default function SettingsScreen() {
           <SettingRow
             icon="information-circle-outline"
             iconColor={COLORS.earth}
-            label="About Africana"
+            label="About"
             description="Version 1.0.0"
             onPress={() => showDialog({
               title: 'Africana v1.0.0',
@@ -276,8 +278,8 @@ export default function SettingsScreen() {
           />
           <SettingRow
             icon="trash-outline"
-            label="Delete Account"
-            description="Permanently delete your account"
+            label="Delete account"
+            description="Remove your profile and data for good"
             onPress={handleDeleteAccount}
             showArrow={false}
             danger
