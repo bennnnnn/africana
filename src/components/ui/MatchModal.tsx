@@ -69,7 +69,9 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
     if (!user || !matchedUser) return;
     onClose();
     const convId = await getOrCreateConversation(user.id, matchedUser.id);
-    if (convId) router.push(`/(chat)/${convId}`);
+    if (convId) {
+      router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: matchedUser.id } });
+    }
   };
 
   if (!matchedUser) return null;

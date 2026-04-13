@@ -324,7 +324,9 @@ export default function LikesScreen() {
   const handleMessage = async (toUserId: string) => {
     if (!user) return;
     const convId = await getOrCreateConversation(user.id, toUserId);
-    if (convId) router.push(`/(chat)/${convId}`);
+    if (convId) {
+      router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: toUserId } });
+    }
   };
 
   const list: User[] = useMemo(() => lists[tab] ?? [], [lists, tab]);

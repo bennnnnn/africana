@@ -50,3 +50,9 @@ export async function replaceCachedMessages(conversationId: string, messages: Me
 export async function clearCachedMessages(conversationId: string): Promise<void> {
   messageStore.delete(conversationId);
 }
+
+export function enqueueReplaceCachedMessages(conversationId: string, messages: Message[]): void {
+  void replaceCachedMessages(conversationId, messages).catch((e) => {
+    console.warn('[chat-cache] replaceCachedMessages failed:', e);
+  });
+}

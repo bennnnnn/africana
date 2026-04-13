@@ -444,3 +444,7 @@ CREATE TRIGGER profiles_enforce_privacy_columns
 
 DROP FUNCTION IF EXISTS public.sync_profile_show_in_discover();
 DROP FUNCTION IF EXISTS public.enforce_profile_show_in_discover();
+
+-- ── Origin country: allow full picker list (ALL_COUNTRIES), not only a DB subset ─
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_origion_country_check;
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_origin_country_check;

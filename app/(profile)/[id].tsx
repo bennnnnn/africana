@@ -13,10 +13,10 @@ import {
   useWindowDimensions,
   StatusBar,
   Platform,
+  InteractionManager,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -32,7 +32,7 @@ import { useDiscoverStore } from '@/store/discover.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { User } from '@/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, DEFAULT_AVATAR, GENDER_OPTIONS, INTERESTED_IN_OPTIONS, RELIGION_OPTIONS, EDUCATION_OPTIONS, MARITAL_STATUS_OPTIONS, LOOKING_FOR_OPTIONS, WANT_CHILDREN_YES_NO, OCCUPATION_OPTIONS, PHYSICAL_CONDITION_OPTIONS, SHADOWS } from '@/constants';
+import { COLORS, DEFAULT_AVATAR, FONT, GENDER_OPTIONS, INTERESTED_IN_OPTIONS, RELIGION_OPTIONS, EDUCATION_OPTIONS, MARITAL_STATUS_OPTIONS, LOOKING_FOR_OPTIONS, WANT_CHILDREN_YES_NO, OCCUPATION_OPTIONS, PHYSICAL_CONDITION_OPTIONS, RADIUS, SHADOWS } from '@/constants';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
@@ -52,8 +52,6 @@ const floatingActionCircle = {
   justifyContent: 'center' as const,
   ...SHADOWS.md,
 };
-
-const AnimatedProfileScrollView = Animated.createAnimatedComponent(ScrollView);
 
 function useProfileGalleryPhotos(userId: string | null) {
   const [photos, setPhotos] = useState<string[]>([]);
@@ -202,14 +200,14 @@ function ProfilePhotoGalleryPage({
   );
 }
 
-function ReadOnlyRow({ icon, label, value }: {
-  icon: keyof typeof Ionicons.glyphMap; label: string; value: string | null | undefined;
+function ReadOnlyRow({ icon, label, value, isLast }: {
+  icon: keyof typeof Ionicons.glyphMap; label: string; value: string | null | undefined; isLast?: boolean;
 }) {
   const filled = !!value;
   return (
-    <View style={pr.fieldRow}>
+    <View style={[pr.fieldRow, isLast && pr.fieldRowLast]}>
       <View style={[pr.fieldIcon, !filled && pr.fieldIconEmpty]}>
-        <Ionicons name={icon} size={15} color={filled ? '#111' : '#CCC'} />
+        <Ionicons name={icon} size={16} color={filled ? COLORS.primary : COLORS.textMuted} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={pr.fieldLabel}>{label}</Text>
@@ -255,7 +253,6 @@ export default function ProfileViewScreen() {
   const [selectedReportReason, setSelectedReportReason] = useState<typeof REPORT_REASONS[number] | null>(null);
   const [reportValidationVisible, setReportValidationVisible] = useState(false);
   const [blockPromptVisible, setBlockPromptVisible] = useState(false);
-  const profileScrollY = useRef(new Animated.Value(0)).current;
 
   // Toast
   const toastAnim = useRef(new Animated.Value(0)).current;
@@ -277,7 +274,6 @@ export default function ProfileViewScreen() {
     setSelectedReportReason(null);
     setReportValidationVisible(false);
     setBlockPromptVisible(false);
-    profileScrollY.setValue(0);
   }, [id]);
 
   useEffect(() => {
@@ -395,14 +391,6 @@ export default function ProfileViewScreen() {
 
   adjacentBrowseRef.current = adjacentBrowse;
 
-  useFocusEffect(
-    useCallback(() => {
-      return () => {
-        useProfileBrowseStore.getState().clearOrderedUserIds();
-      };
-    }, []),
-  );
-
   useEffect(() => {
     if (!photoViewerVisible || !profile) return;
     const y = adjacentBrowse.initialIndex * winHeight;
@@ -420,13 +408,18 @@ export default function ProfileViewScreen() {
     prevProfileIdInPhotoViewerRef.current = profile.id;
   }, [profile?.id, photoViewerVisible]);
 
+  const replaceProfileRoute = useCallback((nextUserId: string) => {
+    router.replace({ pathname: '/(profile)/[id]', params: { id: nextUserId } });
+  }, []);
+
   const handleVerticalPhotoGalleryEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { pages } = adjacentBrowseRef.current;
-    if (pages.length < 2 || !profile) return;
+    const currentId = profile?.id;
+    if (pages.length < 2 || !currentId) return;
     const i = Math.round(e.nativeEvent.contentOffset.y / winHeight);
     const target = pages[i];
-    if (target && target !== profile.id) {
-      router.replace(`/(profile)/${target}`);
+    if (target && target !== currentId) {
+      replaceProfileRoute(target);
     }
   };
 
@@ -435,14 +428,22 @@ export default function ProfileViewScreen() {
   const galleryHasNextProfile = browseIndex >= 0 && browseIndex < orderedUserIds.length - 1;
 
   const goPrevProfileInGallery = useCallback(() => {
-    if (!profile || browseIndex <= 0) return;
-    router.replace(`/(profile)/${orderedUserIds[browseIndex - 1]!}`);
-  }, [profile, browseIndex, orderedUserIds]);
+    const pid = profile?.id;
+    if (!pid) return;
+    const ids = useProfileBrowseStore.getState().orderedUserIds;
+    const i = ids.indexOf(pid);
+    if (i <= 0) return;
+    replaceProfileRoute(ids[i - 1]!);
+  }, [profile?.id, replaceProfileRoute]);
 
   const goNextProfileInGallery = useCallback(() => {
-    if (!profile || browseIndex < 0 || browseIndex >= orderedUserIds.length - 1) return;
-    router.replace(`/(profile)/${orderedUserIds[browseIndex + 1]!}`);
-  }, [profile, browseIndex, orderedUserIds]);
+    const pid = profile?.id;
+    if (!pid) return;
+    const ids = useProfileBrowseStore.getState().orderedUserIds;
+    const i = ids.indexOf(pid);
+    if (i < 0 || i >= ids.length - 1) return;
+    replaceProfileRoute(ids[i + 1]!);
+  }, [profile?.id, replaceProfileRoute]);
 
   if (isLoading) {
     return (
@@ -488,6 +489,11 @@ export default function ProfileViewScreen() {
         : 'offline';
 
   const recipientMessagesPaused = !isOwnProfile && profile.accepts_messages === false;
+
+  const photoModalDotBottom =
+    !isOwnProfile && currentUser
+      ? Math.max(insets.bottom + FLOAT_ACTION_SIZE + 28, 94)
+      : Math.max(insets.bottom + 16, 24);
 
   const p = profile as ProfileWithAgePrefs;
   const normalizeText = (value: string | null | undefined) => value?.trim().toLowerCase() ?? '';
@@ -622,8 +628,15 @@ export default function ProfileViewScreen() {
 
   const handleMessage = async () => {
     if (!currentUser || recipientMessagesPaused) return;
+    if (photoViewerVisible) {
+      setPhotoViewerVisible(false);
+    }
     const convId = await getOrCreateConversation(currentUser.id, profile.id);
-    if (convId) router.push(`/(chat)/${convId}`);
+    if (!convId) return;
+    const peerId = profile.id;
+    InteractionManager.runAfterInteractions(() => {
+      router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: peerId } });
+    });
   };
 
   const handleFavourite = async () => {
@@ -701,7 +714,7 @@ export default function ProfileViewScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: COLORS.white }}>
+    <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
       {/* Toast */}
       {toast && (
         <Animated.View
@@ -720,28 +733,23 @@ export default function ProfileViewScreen() {
           <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600' }}>{toast.msg}</Text>
         </Animated.View>
       )}
-      <AnimatedProfileScrollView
+      <ScrollView
         style={{ flex: 1, backgroundColor: 'transparent' }}
         showsVerticalScrollIndicator={false}
         bounces
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
-        scrollEventThrottle={16}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: profileScrollY } } }],
-          { useNativeDriver: false },
-        )}
         contentContainerStyle={{
           flexGrow: 1,
-          backgroundColor: COLORS.white,
+          backgroundColor: COLORS.surface,
           paddingBottom:
             !isOwnProfile && currentUser
               ? Math.max(insets.bottom + FLOAT_ACTION_SIZE + 36, 108)
               : Math.max(insets.bottom + 24, 32),
         }}
       >
-        {/* Photo Carousel */}
-        <View style={{ position: 'relative', backgroundColor: '#000' }}>
+        {/* Photo Carousel — rounded bottom for handoff into identity card */}
+        <View style={{ position: 'relative', backgroundColor: '#000', overflow: 'hidden', borderBottomLeftRadius: RADIUS.xxl, borderBottomRightRadius: RADIUS.xxl }}>
           <ScrollView
             ref={heroPhotoScrollRef}
             horizontal
@@ -779,7 +787,7 @@ export default function ProfileViewScreen() {
               pointerEvents="none"
               style={{
                 position: 'absolute',
-                bottom: 16,
+                bottom: 28,
                 left: 0,
                 right: 0,
                 flexDirection: 'row',
@@ -843,133 +851,90 @@ export default function ProfileViewScreen() {
           </SafeAreaView>
         </View>
 
-        {/* Info card */}
-        <View style={pr.section}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <Text style={{ fontSize: 26, fontWeight: '800', color: '#111' }}>
-              {profile.full_name}{profile.age ? `, ${profile.age}` : ''}
+        {/* Identity — overlaps hero */}
+        <View style={pr.identityCard}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+            <Text style={pr.displayName}>
+              {profile.full_name}
+              {profile.age ? <Text style={pr.displayAge}>, {profile.age}</Text> : null}
             </Text>
-            <View style={[
-              pr.onlineBadge,
-              { backgroundColor: displayOnlineStatus === 'online' ? `${COLORS.online}18` : `${COLORS.border}` },
-            ]}>
+            <View
+              style={[
+                pr.onlineBadge,
+                { backgroundColor: displayOnlineStatus === 'online' ? `${COLORS.online}16` : COLORS.savanna },
+              ]}
+            >
               <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: displayOnlineStatus === 'online' ? COLORS.online : COLORS.textMuted }} />
-              <Text style={{ fontSize: 11, fontWeight: '600', color: displayOnlineStatus === 'online' ? COLORS.online : COLORS.textSecondary }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: displayOnlineStatus === 'online' ? COLORS.online : COLORS.textSecondary }}>
                 {displayOnlineStatus === 'online' ? 'Online' : `Last seen ${formatLastSeen(profile.last_seen)}`}
               </Text>
             </View>
           </View>
 
           {location ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }}>
-              <Ionicons name="location-outline" size={14} color="#111" />
-              <Text style={{ fontSize: 14, color: COLORS.textSecondary }}>{location}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+              <View style={pr.locationIconWrap}>
+                <Ionicons name="location" size={14} color={COLORS.primary} />
+              </View>
+              <Text style={pr.locationText}>{location}</Text>
             </View>
           ) : null}
 
-          {(profile.looking_for ?? []).length > 0 && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+          {(profile.looking_for ?? []).length > 0 ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
               {(profile.looking_for ?? []).map((lf) => (
-                <View key={lf} style={pr.badge}>
-                  <Text style={pr.badgeText}>{LOOKING_FOR_OPTIONS.find(o => o.value === lf)?.label ?? lf.replace('_', ' ')}</Text>
+                <View key={lf} style={pr.chipLooking}>
+                  <Text style={pr.chipLookingText}>
+                    {LOOKING_FOR_OPTIONS.find((o) => o.value === lf)?.label ?? lf.replace('_', ' ')}
+                  </Text>
                 </View>
               ))}
             </View>
-          )}
+          ) : null}
 
           {profile.bio ? (
-            <View style={{ marginTop: 14 }}>
-              <Text style={pr.sectionTitle}>About</Text>
-              <Text style={{ fontSize: 15, color: '#111', lineHeight: 23 }}>{profile.bio}</Text>
+            <View style={pr.aboutBlock}>
+              <View style={pr.aboutAccent} />
+              <View style={{ flex: 1 }}>
+                <Text style={pr.aboutLabel}>About</Text>
+                <Text style={pr.aboutBody}>{profile.bio}</Text>
+              </View>
             </View>
-          ) : null}
-        </View>
-
-        {/* Personal — ReadOnlyRow auto-hides null fields */}
-        <View style={pr.section}>
-          <Text style={pr.sectionTitle}>Personal</Text>
-          <ReadOnlyRow icon="person-outline"      label="Gender"         value={GENDER_LABEL[profile.gender] ?? profile.gender} />
-          <ReadOnlyRow icon="calendar-outline"    label="Age"            value={profile.age ? `${profile.age} years old` : null} />
-          <ReadOnlyRow icon="search-outline"      label="Interested in"  value={interestedInLabel} />
-          <ReadOnlyRow icon="location-outline"    label="Lives in"       value={location || null} />
-          <ReadOnlyRow icon="heart-outline"       label="Marital status" value={maritalLabel} />
-          <ReadOnlyRow icon="sunny-outline"       label="Religion"       value={religionLabel} />
-          <ReadOnlyRow icon="globe-outline"       label="Ethnicity"      value={profile.ethnicity ?? null} />
-          <ReadOnlyRow icon="chatbubbles-outline" label="Languages"      value={(profile.languages ?? []).join(', ') || null} />
-        </View>
-
-        {/* Physical */}
-        <View style={pr.section}>
-          <Text style={pr.sectionTitle}>Physical</Text>
-          <ReadOnlyRow icon="resize-outline" label="Height"    value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null} />
-          <ReadOnlyRow icon="body-outline"   label="Body type" value={bodyTypeLabel} />
-        </View>
-
-        {/* Work & Education */}
-        <View style={pr.section}>
-          <Text style={pr.sectionTitle}>Work & Education</Text>
-          <ReadOnlyRow icon="briefcase-outline" label="Occupation" value={occupationLabel} />
-          <ReadOnlyRow icon="school-outline"    label="Education"  value={educationLabel} />
-        </View>
-
-        {/* Family */}
-        <View style={pr.section}>
-          <Text style={pr.sectionTitle}>Family</Text>
-          <ReadOnlyRow icon="people-outline" label="Children"      value={profile.has_children == null ? null : profile.has_children ? 'Has children' : 'No children'} />
-          <ReadOnlyRow icon="happy-outline"  label="Wants children" value={wantChildLabel} />
-        </View>
-
-        {/* Hobbies */}
-        {(profile.hobbies ?? []).length > 0 && (
-          <View style={pr.section}>
-            <Text style={pr.sectionTitle}>Hobbies & Interests</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4 }}>
-              {(profile.hobbies ?? []).map(h => (
-                <View key={h} style={pr.badge}><Text style={pr.badgeText}>{h}</Text></View>
-              ))}
+          ) : (
+            <View style={{ marginTop: 14, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: `${COLORS.savanna}88`, borderRadius: RADIUS.md }}>
+              <Text style={{ fontSize: 14, color: COLORS.textSecondary, fontStyle: 'italic', lineHeight: 21 }}>
+                {isOwnProfile
+                  ? 'You haven’t added a bio yet — edit your profile from Me to tell your story.'
+                  : 'No bio yet — say hi and get the conversation started.'}
+              </Text>
             </View>
-          </View>
-        )}
+          )}
+        </View>
 
         {canShowCompatibility && compatibilityPercent !== null && (
-          <View style={{ backgroundColor: '#FFFFFF', padding: 20, marginBottom: 8 }}>
+          <View style={pr.compatibilityCard}>
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => setCompatibilityExpanded((prev) => !prev)}
               style={{ paddingVertical: 2 }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                <View
-                  style={{
-                    width: 54,
-                    height: 54,
-                    borderRadius: 27,
-                    backgroundColor: `${COLORS.success}12`,
-                    borderWidth: 1,
-                    borderColor: `${COLORS.success}24`,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.success }}>
-                    {compatibilityPercent}%
-                  </Text>
+                <View style={pr.compatibilityRing}>
+                  <Text style={pr.compatibilityPercent}>{compatibilityPercent}%</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 4 }}>
-                    COMPATIBILITY
+                  <Text style={pr.compatibilityKicker}>Compatibility</Text>
+                  <Text style={pr.compatibilityTitle}>
+                    {matchedCriteriaCount} of {compatibilityCriteria.length} in common
                   </Text>
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.text }}>
-                    {matchedCriteriaCount} of {compatibilityCriteria.length} match
-                  </Text>
-                  <Text style={{ marginTop: 4, fontSize: 13, color: COLORS.textSecondary, lineHeight: 20 }}>
-                    Their preferences compared with yours.
+                  <Text style={pr.compatibilitySub}>
+                    How their preferences line up with yours.
                   </Text>
                 </View>
                 <Ionicons
                   name={compatibilityExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={20}
-                  color={COLORS.textSecondary}
+                  size={22}
+                  color={COLORS.primary}
                 />
               </View>
             </TouchableOpacity>
@@ -1027,10 +992,58 @@ export default function ProfileViewScreen() {
             )}
           </View>
         )}
-      </AnimatedProfileScrollView>
+
+        {/* Personal — ReadOnlyRow auto-hides null fields */}
+        <View style={pr.sectionCard}>
+          <Text style={pr.sectionTitle}>Personal</Text>
+          <ReadOnlyRow icon="person-outline"      label="Gender"         value={GENDER_LABEL[profile.gender] ?? profile.gender} />
+          <ReadOnlyRow icon="calendar-outline"    label="Age"            value={profile.age ? `${profile.age} years old` : null} />
+          <ReadOnlyRow icon="search-outline"      label="Interested in"  value={interestedInLabel} />
+          <ReadOnlyRow icon="location-outline"    label="Lives in"       value={location || null} />
+          <ReadOnlyRow icon="heart-outline"       label="Marital status" value={maritalLabel} />
+          <ReadOnlyRow icon="sunny-outline"       label="Religion"       value={religionLabel} />
+          <ReadOnlyRow icon="globe-outline"       label="Ethnicity"      value={profile.ethnicity ?? null} />
+          <ReadOnlyRow icon="chatbubbles-outline" label="Languages"      value={(profile.languages ?? []).join(', ') || null} isLast />
+        </View>
+
+        {/* Physical */}
+        <View style={pr.sectionCard}>
+          <Text style={pr.sectionTitle}>Physical</Text>
+          <ReadOnlyRow icon="resize-outline" label="Height"    value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null} />
+          <ReadOnlyRow icon="body-outline"   label="Body type" value={bodyTypeLabel} isLast />
+        </View>
+
+        {/* Work & Education */}
+        <View style={pr.sectionCard}>
+          <Text style={pr.sectionTitle}>Work & Education</Text>
+          <ReadOnlyRow icon="briefcase-outline" label="Occupation" value={occupationLabel} />
+          <ReadOnlyRow icon="school-outline"    label="Education"  value={educationLabel} isLast />
+        </View>
+
+        {/* Family */}
+        <View style={pr.sectionCard}>
+          <Text style={pr.sectionTitle}>Family</Text>
+          <ReadOnlyRow icon="people-outline" label="Children"      value={profile.has_children == null ? null : profile.has_children ? 'Has children' : 'No children'} />
+          <ReadOnlyRow icon="happy-outline"  label="Wants children" value={wantChildLabel} isLast />
+        </View>
+
+        {/* Hobbies */}
+        {(profile.hobbies ?? []).length > 0 && (
+          <View style={pr.sectionCard}>
+            <Text style={pr.sectionTitle}>Hobbies & Interests</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4 }}>
+              {(profile.hobbies ?? []).map((h) => (
+                <View key={h} style={pr.chipHobby}>
+                  <Text style={pr.chipHobbyText}>{h}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+      </ScrollView>
 
       {!isOwnProfile && currentUser ? (
-        <Animated.View
+        <View
           pointerEvents="box-none"
           style={{
             position: 'absolute',
@@ -1040,21 +1053,6 @@ export default function ProfileViewScreen() {
             paddingBottom: Math.max(insets.bottom + 14, 20),
             paddingHorizontal: 18,
             backgroundColor: 'transparent',
-            opacity: profileScrollY.interpolate({
-              inputRange: [0, 80, 220, 480],
-              outputRange: [1, 1, 0.88, 0.72],
-              extrapolate: 'clamp',
-            }),
-            transform: [
-              {
-                // Negative = move up on screen; positive was pushing into home indicator / system nav.
-                translateY: profileScrollY.interpolate({
-                  inputRange: [0, 80, 220, 480],
-                  outputRange: [0, 0, -10, -22],
-                  extrapolate: 'clamp',
-                }),
-              },
-            ],
           }}
         >
           <View
@@ -1111,7 +1109,7 @@ export default function ProfileViewScreen() {
               />
             </TouchableOpacity>
           </View>
-        </Animated.View>
+        </View>
       ) : null}
 
       <Modal
@@ -1140,7 +1138,7 @@ export default function ProfileViewScreen() {
                   winHeight={winHeight}
                   initialHIndex={uid === profile.id ? viewerPhotoIndex : 0}
                   syncHorizontalFromOpen={uid === profile.id}
-                  dotBottom={Math.max(insets.bottom + 16, 24)}
+                  dotBottom={photoModalDotBottom}
                   onHorizontalIndexChange={(i) => {
                     if (uid === profile.id) setViewerPhotoIndex(i);
                   }}
@@ -1221,6 +1219,75 @@ export default function ProfileViewScreen() {
               </TouchableOpacity>
             </View>
           </SafeAreaView>
+          {!isOwnProfile && currentUser ? (
+            <View
+              pointerEvents="box-none"
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                paddingBottom: Math.max(insets.bottom + 12, 16),
+                paddingHorizontal: 18,
+                backgroundColor: 'transparent',
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 14,
+                  backgroundColor: 'transparent',
+                }}
+              >
+                <TouchableOpacity
+                  onPress={handleFavourite}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
+                  style={floatingActionCircle}
+                >
+                  <Ionicons
+                    name={isFavourite ? 'star' : 'star-outline'}
+                    size={26}
+                    color={isFavourite ? COLORS.primary : COLORS.text}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleLike}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={isLiked ? 'Unlike' : 'Like'}
+                  style={floatingActionCircle}
+                >
+                  <Ionicons
+                    name={isLiked ? 'heart' : 'heart-outline'}
+                    size={26}
+                    color={isLiked ? COLORS.primary : COLORS.text}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleMessage}
+                  disabled={recipientMessagesPaused}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={recipientMessagesPaused ? 'Messages paused' : 'Message'}
+                  accessibilityState={{ disabled: recipientMessagesPaused }}
+                  style={[
+                    floatingActionCircle,
+                    recipientMessagesPaused && { opacity: 0.55 },
+                  ]}
+                >
+                  <Ionicons
+                    name={recipientMessagesPaused ? 'lock-closed-outline' : 'chatbubble-ellipses-outline'}
+                    size={26}
+                    color={recipientMessagesPaused ? COLORS.textMuted : COLORS.primary}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
         </GestureHandlerRootView>
       </Modal>
 
@@ -1391,15 +1458,136 @@ function formatLastSeen(iso: string): string {
 }
 
 const pr = StyleSheet.create({
-  section:        { backgroundColor: '#FFF', marginBottom: 8, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12 },
-  sectionTitle:   { fontSize: 11, fontWeight: '800', color: COLORS.textSecondary, letterSpacing: 0.8, marginBottom: 10, textTransform: 'uppercase' },
-  onlineBadge:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  badge:          { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#F0F0F0', borderWidth: 1, borderColor: '#DDD' },
-  badgeText:      { fontSize: 13, color: '#111', fontWeight: '600' },
-  fieldRow:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  fieldIcon:      { width: 32, height: 32, borderRadius: 9, backgroundColor: '#F0F0F0', alignItems: 'center', justifyContent: 'center' },
-  fieldIconEmpty: { backgroundColor: '#FAFAFA' },
-  fieldLabel:     { fontSize: 11, color: COLORS.textSecondary, fontWeight: '500', marginBottom: 1 },
-  fieldValue:     { fontSize: 14, color: '#111', fontWeight: '600' },
-  fieldValueEmpty:{ fontSize: 14, color: '#CCC', fontWeight: '400', fontStyle: 'italic' },
+  identityCard: {
+    marginTop: -28,
+    marginHorizontal: 16,
+    marginBottom: 4,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
+    ...SHADOWS.md,
+  },
+  displayName: { fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.textStrong, flex: 1, flexWrap: 'wrap' },
+  displayAge: { fontWeight: FONT.bold, color: COLORS.textSecondary },
+  locationIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: `${COLORS.primary}12`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locationText: { fontSize: FONT.md, color: COLORS.text, fontWeight: FONT.semibold },
+  chipLooking: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+    backgroundColor: `${COLORS.primary}10`,
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}28`,
+  },
+  chipLookingText: { fontSize: FONT.sm, color: COLORS.primaryDark, fontWeight: FONT.bold },
+  chipHobby: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.savanna,
+    borderWidth: 1,
+    borderColor: `${COLORS.earth}35`,
+  },
+  chipHobbyText: { fontSize: FONT.sm, color: COLORS.earth, fontWeight: FONT.semibold },
+  aboutBlock: { flexDirection: 'row', marginTop: 18, alignItems: 'flex-start' },
+  aboutAccent: {
+    width: 4,
+    marginTop: 4,
+    minHeight: 52,
+    borderRadius: 2,
+    backgroundColor: COLORS.primary,
+    marginRight: 14,
+  },
+  aboutLabel: {
+    fontSize: FONT.sm,
+    fontWeight: FONT.extrabold,
+    color: COLORS.textStrong,
+    marginBottom: 8,
+  },
+  aboutBody: {
+    fontSize: FONT.md,
+    color: COLORS.text,
+    lineHeight: 24,
+    fontWeight: FONT.medium,
+  },
+  compatibilityCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: 18,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.success,
+    ...SHADOWS.sm,
+  },
+  compatibilityRing: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: `${COLORS.success}14`,
+    borderWidth: 2,
+    borderColor: `${COLORS.success}40`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compatibilityPercent: { fontSize: FONT.lg, fontWeight: FONT.extrabold, color: COLORS.success },
+  compatibilityKicker: {
+    fontSize: FONT.xs,
+    fontWeight: FONT.extrabold,
+    color: COLORS.success,
+    marginBottom: 4,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  compatibilityTitle: { fontSize: FONT.xl, fontWeight: FONT.extrabold, color: COLORS.textStrong },
+  compatibilitySub: { marginTop: 4, fontSize: FONT.sm, color: COLORS.textSecondary, lineHeight: 20 },
+  sectionCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+    ...SHADOWS.sm,
+  },
+  sectionTitle: {
+    fontSize: FONT.xs,
+    fontWeight: FONT.extrabold,
+    color: COLORS.earth,
+    letterSpacing: 1,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+  onlineBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
+  fieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: `${COLORS.border}CC`,
+  },
+  fieldRowLast: { borderBottomWidth: 0 },
+  fieldIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.sm,
+    backgroundColor: `${COLORS.primary}0D`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fieldIconEmpty: { backgroundColor: COLORS.savanna },
+  fieldLabel: { fontSize: FONT.xs, color: COLORS.textSecondary, fontWeight: FONT.semibold, marginBottom: 2 },
+  fieldValue: { fontSize: FONT.md, color: COLORS.textStrong, fontWeight: FONT.semibold },
+  fieldValueEmpty: { fontSize: FONT.md, color: COLORS.textMuted, fontWeight: FONT.regular, fontStyle: 'italic' },
 });

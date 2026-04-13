@@ -83,7 +83,9 @@ export default function OnlineScreen() {
   const handleMessage = async (toUserId: string) => {
     if (!user) return;
     const convId = await getOrCreateConversation(user.id, toUserId);
-    if (convId) router.push(`/(chat)/${convId}`);
+    if (convId) {
+      router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: toUserId } });
+    }
   };
 
   if (isLoading) {

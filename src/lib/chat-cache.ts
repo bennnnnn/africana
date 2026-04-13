@@ -5,41 +5,61 @@ type CachedPayloadRow = {
   payload: string;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let dbPromise: Promise<SQLite.SQLiteDatabase | null> | null = null;
 
-async function getDb(): Promise<SQLite.SQLiteDatabase> {
+/**
+ * Open DB once. Returns null if native SQLite fails (avoids crashing the app / uncaught rejections).
+ * Avoids multi-statement execAsync and index column DESC/ASC — some RN SQLite builds reject them.
+ */
+function getDb(): Promise<SQLite.SQLiteDatabase | null> {
   if (!dbPromise) {
-    dbPromise = SQLite.openDatabaseAsync('africana-cache.db').then(async (db) => {
-      await db.execAsync(`
-        PRAGMA journal_mode = WAL;
-        CREATE TABLE IF NOT EXISTS cached_conversations (
-          user_id TEXT NOT NULL,
-          conversation_id TEXT NOT NULL,
-          sort_timestamp TEXT,
-          payload TEXT NOT NULL,
-          PRIMARY KEY (user_id, conversation_id)
-        );
-        CREATE TABLE IF NOT EXISTS cached_conversation_snapshots (
-          user_id TEXT NOT NULL PRIMARY KEY,
-          payload TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS cached_messages (
-          conversation_id TEXT NOT NULL,
-          message_id TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          payload TEXT NOT NULL,
-          PRIMARY KEY (conversation_id, message_id)
-        );
-        CREATE INDEX IF NOT EXISTS idx_cached_conversations_user_sort
-          ON cached_conversations (user_id, sort_timestamp DESC);
-        CREATE INDEX IF NOT EXISTS idx_cached_messages_conversation_created
-          ON cached_messages (conversation_id, created_at ASC);
-      `);
-      return db;
-    });
+    dbPromise = (async () => {
+      try {
+        const db = await SQLite.openDatabaseAsync('africana-cache.db');
+        await applySchema(db);
+        return db;
+      } catch (err) {
+        console.warn('[chat-cache] SQLite unavailable, continuing without disk cache:', err);
+        return null;
+      }
+    })();
+  }
+  return dbPromise;
+}
+
+async function applySchema(db: SQLite.SQLiteDatabase): Promise<void> {
+  const ddl: string[] = [
+    `CREATE TABLE IF NOT EXISTS cached_conversations (
+      user_id TEXT NOT NULL,
+      conversation_id TEXT NOT NULL,
+      sort_timestamp TEXT,
+      payload TEXT NOT NULL,
+      PRIMARY KEY (user_id, conversation_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS cached_conversation_snapshots (
+      user_id TEXT PRIMARY KEY,
+      payload TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS cached_messages (
+      conversation_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      PRIMARY KEY (conversation_id, message_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_cached_conversations_user_sort ON cached_conversations (user_id, sort_timestamp)`,
+    `CREATE INDEX IF NOT EXISTS idx_cached_messages_conversation_created ON cached_messages (conversation_id, created_at)`,
+  ];
+
+  for (const sql of ddl) {
+    await db.execAsync(sql);
   }
 
-  return dbPromise;
+  try {
+    await db.execAsync('PRAGMA journal_mode = WAL');
+  } catch {
+    // Optional; some environments reject WAL — table cache still works.
+  }
 }
 
 function serializeConversation(conversation: Conversation): string {
@@ -84,6 +104,7 @@ function safeParseMessage(payload: string): Message | null {
 export async function getCachedConversations(userId: string): Promise<Conversation[]> {
   if (!userId) return [];
   const db = await getDb();
+  if (!db) return [];
   const rows = await db.getAllAsync<CachedPayloadRow>(
     `SELECT payload
      FROM cached_conversations
@@ -102,6 +123,7 @@ export async function getCachedConversationSnapshot(
 ): Promise<{ found: boolean; conversations: Conversation[] }> {
   if (!userId) return { found: false, conversations: [] };
   const db = await getDb();
+  if (!db) return { found: false, conversations: [] };
   const row = await db.getFirstAsync<CachedPayloadRow>(
     `SELECT payload
      FROM cached_conversation_snapshots
@@ -130,6 +152,7 @@ export async function getCachedConversationSnapshot(
 export async function replaceCachedConversations(userId: string, conversations: Conversation[]): Promise<void> {
   if (!userId) return;
   const db = await getDb();
+  if (!db) return;
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT OR REPLACE INTO cached_conversation_snapshots (user_id, payload)
@@ -155,6 +178,7 @@ export async function replaceCachedConversations(userId: string, conversations: 
 export async function getCachedMessages(conversationId: string): Promise<Message[]> {
   if (!conversationId) return [];
   const db = await getDb();
+  if (!db) return [];
   const rows = await db.getAllAsync<CachedPayloadRow>(
     `SELECT payload
      FROM cached_messages
@@ -171,6 +195,7 @@ export async function getCachedMessages(conversationId: string): Promise<Message
 export async function replaceCachedMessages(conversationId: string, messages: Message[]): Promise<void> {
   if (!conversationId) return;
   const db = await getDb();
+  if (!db) return;
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM cached_messages WHERE conversation_id = ?', conversationId);
 
@@ -190,5 +215,13 @@ export async function replaceCachedMessages(conversationId: string, messages: Me
 export async function clearCachedMessages(conversationId: string): Promise<void> {
   if (!conversationId) return;
   const db = await getDb();
+  if (!db) return;
   await db.runAsync('DELETE FROM cached_messages WHERE conversation_id = ?', conversationId);
+}
+
+/** Background persist after optimistic updates — never surfaces as an uncaught promise rejection. */
+export function enqueueReplaceCachedMessages(conversationId: string, messages: Message[]): void {
+  void replaceCachedMessages(conversationId, messages).catch((e) => {
+    console.warn('[chat-cache] replaceCachedMessages failed:', e);
+  });
 }

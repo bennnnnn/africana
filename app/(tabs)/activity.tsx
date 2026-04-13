@@ -244,6 +244,13 @@ export default function ActivityScreen() {
               onPress={() => {
                 if (item.navTarget.startsWith('/(profile)/')) {
                   useProfileBrowseStore.getState().setOrderedUserIds(activityProfileBrowseIds);
+                  router.push(item.navTarget as any);
+                  return;
+                }
+                if (item.type === 'message' && item.navTarget.startsWith('/(chat)/')) {
+                  const chatId = item.navTarget.slice('/(chat)/'.length);
+                  router.push({ pathname: '/(chat)/[id]', params: { id: chatId, otherUserId: item.userId } });
+                  return;
                 }
                 router.push(item.navTarget as any);
               }}

@@ -108,6 +108,8 @@ export interface Message {
   edited_at?: string | null;
   reactions?: string[];
   sender?: User;
+  /** Stable list key across optimistic → server id swap (avoids FlatList remount jank). */
+  listKey?: string;
 }
 
 export interface Conversation {

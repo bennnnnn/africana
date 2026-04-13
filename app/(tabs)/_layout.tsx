@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Platform } from 'react-native';
@@ -7,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { COLORS } from '@/constants';
+import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
 
 function TabIcon({
@@ -70,6 +72,14 @@ export default function TabLayout() {
       router.replace(onboardingHrefFromSession(session));
     }
   }, [isInitialized, session, user, router]);
+
+  // Drop browse order when returning to tabs (e.g. back from profile). Clearing on profile
+  // blur breaks router.replace between profiles because the screen can unfocus briefly.
+  useFocusEffect(
+    useCallback(() => {
+      useProfileBrowseStore.getState().clearOrderedUserIds();
+    }, []),
+  );
 
   useEffect(() => {
     if (!user) return;

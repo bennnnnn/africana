@@ -9,6 +9,7 @@ import {
   getCachedMessages,
   replaceCachedConversations,
   replaceCachedMessages,
+  enqueueReplaceCachedMessages,
 } from '@/lib/chat-cache';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -169,7 +170,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           : [];
         const result = [...conversationsWithUsers, ...mockToAdd];
         set({ conversations: result });
-        await replaceCachedConversations(userId, result);
+        try {
+          await replaceCachedConversations(userId, result);
+        } catch (e) {
+          console.warn('[chat-cache] replaceCachedConversations failed:', e);
+        }
       }
     } finally {
       set({ isLoading: false });
@@ -211,7 +216,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((state) => ({
         messages: { ...state.messages, [conversationId]: rows },
       }));
-      await replaceCachedMessages(conversationId, rows);
+      try {
+        await replaceCachedMessages(conversationId, rows);
+      } catch (e) {
+        console.warn('[chat-cache] fetchMessages persist failed:', e);
+      }
     }
   },
 
@@ -290,6 +299,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const tempId = `temp-${Date.now()}`;
     const tempMsg: Message = {
       id: tempId,
+      listKey: tempId,
       conversation_id: conversationId,
       sender_id: senderId,
       content,
@@ -307,7 +317,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           : c
       ),
     }));
-    void replaceCachedMessages(conversationId, [...(get().messages[conversationId] ?? []), tempMsg]);
+    enqueueReplaceCachedMessages(conversationId, get().messages[conversationId] ?? []);
 
     const { data, error } = await supabase
       .from('messages')
@@ -324,7 +334,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           [conversationId]: (state.messages[conversationId] ?? []).filter((m) => m.id !== tempId),
         },
       }));
-      void replaceCachedMessages(
+      enqueueReplaceCachedMessages(
         conversationId,
         (get().messages[conversationId] ?? []).filter((m) => m.id !== tempId),
       );
@@ -333,19 +343,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { error: error?.message ?? 'Failed to send message' };
     }
 
-    // Replace temp with confirmed message in-place (no flicker)
+    // Replace temp with confirmed message in-place; keep listKey so FlatList row does not remount.
+    const confirmed: Message = { ...(data as Message), listKey: tempId };
     set((state) => ({
       messages: {
         ...state.messages,
         [conversationId]: (state.messages[conversationId] ?? []).map(
-          (m) => m.id === tempId ? data : m
+          (m) => m.id === tempId ? confirmed : m
         ),
       },
     }));
-    void replaceCachedMessages(
-      conversationId,
-      (get().messages[conversationId] ?? []).map((m) => m.id === tempId ? data : m),
-    );
+    enqueueReplaceCachedMessages(conversationId, get().messages[conversationId] ?? []);
 
     // Update conversation last_message (participants can update — see migration)
     const { error: convErr } = await supabase
@@ -415,7 +423,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ),
     }));
     if (conversationId.startsWith('mock-')) return;
-    await clearCachedMessages(conversationId);
+    try {
+      await clearCachedMessages(conversationId);
+    } catch (e) {
+      console.warn('[chat-cache] clearCachedMessages failed:', e);
+    }
     // Delete messages first (FK constraint), then conversation
     await supabase.from('messages').delete().eq('conversation_id', conversationId);
     await supabase.from('conversations').delete().eq('id', conversationId);
@@ -429,7 +441,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         [conversationId]: (state.messages[conversationId] ?? []).filter((m) => m.id !== messageId),
       },
     }));
-    void replaceCachedMessages(conversationId, (get().messages[conversationId] ?? []).filter((m) => m.id !== messageId));
+    enqueueReplaceCachedMessages(
+      conversationId,
+      (get().messages[conversationId] ?? []).filter((m) => m.id !== messageId),
+    );
     // Skip DB call for mock messages
     if (messageId.startsWith('mm-') || conversationId.startsWith('mock-')) return;
     await supabase.from('messages').delete().eq('id', messageId);
@@ -452,7 +467,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       },
     }));
-    void replaceCachedMessages(conversationId, get().messages[conversationId] ?? []);
+    enqueueReplaceCachedMessages(conversationId, get().messages[conversationId] ?? []);
     if (conversationId.startsWith('mock-')) return;
     await supabase
       .from('messages')

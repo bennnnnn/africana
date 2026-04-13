@@ -151,7 +151,15 @@ export default function MessagesScreen() {
 
           return (
             <TouchableOpacity
-              onPress={() => router.push(`/(chat)/${item.id}`)}
+              onPress={() =>
+                router.push({
+                  pathname: '/(chat)/[id]',
+                  params: {
+                    id: item.id,
+                    ...(other?.id ? { otherUserId: other.id } : {}),
+                  },
+                })
+              }
               onLongPress={() => {
                 showDialog({
                   title: 'Delete conversation',
