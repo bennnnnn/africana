@@ -87,7 +87,7 @@ export default function TabLayout() {
     fetchConversations(user.id);
 
     channelRef.current = supabase
-      .channel(`unread-badge-${user.id}`)
+      .channel(`unread-badge:${user.id}:${Date.now()}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const message = payload.new as { sender_id?: string };
         if (message.sender_id === user.id) return;

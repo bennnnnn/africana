@@ -49,7 +49,7 @@ export default function MessagesScreen() {
     fetchConversations(user.id);
 
     channelRef.current = supabase
-      .channel(`conv-list-${user.id}`)
+      .channel(`conv-list:${user.id}:${Date.now()}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const message = payload.new as { conversation_id?: string; sender_id?: string };
         if (!message.conversation_id || message.sender_id === user.id) return;

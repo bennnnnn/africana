@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
-import type { KeyboardEvent } from 'react-native';
+import type { KeyboardEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   Animated, Keyboard, Platform,
@@ -29,6 +29,21 @@ import isYesterday from 'dayjs/plugin/isYesterday';
 
 dayjs.extend(isToday);
 dayjs.extend(isYesterday);
+
+type ChatListItem =
+  | { type: 'message'; message: Message }
+  | { type: 'date'; id: string; label: string };
+
+function getChatDayKey(createdAt: string): string {
+  return dayjs(createdAt).format('YYYY-MM-DD');
+}
+
+function formatChatDateLabel(createdAt: string): string {
+  const d = dayjs(createdAt);
+  if (d.isToday()) return 'Today';
+  if (d.isYesterday()) return 'Yesterday';
+  return d.format('ddd, MMM D');
+}
 
 /** Survives screen remounts (Strict Mode, navigation glitches) so the header never loses peer data mid-session. */
 const peerSnapshotByConversationId = new Map<string, User>();
@@ -79,6 +94,10 @@ export default function ChatScreen() {
   const menuAnim  = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+  const isNearBottomRef = useRef(true);
+  const pendingScrollModeRef = useRef<'none' | 'instant' | 'smooth'>('instant');
+  const prevMessageCountRef = useRef(0);
+  const prevLatestMessageKeyRef = useRef<string | undefined>(undefined);
   const [inputFocused, setInputFocused] = useState(false);
   // Unified overlay — one at a time; isOwn=true → own message (trash only), isOwn=false → other's (emojis + trash)
   const [msgSheet, setMsgSheet] = useState<{ messageId: string; isOwn: boolean } | null>(null);
@@ -107,7 +126,27 @@ export default function ChatScreen() {
     () => convMessages.filter((m) => !hiddenIds.has(m.id)),
     [convMessages, hiddenIds],
   );
-  const listData = useMemo(() => [...visibleMessages].reverse(), [visibleMessages]);
+  const listData = visibleMessages;
+  const listItems = useMemo<ChatListItem[]>(() => {
+    const items: ChatListItem[] = [];
+    let lastDayKey: string | null = null;
+    for (const message of listData) {
+      const dayKey = getChatDayKey(message.created_at);
+      if (dayKey !== lastDayKey) {
+        items.push({
+          type: 'date',
+          id: `date-${dayKey}`,
+          label: formatChatDateLabel(message.created_at),
+        });
+        lastDayKey = dayKey;
+      }
+      items.push({ type: 'message', message });
+    }
+    return items;
+  }, [listData]);
+  const latestMessageKey = visibleMessages.length > 0
+    ? (visibleMessages[visibleMessages.length - 1].listKey ?? visibleMessages[visibleMessages.length - 1].id)
+    : undefined;
   const isLiked = peer ? likedUserIds.has(peer.id) : false;
   const avatar = peer
     ? (peer.avatar_url || `${DEFAULT_AVATAR}${encodeURIComponent((peer.full_name ?? '?').charAt(0))}`)
@@ -137,6 +176,51 @@ export default function ChatScreen() {
     }),
     [insets.top],
   );
+
+  useEffect(() => {
+    prevMessageCountRef.current = 0;
+    prevLatestMessageKeyRef.current = undefined;
+    isNearBottomRef.current = true;
+    pendingScrollModeRef.current = 'instant';
+  }, [conversationId]);
+
+  const scrollToBottom = useCallback((animated: boolean) => {
+    requestAnimationFrame(() => {
+      flatListRef.current?.scrollToEnd({ animated });
+    });
+  }, []);
+
+  useEffect(() => {
+    const nextCount = visibleMessages.length;
+    const prevCount = prevMessageCountRef.current;
+    const prevLatestKey = prevLatestMessageKeyRef.current;
+    const changed = nextCount !== prevCount || latestMessageKey !== prevLatestKey;
+
+    if (changed && nextCount > 0) {
+      const pendingMode = pendingScrollModeRef.current;
+      const shouldScroll = pendingMode !== 'none' || isNearBottomRef.current || prevCount === 0;
+      if (shouldScroll) {
+        const animated = pendingMode === 'smooth' || (pendingMode === 'none' && isNearBottomRef.current && prevCount > 0);
+        scrollToBottom(animated);
+      }
+      pendingScrollModeRef.current = 'none';
+    }
+
+    prevMessageCountRef.current = nextCount;
+    prevLatestMessageKeyRef.current = latestMessageKey;
+  }, [latestMessageKey, scrollToBottom, visibleMessages.length]);
+
+  useEffect(() => {
+    if (keyboardHeight > 0 && isNearBottomRef.current) {
+      scrollToBottom(false);
+    }
+  }, [keyboardHeight, scrollToBottom]);
+
+  const handleListScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    isNearBottomRef.current = distanceFromBottom < 80;
+  }, []);
 
   useEffect(() => {
     const overlap = (e: KeyboardEvent) => {
@@ -307,7 +391,7 @@ export default function ChatScreen() {
     if (!conversationId || !user || conversationId.startsWith('mock-conv-')) return;
 
     const channel = supabase
-      .channel(`messages-${conversationId}`)
+      .channel(`messages:${conversationId}:${Date.now()}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'messages',
         filter: `conversation_id=eq.${conversationId}`,
@@ -347,7 +431,7 @@ export default function ChatScreen() {
     const content = text.trim();
     const cid = conversationId;
     setText('');
-    inputRef.current?.focus();
+    pendingScrollModeRef.current = 'smooth';
     const { error } = await sendMessage(cid, user.id, content, user.full_name);
     if (error) {
       setText(content);
@@ -483,27 +567,30 @@ export default function ChatScreen() {
       <FlatList
         ref={flatListRef}
         style={{ flex: 1, minHeight: 0 }}
-        data={listData}
-        keyExtractor={(item) => item.listKey ?? item.id}
-        inverted
+        data={listItems}
+        keyExtractor={(item) => item.type === 'message' ? (item.message.listKey ?? item.message.id) : item.id}
         extraData={reactions}
         removeClippedSubviews={false}
         initialNumToRender={20}
         maxToRenderPerBatch={12}
         windowSize={12}
         updateCellsBatchingPeriod={50}
-        contentContainerStyle={{ padding: 12, paddingTop: 8 }}
+        contentContainerStyle={{ padding: 12, paddingTop: 8, flexGrow: 1, justifyContent: 'flex-end' }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
+        onScroll={handleListScroll}
+        scrollEventThrottle={16}
         ListEmptyComponent={null}
-        renderItem={({ item, index }) => (
+        renderItem={({ item }) => item.type === 'date' ? (
+          <View style={{ alignItems: 'center', marginVertical: 6 }}>
+            <Text style={s.datePill}>{item.label}</Text>
+          </View>
+        ) : (
           <ChatMessageRow
-            item={item}
-            older={listData[index + 1]}
-            soleInThread={listData.length === 1}
+            item={item.message}
             userId={user?.id}
-            msgReactions={reactions[item.id] ?? NO_REACTIONS}
+            msgReactions={reactions[item.message.id] ?? NO_REACTIONS}
             onLongPress={openMsgSheet}
           />
         )}
@@ -761,26 +848,17 @@ const s = StyleSheet.create({
 
 const ChatMessageRow = memo(function ChatMessageRow({
   item,
-  older,
-  soleInThread,
   userId,
   msgReactions,
   onLongPress,
 }: {
   item: Message;
-  older: Message | undefined;
-  soleInThread: boolean;
   userId: string | undefined;
   msgReactions: string[];
   onLongPress: (messageId: string, isOwn: boolean) => void;
 }) {
   const isOwn = item.sender_id === userId;
   const isTemp = item.id.startsWith('temp-');
-  const dayKey = (m: Message) => dayjs(m.created_at).format('YYYY-MM-DD');
-  /** Inverted list is newest-first; older === listData[index+1]. Never use `!older` — that forced a pill on every oldest row and put "Today" between two same-day messages. */
-  const showDate =
-    soleInThread ||
-    (older != null && dayKey(item) !== dayKey(older));
 
   return (
     <View>
@@ -833,17 +911,6 @@ const ChatMessageRow = memo(function ChatMessageRow({
           </View>
         </Pressable>
       </View>
-      {showDate && (
-        <View style={{ alignItems: 'center', marginVertical: 6 }}>
-          <Text style={s.datePill}>
-            {dayjs(item.created_at).isToday()
-              ? 'Today'
-              : dayjs(item.created_at).isYesterday()
-                ? 'Yesterday'
-                : dayjs(item.created_at).format('ddd, MMM D')}
-          </Text>
-        </View>
-      )}
     </View>
   );
 });

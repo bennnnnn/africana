@@ -10,12 +10,12 @@ import {
   StyleSheet,
   Share,
   Pressable,
+  PanResponder,
+  FlatList,
   useWindowDimensions,
   StatusBar,
   Platform,
   InteractionManager,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
 import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -41,6 +41,8 @@ import { calculateAge, getEffectiveAgePreferenceRange } from '@/lib/utils';
 
 const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female' };
 const REPORT_REASONS = ['Fake profile', 'Scam', 'Harassment', 'Nudity', 'Underage', 'Other'] as const;
+const profileGalleryCache = new Map<string, string[]>();
+const prefetchedPhotoUris = new Set<string>();
 
 const FLOAT_ACTION_SIZE = 56;
 const floatingActionCircle = {
@@ -52,6 +54,52 @@ const floatingActionCircle = {
   justifyContent: 'center' as const,
   ...SHADOWS.md,
 };
+
+function normalizeParam(value: string | string[] | undefined): string | undefined {
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (Array.isArray(value) && typeof value[0] === 'string' && value[0].length > 0) return value[0];
+  return undefined;
+}
+
+function buildFallbackPhotoList(fullName?: string | null, avatarUrl?: string | null): string[] {
+  return avatarUrl
+    ? [avatarUrl]
+    : [`${DEFAULT_AVATAR}${encodeURIComponent((fullName ?? '?').charAt(0))}`];
+}
+
+async function warmPhotoUris(uris: string[]) {
+  const nextUris = uris.filter((uri) => !!uri && !prefetchedPhotoUris.has(uri));
+  if (nextUris.length === 0) return;
+  nextUris.forEach((uri) => prefetchedPhotoUris.add(uri));
+  await Promise.allSettled(nextUris.map((uri) => Image.prefetch(uri)));
+}
+
+async function loadProfilePhotoList(userId: string): Promise<string[]> {
+  const cached = profileGalleryCache.get(userId);
+  if (cached) return cached;
+
+  let list: string[];
+  if (userId.startsWith('mock-')) {
+    const mock = MOCK_USERS.find((u) => u.id === userId);
+    list =
+      mock?.profile_photos && mock.profile_photos.length > 0
+        ? mock.profile_photos
+        : buildFallbackPhotoList(mock?.full_name, mock?.avatar_url);
+  } else {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('profile_photos, avatar_url, full_name')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error || !data) return [];
+    const photos = data.profile_photos ?? [];
+    list = photos.length > 0 ? photos : buildFallbackPhotoList(data.full_name, data.avatar_url);
+  }
+
+  profileGalleryCache.set(userId, list);
+  void warmPhotoUris(list.slice(0, 4));
+  return list;
+}
 
 function useProfileGalleryPhotos(userId: string | null) {
   const [photos, setPhotos] = useState<string[]>([]);
@@ -111,31 +159,26 @@ function ProfilePhotoGalleryPage({
   userId,
   winWidth,
   winHeight,
-  initialHIndex,
-  syncHorizontalFromOpen,
+  activePhotoIndex,
   dotBottom,
   onHorizontalIndexChange,
 }: {
   userId: string;
   winWidth: number;
   winHeight: number;
-  initialHIndex: number;
-  syncHorizontalFromOpen: boolean;
+  activePhotoIndex: number;
   dotBottom: number;
   onHorizontalIndexChange: (i: number) => void;
 }) {
   const { photos, loading } = useProfileGalleryPhotos(userId);
-  const hRef = useRef<ScrollView>(null);
-  const [hIdx, setHIdx] = useState(initialHIndex);
+  const clampedIndex = Math.min(activePhotoIndex, Math.max(photos.length - 1, 0));
 
   useEffect(() => {
-    if (!syncHorizontalFromOpen) return;
-    setHIdx(initialHIndex);
-    const idfr = requestAnimationFrame(() => {
-      hRef.current?.scrollTo({ x: initialHIndex * winWidth, animated: false });
-    });
-    return () => cancelAnimationFrame(idfr);
-  }, [syncHorizontalFromOpen, initialHIndex, winWidth]);
+    if (loading) return;
+    if (clampedIndex !== activePhotoIndex) {
+      onHorizontalIndexChange(clampedIndex);
+    }
+  }, [activePhotoIndex, clampedIndex, loading, onHorizontalIndexChange]);
 
   if (loading) {
     return (
@@ -150,26 +193,14 @@ function ProfilePhotoGalleryPage({
 
   return (
     <View style={{ width: winWidth, height: winHeight, backgroundColor: '#000' }}>
-      <ScrollView
-        ref={hRef}
-        horizontal
-        pagingEnabled
-        directionalLockEnabled={Platform.OS === 'ios'}
-        showsHorizontalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        nestedScrollEnabled
-        onMomentumScrollEnd={(e) => {
-          const i = Math.round(e.nativeEvent.contentOffset.x / winWidth);
-          setHIdx(i);
-          onHorizontalIndexChange(i);
-        }}
-      >
-        {photos.map((uri, i) => (
-          <View key={`${uri}-${i}`} style={{ width: winWidth, height: winHeight, justifyContent: 'center', alignItems: 'center' }}>
-            <Image source={{ uri }} style={{ width: winWidth, height: winHeight }} contentFit="contain" />
-          </View>
-        ))}
-      </ScrollView>
+      <View style={{ width: winWidth, height: winHeight, justifyContent: 'center', alignItems: 'center' }}>
+        <Image
+          source={{ uri: photos[clampedIndex] }}
+          style={{ width: winWidth, height: winHeight }}
+          contentFit="cover"
+          transition={180}
+        />
+      </View>
       {photos.length > 1 ? (
         <View
           pointerEvents="none"
@@ -187,10 +218,10 @@ function ProfilePhotoGalleryPage({
             <View
               key={i}
               style={{
-                width: i === hIdx ? 22 : 7,
+                width: i === clampedIndex ? 22 : 7,
                 height: 7,
                 borderRadius: 3.5,
-                backgroundColor: i === hIdx ? '#FFF' : 'rgba(255,255,255,0.45)',
+                backgroundColor: i === clampedIndex ? '#FFF' : 'rgba(255,255,255,0.45)',
               }}
             />
           ))}
@@ -227,21 +258,30 @@ function isMeaningfulText(value: string | null | undefined): boolean {
 }
 
 export default function ProfileViewScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const {
+    id: rawId,
+    viewer: rawViewer,
+    photo: rawPhoto,
+  } = useLocalSearchParams<{ id: string | string[]; viewer?: string | string[]; photo?: string | string[] }>();
+  const id = normalizeParam(rawId);
+  const viewerParam = normalizeParam(rawViewer);
+  const photoParam = normalizeParam(rawPhoto);
+  const routeWantsPhotoViewer = viewerParam === '1';
+  const routePhotoIndex = Math.max(0, Number.parseInt(photoParam ?? '0', 10) || 0);
   const { user: currentUser } = useAuthStore();
   const { getOrCreateConversation } = useChatStore();
   const { likedUserIds, toggleLike, fetchLikedUserIds } = useDiscoverStore();
   const insets = useSafeAreaInsets();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
-  const heroPhotoScrollRef = useRef<ScrollView | null>(null);
-  const verticalPhotoGalleryRef = useRef<ScrollView>(null);
-  const adjacentBrowseRef = useRef<{ pages: string[]; initialIndex: number }>({ pages: [], initialIndex: 0 });
+  const heroPhotoScrollRef = useRef<FlatList<string> | null>(null);
   const prevProfileIdInPhotoViewerRef = useRef<string | null>(null);
+  const photoViewerSwipeX = useRef(new Animated.Value(0)).current;
+  const photoViewerSwipeY = useRef(new Animated.Value(0)).current;
 
   const orderedUserIds = useProfileBrowseStore((s) => s.orderedUserIds);
-  const [photoViewerVisible, setPhotoViewerVisible] = useState(false);
-  const [viewerPhotoIndex, setViewerPhotoIndex] = useState(0);
+  const [photoViewerVisible, setPhotoViewerVisible] = useState(routeWantsPhotoViewer);
+  const [viewerPhotoIndex, setViewerPhotoIndex] = useState(routePhotoIndex);
 
   const [profile, setProfile] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -275,6 +315,13 @@ export default function ProfileViewScreen() {
     setReportValidationVisible(false);
     setBlockPromptVisible(false);
   }, [id]);
+
+  useEffect(() => {
+    setPhotoViewerVisible(routeWantsPhotoViewer);
+    if (routeWantsPhotoViewer) {
+      setViewerPhotoIndex(routePhotoIndex);
+    }
+  }, [routePhotoIndex, routeWantsPhotoViewer, id]);
 
   useEffect(() => {
     if (!id) return;
@@ -389,39 +436,47 @@ export default function ProfileViewScreen() {
     return { pages, initialIndex };
   }, [profile?.id, orderedUserIds]);
 
-  adjacentBrowseRef.current = adjacentBrowse;
-
-  useEffect(() => {
-    if (!photoViewerVisible || !profile) return;
-    const y = adjacentBrowse.initialIndex * winHeight;
-    const idfr = requestAnimationFrame(() => {
-      verticalPhotoGalleryRef.current?.scrollTo({ y, animated: false });
-    });
-    return () => cancelAnimationFrame(idfr);
-  }, [photoViewerVisible, profile?.id, adjacentBrowse.initialIndex, adjacentBrowse.pages.join('|'), winHeight]);
-
   useEffect(() => {
     if (!photoViewerVisible || !profile) return;
     if (prevProfileIdInPhotoViewerRef.current && prevProfileIdInPhotoViewerRef.current !== profile.id) {
-      setViewerPhotoIndex(0);
+      setViewerPhotoIndex(routePhotoIndex);
     }
     prevProfileIdInPhotoViewerRef.current = profile.id;
-  }, [profile?.id, photoViewerVisible]);
+  }, [photoViewerVisible, profile?.id, routePhotoIndex]);
 
-  const replaceProfileRoute = useCallback((nextUserId: string) => {
-    router.replace({ pathname: '/(profile)/[id]', params: { id: nextUserId } });
+  useEffect(() => {
+    const idsToWarm = adjacentBrowse.pages.filter(Boolean);
+    if (idsToWarm.length === 0) return;
+    void Promise.allSettled(idsToWarm.map((uid) => loadProfilePhotoList(uid)));
+  }, [adjacentBrowse.pages.join('|')]);
+
+  useEffect(() => {
+    if (!profile) return;
+    const safePhotos = profile.profile_photos ?? [];
+    const photosToWarm = safePhotos.length > 0
+      ? safePhotos
+      : [profile.avatar_url || `${DEFAULT_AVATAR}${encodeURIComponent(profile.full_name.charAt(0))}`];
+    void warmPhotoUris(photosToWarm.slice(0, 4));
+  }, [profile]);
+
+  const safePhotos = profile?.profile_photos ?? [];
+  const photos = profile
+    ? (safePhotos.length > 0
+      ? safePhotos
+      : [profile.avatar_url || `${DEFAULT_AVATAR}${encodeURIComponent(profile.full_name.charAt(0))}`])
+    : [];
+
+  const replaceProfileRoute = useCallback((
+    nextUserId: string,
+    options?: { openPhotoViewer?: boolean; photoIndex?: number },
+  ) => {
+    router.replace({
+      pathname: '/(profile)/[id]',
+      params: options?.openPhotoViewer
+        ? { id: nextUserId, viewer: '1', photo: String(options.photoIndex ?? 0) }
+        : { id: nextUserId },
+    });
   }, []);
-
-  const handleVerticalPhotoGalleryEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { pages } = adjacentBrowseRef.current;
-    const currentId = profile?.id;
-    if (pages.length < 2 || !currentId) return;
-    const i = Math.round(e.nativeEvent.contentOffset.y / winHeight);
-    const target = pages[i];
-    if (target && target !== currentId) {
-      replaceProfileRoute(target);
-    }
-  };
 
   const browseIndex = profile ? orderedUserIds.indexOf(profile.id) : -1;
   const galleryHasPrevProfile = browseIndex > 0;
@@ -433,8 +488,8 @@ export default function ProfileViewScreen() {
     const ids = useProfileBrowseStore.getState().orderedUserIds;
     const i = ids.indexOf(pid);
     if (i <= 0) return;
-    replaceProfileRoute(ids[i - 1]!);
-  }, [profile?.id, replaceProfileRoute]);
+    replaceProfileRoute(ids[i - 1]!, { openPhotoViewer: true, photoIndex: viewerPhotoIndex });
+  }, [profile?.id, replaceProfileRoute, viewerPhotoIndex]);
 
   const goNextProfileInGallery = useCallback(() => {
     const pid = profile?.id;
@@ -442,8 +497,94 @@ export default function ProfileViewScreen() {
     const ids = useProfileBrowseStore.getState().orderedUserIds;
     const i = ids.indexOf(pid);
     if (i < 0 || i >= ids.length - 1) return;
-    replaceProfileRoute(ids[i + 1]!);
-  }, [profile?.id, replaceProfileRoute]);
+    replaceProfileRoute(ids[i + 1]!, { openPhotoViewer: true, photoIndex: viewerPhotoIndex });
+  }, [profile?.id, replaceProfileRoute, viewerPhotoIndex]);
+
+  const resetPhotoViewerSwipe = useCallback(() => {
+    Animated.parallel([
+      Animated.spring(photoViewerSwipeX, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 70,
+        friction: 9,
+      }),
+      Animated.spring(photoViewerSwipeY, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 70,
+        friction: 9,
+      }),
+    ]).start();
+  }, [photoViewerSwipeX, photoViewerSwipeY]);
+
+  const photoViewerPanResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gestureState) =>
+      photoViewerVisible &&
+      (Math.abs(gestureState.dy) > 16 || Math.abs(gestureState.dx) > 16),
+    onPanResponderGrant: () => {
+      photoViewerSwipeX.stopAnimation();
+      photoViewerSwipeY.stopAnimation();
+    },
+    onPanResponderMove: (_, gestureState) => {
+      const horizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      if (horizontal) {
+        const clampedX = Math.max(-120, Math.min(120, gestureState.dx * 0.35));
+        photoViewerSwipeX.setValue(clampedX);
+        photoViewerSwipeY.setValue(0);
+      } else {
+        const clampedY = Math.max(-120, Math.min(120, gestureState.dy * 0.38));
+        photoViewerSwipeY.setValue(clampedY);
+        photoViewerSwipeX.setValue(0);
+      }
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      const horizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      if (horizontal) {
+        const triggerX = 56;
+        if (gestureState.dx <= -triggerX && viewerPhotoIndex < photos.length - 1) {
+          setViewerPhotoIndex((prev) => prev + 1);
+          resetPhotoViewerSwipe();
+          return;
+        }
+        if (gestureState.dx >= triggerX && viewerPhotoIndex > 0) {
+          setViewerPhotoIndex((prev) => prev - 1);
+          resetPhotoViewerSwipe();
+          return;
+        }
+        resetPhotoViewerSwipe();
+        return;
+      }
+
+      const trigger = 72;
+      if (gestureState.dy <= -trigger && galleryHasNextProfile) {
+        photoViewerSwipeX.setValue(0);
+        photoViewerSwipeY.setValue(0);
+        goNextProfileInGallery();
+        return;
+      }
+      if (gestureState.dy >= trigger && galleryHasPrevProfile) {
+        photoViewerSwipeX.setValue(0);
+        photoViewerSwipeY.setValue(0);
+        goPrevProfileInGallery();
+        return;
+      }
+      resetPhotoViewerSwipe();
+    },
+    onPanResponderTerminate: () => {
+      resetPhotoViewerSwipe();
+    },
+  }), [
+    galleryHasNextProfile,
+    galleryHasPrevProfile,
+    goNextProfileInGallery,
+    goPrevProfileInGallery,
+    photos.length,
+    photoViewerSwipeX,
+    photoViewerSwipeY,
+    photoViewerVisible,
+    resetPhotoViewerSwipe,
+    viewerPhotoIndex,
+  ]);
 
   if (isLoading) {
     return (
@@ -472,11 +613,6 @@ export default function ProfileViewScreen() {
     profile.interested_in === 'everyone'
       ? 'Everyone'
       : INTERESTED_IN_OPTIONS.find((o) => o.value === profile.interested_in)?.label ?? profile.interested_in ?? null;
-
-  const safePhotos = profile.profile_photos ?? [];
-  const photos = safePhotos.length > 0
-    ? safePhotos
-    : [profile.avatar_url || `${DEFAULT_AVATAR}${encodeURIComponent(profile.full_name.charAt(0))}`];
 
   const location = [profile.city, profile.state, profile.country].filter(Boolean).join(', ');
   const isLiked = likedUserIds.has(profile.id);
@@ -661,18 +797,20 @@ export default function ProfileViewScreen() {
   const openPhotoViewer = (index: number) => {
     setViewerPhotoIndex(index);
     setPhotoViewerVisible(true);
+    router.setParams({ viewer: '1', photo: String(index) });
   };
 
   const closePhotoViewer = () => {
     prevProfileIdInPhotoViewerRef.current = null;
     setPhotoIndex(viewerPhotoIndex);
     requestAnimationFrame(() => {
-      heroPhotoScrollRef.current?.scrollTo({
-        x: viewerPhotoIndex * winWidth,
+      heroPhotoScrollRef.current?.scrollToOffset({
+        offset: viewerPhotoIndex * winWidth,
         animated: false,
       });
     });
     setPhotoViewerVisible(false);
+    router.setParams({ viewer: undefined, photo: undefined });
   };
 
   const handleBlock = () => {
@@ -713,26 +851,33 @@ export default function ProfileViewScreen() {
     showToast('🚩', 'Report submitted. Thank you.');
   };
 
+  const toastOverlay = toast ? (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        zIndex: 999,
+        top: 80,
+        alignSelf: 'center',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: 'rgba(17,17,17,0.88)',
+        paddingHorizontal: 18,
+        paddingVertical: 11,
+        borderRadius: 30,
+        opacity: toastAnim,
+        transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }],
+      }}
+    >
+      <Text style={{ fontSize: 18 }}>{toast.icon}</Text>
+      <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600' }}>{toast.msg}</Text>
+    </Animated.View>
+  ) : null;
+
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      {/* Toast */}
-      {toast && (
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            position: 'absolute', zIndex: 999,
-            top: 80, alignSelf: 'center',
-            flexDirection: 'row', alignItems: 'center', gap: 8,
-            backgroundColor: 'rgba(17,17,17,0.88)',
-            paddingHorizontal: 18, paddingVertical: 11, borderRadius: 30,
-            opacity: toastAnim,
-            transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }],
-          }}
-        >
-          <Text style={{ fontSize: 18 }}>{toast.icon}</Text>
-          <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600' }}>{toast.msg}</Text>
-        </Animated.View>
-      )}
+      {!photoViewerVisible ? toastOverlay : null}
       <ScrollView
         style={{ flex: 1, backgroundColor: 'transparent' }}
         showsVerticalScrollIndicator={false}
@@ -750,20 +895,22 @@ export default function ProfileViewScreen() {
       >
         {/* Photo Carousel — rounded bottom for handoff into identity card */}
         <View style={{ position: 'relative', backgroundColor: '#000', overflow: 'hidden', borderBottomLeftRadius: RADIUS.xxl, borderBottomRightRadius: RADIUS.xxl }}>
-          <ScrollView
+          <FlatList
             ref={heroPhotoScrollRef}
+            data={photos}
+            keyExtractor={(photo, index) => `${photo}-${index}`}
             horizontal
             pagingEnabled
+            directionalLockEnabled={Platform.OS === 'ios'}
             nestedScrollEnabled
             showsHorizontalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            removeClippedSubviews={false}
             onMomentumScrollEnd={(e) => {
               setPhotoIndex(Math.round(e.nativeEvent.contentOffset.x / winWidth));
             }}
-          >
-            {photos.map((photo, i) => (
+            renderItem={({ item: photo, index: i }) => (
               <Pressable
-                key={i}
                 onPress={() => openPhotoViewer(i)}
                 style={{ width: winWidth, height: winWidth * 1.1 }}
               >
@@ -771,10 +918,11 @@ export default function ProfileViewScreen() {
                   source={{ uri: photo }}
                   style={{ width: winWidth, height: winWidth * 1.1 }}
                   contentFit="cover"
+                  transition={180}
                 />
               </Pressable>
-            ))}
-          </ScrollView>
+            )}
+          />
           <LinearGradient
             pointerEvents="none"
             colors={['transparent', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.60)']}
@@ -1120,89 +1268,48 @@ export default function ProfileViewScreen() {
         onRequestClose={closePhotoViewer}
       >
         <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000' }}>
-          <ScrollView
-            ref={verticalPhotoGalleryRef}
-            pagingEnabled
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled
-            scrollEventThrottle={16}
-            bounces={adjacentBrowse.pages.length > 1}
-            onMomentumScrollEnd={handleVerticalPhotoGalleryEnd}
+          {toastOverlay}
+          <Animated.View
+            style={{
+              flex: 1,
+              transform: [
+                { translateX: photoViewerSwipeX },
+                { translateY: photoViewerSwipeY },
+              ],
+              opacity: Animated.add(
+                photoViewerSwipeX.interpolate({
+                  inputRange: [-120, 0, 120],
+                  outputRange: [0.92, 1, 0.92],
+                }),
+                photoViewerSwipeY.interpolate({
+                  inputRange: [-120, 0, 120],
+                  outputRange: [0, 0, 0],
+                }),
+              ).interpolate({
+                inputRange: [0.92, 1],
+                outputRange: [0.92, 1],
+              }),
+            }}
+            {...photoViewerPanResponder.panHandlers}
           >
-            {adjacentBrowse.pages.map((uid) => (
-              <View key={uid} style={{ height: winHeight, width: winWidth }}>
-                <ProfilePhotoGalleryPage
-                  userId={uid}
-                  winWidth={winWidth}
-                  winHeight={winHeight}
-                  initialHIndex={uid === profile.id ? viewerPhotoIndex : 0}
-                  syncHorizontalFromOpen={uid === profile.id}
-                  dotBottom={photoModalDotBottom}
-                  onHorizontalIndexChange={(i) => {
-                    if (uid === profile.id) setViewerPhotoIndex(i);
-                  }}
-                />
-              </View>
-            ))}
-          </ScrollView>
-          {adjacentBrowse.pages.length > 1 ? (
-            <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-              <TouchableOpacity
-                onPress={goPrevProfileInGallery}
-                disabled={!galleryHasPrevProfile}
-                accessibilityRole="button"
-                accessibilityLabel="Previous profile"
-                style={{
-                  position: 'absolute',
-                  left: 10,
-                  top: '42%',
-                  paddingVertical: 14,
-                  paddingHorizontal: 10,
-                  borderRadius: 24,
-                  backgroundColor: 'rgba(0,0,0,0.45)',
-                  opacity: galleryHasPrevProfile ? 1 : 0.35,
-                }}
-              >
-                <Ionicons name="chevron-back" size={26} color="#FFF" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={goNextProfileInGallery}
-                disabled={!galleryHasNextProfile}
-                accessibilityRole="button"
-                accessibilityLabel="Next profile"
-                style={{
-                  position: 'absolute',
-                  right: 10,
-                  top: '42%',
-                  paddingVertical: 14,
-                  paddingHorizontal: 10,
-                  borderRadius: 24,
-                  backgroundColor: 'rgba(0,0,0,0.45)',
-                  opacity: galleryHasNextProfile ? 1 : 0.35,
-                }}
-              >
-                <Ionicons name="chevron-forward" size={26} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-          ) : null}
+            <ProfilePhotoGalleryPage
+              userId={profile.id}
+              winWidth={winWidth}
+              winHeight={winHeight}
+              activePhotoIndex={viewerPhotoIndex}
+              dotBottom={photoModalDotBottom}
+              onHorizontalIndexChange={(i) => {
+                setViewerPhotoIndex(i);
+              }}
+            />
+          </Animated.View>
           <SafeAreaView
             pointerEvents="box-none"
             edges={['top']}
             style={{ position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: 'transparent' }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingHorizontal: 12, paddingTop: 4, gap: 10 }}>
-              {(adjacentBrowse.pages.length > 1 || photos.length > 1) ? (
-                <View pointerEvents="none" style={{ flex: 1, justifyContent: 'center', paddingTop: 8, paddingRight: 4 }}>
-                  <Text style={{ color: 'rgba(255,255,255,0.52)', fontSize: 11, fontWeight: '600', lineHeight: 15 }}>
-                    {adjacentBrowse.pages.length > 1 ? 'Swipe up or down — next / previous profile' : ''}
-                    {adjacentBrowse.pages.length > 1 && photos.length > 1 ? '\n' : ''}
-                    {photos.length > 1 ? 'Swipe sideways — more photos' : ''}
-                  </Text>
-                </View>
-              ) : (
-                <View style={{ flex: 1 }} />
-              )}
+              <View style={{ flex: 1 }} />
               <TouchableOpacity
                 onPress={closePhotoViewer}
                 accessibilityLabel="Close photos"
@@ -1235,23 +1342,56 @@ export default function ProfileViewScreen() {
               <View
                 style={{
                   flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 14,
+                backgroundColor: 'transparent',
+              }}
+            >
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  bottom: FLOAT_ACTION_SIZE + 18,
+                  left: 18,
+                  right: 18,
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 14,
-                  backgroundColor: 'transparent',
                 }}
               >
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    maxWidth: winWidth - 52,
+                    color: '#FFF',
+                    fontSize: 22,
+                    fontWeight: '800',
+                    textAlign: 'center',
+                    textShadowColor: 'rgba(0,0,0,0.45)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 10,
+                  }}
+                >
+                  {profile.full_name}
+                </Text>
+              </View>
                 <TouchableOpacity
                   onPress={handleFavourite}
                   activeOpacity={0.85}
                   accessibilityRole="button"
                   accessibilityLabel={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
-                  style={floatingActionCircle}
+                  style={[
+                    floatingActionCircle,
+                    {
+                      backgroundColor: 'rgba(10,10,10,0.62)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(255,255,255,0.14)',
+                    },
+                  ]}
                 >
                   <Ionicons
                     name={isFavourite ? 'star' : 'star-outline'}
                     size={26}
-                    color={isFavourite ? COLORS.primary : COLORS.text}
+                    color={isFavourite ? '#F6B94C' : '#FFF'}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1259,12 +1399,19 @@ export default function ProfileViewScreen() {
                   activeOpacity={0.85}
                   accessibilityRole="button"
                   accessibilityLabel={isLiked ? 'Unlike' : 'Like'}
-                  style={floatingActionCircle}
+                  style={[
+                    floatingActionCircle,
+                    {
+                      backgroundColor: 'rgba(10,10,10,0.74)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(255,255,255,0.16)',
+                    },
+                  ]}
                 >
                   <Ionicons
                     name={isLiked ? 'heart' : 'heart-outline'}
                     size={26}
-                    color={isLiked ? COLORS.primary : COLORS.text}
+                    color={isLiked ? '#FF7B7B' : '#FFF'}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1276,13 +1423,18 @@ export default function ProfileViewScreen() {
                   accessibilityState={{ disabled: recipientMessagesPaused }}
                   style={[
                     floatingActionCircle,
+                    {
+                      backgroundColor: 'rgba(10,10,10,0.62)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(255,255,255,0.14)',
+                    },
                     recipientMessagesPaused && { opacity: 0.55 },
                   ]}
                 >
                   <Ionicons
                     name={recipientMessagesPaused ? 'lock-closed-outline' : 'chatbubble-ellipses-outline'}
                     size={26}
-                    color={recipientMessagesPaused ? COLORS.textMuted : COLORS.primary}
+                    color={recipientMessagesPaused ? 'rgba(255,255,255,0.48)' : '#FFF'}
                   />
                 </TouchableOpacity>
               </View>

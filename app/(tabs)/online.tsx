@@ -63,7 +63,7 @@ export default function OnlineScreen() {
     fetchOnlineUsers().finally(() => setIsLoading(false));
 
     const channel = supabase
-      .channel('online-users')
+      .channel(`online-users:${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
         fetchOnlineUsers();
       })

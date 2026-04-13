@@ -263,7 +263,7 @@ export default function LikesScreen() {
     };
 
     const channel = supabase
-      .channel(`likes-live-${user.id}`)
+      .channel(`likes-live:${user.id}:${Date.now()}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'likes' }, (payload) => {
         const row = payload.new as { from_user_id?: string; to_user_id?: string };
         if (!row.from_user_id || !row.to_user_id) return;

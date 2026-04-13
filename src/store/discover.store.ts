@@ -250,7 +250,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     if (_subscribed) return;
     _subscribed = true;
     _realtimeChannel = supabase
-      .channel('discover-online-status')
+      .channel(`discover-online-status:${Date.now()}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles' },
