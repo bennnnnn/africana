@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Dimensions,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -16,11 +17,61 @@ import { COLORS } from '@/constants';
 import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
 import { appDialog } from '@/lib/app-dialog';
 
-const { height } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+
+const SLIDES = [
+  {
+    icon: 'earth' as const,
+    title: 'Where African\nHearts Connect',
+    desc: 'Meet Africans and the diaspora worldwide.\nReal people. Genuine connections.',
+  },
+  {
+    icon: 'heart' as const,
+    title: 'Built for\nYour Culture',
+    desc: 'Filter by country, language, and values.\nFind someone who truly gets you.',
+  },
+  {
+    icon: 'shield-checkmark' as const,
+    title: 'Safe &\nAuthentic',
+    desc: 'Privacy controls, blocking, and a community\nthat respects your boundaries.',
+  },
+];
 
 export default function WelcomeScreen() {
   const { fetchProfile, fetchSettings } = useAuthStore();
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [activeSlide, setActiveSlide] = useState(0);
+  const flatListRef = useRef<FlatList>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    startAutoPlay();
+    return () => stopAutoPlay();
+  }, []);
+
+  const startAutoPlay = () => {
+    stopAutoPlay();
+    timerRef.current = setInterval(() => {
+      setActiveSlide((prev) => {
+        const next = (prev + 1) % SLIDES.length;
+        flatListRef.current?.scrollToIndex({ index: next, animated: true });
+        return next;
+      });
+    }, 3200);
+  };
+
+  const stopAutoPlay = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const onMomentumScrollEnd = (e: any) => {
+    const index = Math.round(e.nativeEvent.contentOffset.x / width);
+    setActiveSlide(index);
+    startAutoPlay();
+  };
 
   const handleGoogle = async () => {
     setGoogleLoading(true);
@@ -51,16 +102,57 @@ export default function WelcomeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.circle, { top: -120, right: -80, width: 280, height: 280, opacity: 0.15 }]} />
-      <View style={[styles.circle, { top: height * 0.15, left: -60, width: 160, height: 160, opacity: 0.1 }]} />
-      <View style={[styles.circle, { bottom: 80, right: -40, width: 200, height: 200, opacity: 0.1 }]} />
+      <View style={[styles.circle, { top: -120, right: -80, width: 280, height: 280, opacity: 0.12 }]} />
+      <View style={[styles.circle, { top: height * 0.28, left: -60, width: 160, height: 160, opacity: 0.08 }]} />
+      <View style={[styles.circle, { bottom: 110, right: -40, width: 200, height: 200, opacity: 0.08 }]} />
 
       <SafeAreaView style={styles.inner}>
-        <View style={styles.brandSection}>
+        {/* App name */}
+        <View style={styles.brandRow}>
           <Text style={styles.appName}>Africana</Text>
-          <Text style={styles.tagline}>Where African hearts connect</Text>
         </View>
 
+        {/* Slides */}
+        <View style={styles.slidesWrapper}>
+          <FlatList
+            ref={flatListRef}
+            data={SLIDES}
+            horizontal
+            pagingEnabled
+            bounces={false}
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={onMomentumScrollEnd}
+            onScrollBeginDrag={stopAutoPlay}
+            keyExtractor={(_, i) => String(i)}
+            getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+            renderItem={({ item }) => (
+              <View style={[styles.slide, { width }]}>
+                <View style={styles.iconWrap}>
+                  <Ionicons name={item.icon} size={54} color="#FFF" />
+                </View>
+                <Text style={styles.slideTitle}>{item.title}</Text>
+                <Text style={styles.slideDesc}>{item.desc}</Text>
+              </View>
+            )}
+          />
+
+          {/* Dot indicators */}
+          <View style={styles.dots}>
+            {SLIDES.map((_, i) => (
+              <TouchableOpacity
+                key={i}
+                onPress={() => {
+                  flatListRef.current?.scrollToIndex({ index: i, animated: true });
+                  setActiveSlide(i);
+                  startAutoPlay();
+                }}
+                style={[styles.dot, activeSlide === i && styles.dotActive]}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* Sign-in buttons */}
         <View style={styles.actionsSection}>
           <TouchableOpacity
             style={styles.googleBtn}
@@ -93,7 +185,6 @@ export default function WelcomeScreen() {
             <Text style={styles.emailBtnText}>Continue with Email</Text>
           </TouchableOpacity>
 
-          {/* Sign in */}
           <View style={styles.signinRow}>
             <Text style={styles.signinText}>Already have an account? </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
@@ -119,29 +210,74 @@ const styles = StyleSheet.create({
   inner: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingHorizontal: 28,
     paddingBottom: 16,
   },
-  brandSection: {
-    flex: 1,
+  brandRow: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 40,
+    paddingTop: 20,
   },
   appName: {
-    fontSize: 48,
+    fontSize: 34,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -1,
   },
-  tagline: {
-    fontSize: 17,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 8,
-    fontWeight: '400',
+  slidesWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  slide: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  iconWrap: {
+    width: 114,
+    height: 114,
+    borderRadius: 57,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 28,
+  },
+  slideTitle: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    letterSpacing: -0.5,
+    lineHeight: 36,
+    marginBottom: 14,
+  },
+  slideDesc: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.80)',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 7,
+    paddingTop: 28,
+    paddingBottom: 4,
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.32)',
+  },
+  dotActive: {
+    width: 24,
+    backgroundColor: '#FFFFFF',
   },
   actionsSection: {
     gap: 12,
+    paddingHorizontal: 28,
     paddingBottom: 8,
   },
   googleBtn: {
@@ -160,7 +296,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  gLogo: {},
   googleBtnText: {
     fontSize: 16,
     fontWeight: '600',
