@@ -67,5 +67,7 @@ export function rowToUserSettings(row: Record<string, unknown>): UserSettings {
     likes_seen_at: (row.likes_seen_at as string | null) ?? null,
     views_seen_at: (row.views_seen_at as string | null) ?? null,
     favourites_seen_at: (row.favourites_seen_at as string | null) ?? null,
+    matches_seen_at: (row.matches_seen_at as string | null) ?? null,
+    sent_seen_at: (row.sent_seen_at as string | null) ?? null,
   };
 }

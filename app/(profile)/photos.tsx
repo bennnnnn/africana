@@ -3,9 +3,8 @@ import {
   View,
   Text,
   SafeAreaView,
-  FlatList,
   TouchableOpacity,
-  Alert,
+  Pressable,
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
@@ -13,9 +12,10 @@ import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
+import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
 import { COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
+import { appDialog } from '@/lib/app-dialog';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 56) / 3;
@@ -26,11 +26,11 @@ export default function PhotosScreen() {
 
   if (!user) return null;
 
-  const photos = user.profile_photos;
+  const photos = user.profile_photos ?? [];
 
   const addPhoto = async () => {
     if (photos.length >= MAX_PROFILE_PHOTOS) {
-      Alert.alert('Limit Reached', `You can have at most ${MAX_PROFILE_PHOTOS} photos.`);
+      appDialog({ title: 'Limit reached', message: `You can have at most ${MAX_PROFILE_PHOTOS} photos.` });
       return;
     }
 
@@ -45,47 +45,55 @@ export default function PhotosScreen() {
 
     setUploading(true);
     try {
-      const uri = result.assets[0].uri;
-      const fileName = `${user.id}/${Date.now()}.jpg`;
-      const response = await fetch(uri);
-      const blob = await response.blob();
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, blob, { contentType: 'image/jpeg' });
-
-      if (uploadError) {
-        Alert.alert('Upload Failed', uploadError.message);
+      const asset = result.assets[0];
+      const out = await uploadToAvatarsBucket(user.id, asset.uri, asset.mimeType);
+      if ('error' in out) {
+        appDialog({ title: 'Upload failed', message: out.error, icon: 'cloud-offline-outline' });
         return;
       }
 
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
-
-      const updatedPhotos = [...photos, publicUrl];
+      const updatedPhotos = [...photos, out.publicUrl];
+      if (updatedPhotos.length > MAX_PROFILE_PHOTOS) {
+        appDialog({ title: 'Photo limit', message: `You can have at most ${MAX_PROFILE_PHOTOS} photos.` });
+        return;
+      }
       await updateProfile({
         profile_photos: updatedPhotos,
         avatar_url: updatedPhotos[0],
       });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Something went wrong.';
+      appDialog({ title: 'Could not save photo', message: msg, icon: 'alert-circle-outline' });
     } finally {
       setUploading(false);
     }
   };
 
   const removePhoto = (photoUrl: string) => {
-    Alert.alert('Remove Photo', 'Are you sure you want to remove this photo?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          const updatedPhotos = photos.filter((p) => p !== photoUrl);
-          await updateProfile({
-            profile_photos: updatedPhotos,
-            avatar_url: updatedPhotos[0] ?? null,
-          });
+    appDialog({
+      title: 'Remove photo',
+      message: 'Remove this photo from your profile?',
+      icon: 'trash-outline',
+      actions: [
+        { label: 'Cancel', style: 'cancel' },
+        {
+          label: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const updatedPhotos = photos.filter((p) => p !== photoUrl);
+            try {
+              await updateProfile({
+                profile_photos: updatedPhotos,
+                avatar_url: updatedPhotos[0] ?? null,
+              });
+            } catch (e: unknown) {
+              const msg = e instanceof Error ? e.message : 'Something went wrong.';
+              appDialog({ title: 'Could not remove photo', message: msg, icon: 'alert-circle-outline' });
+            }
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   const setMainPhoto = async (photoUrl: string) => {
@@ -111,22 +119,22 @@ export default function PhotosScreen() {
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>My Photos</Text>
-        <TouchableOpacity
-          onPress={addPhoto}
-          disabled={uploading || photos.length >= MAX_PROFILE_PHOTOS}
-          style={{ opacity: uploading || photos.length >= MAX_PROFILE_PHOTOS ? 0.4 : 1 }}
-        >
-          {uploading ? (
-            <ActivityIndicator size="small" color={COLORS.primary} />
-          ) : (
-            <Ionicons name="add-circle" size={28} color={COLORS.primary} />
-          )}
-        </TouchableOpacity>
+        {photos.length < MAX_PROFILE_PHOTOS ? (
+          <TouchableOpacity onPress={addPhoto} disabled={uploading}>
+            {uploading ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <Ionicons name="add-circle" size={28} color={COLORS.primary} />
+            )}
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 28, height: 28 }} />
+        )}
       </View>
 
       <View style={{ padding: 16 }}>
         <Text style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 16, textAlign: 'center' }}>
-          {photos.length}/{MAX_PROFILE_PHOTOS} photos • First photo is your main profile picture
+          {photos.length}/{MAX_PROFILE_PHOTOS} photos • First is your main picture • Long press to remove
         </Text>
 
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -141,46 +149,31 @@ export default function PhotosScreen() {
                 position: 'relative',
               }}
             >
-              <Image source={{ uri: photo }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-
-              {i === 0 && (
-                <View
-                  style={{
-                    position: 'absolute',
-                    bottom: 6,
-                    left: 6,
-                    backgroundColor: COLORS.primary,
-                    borderRadius: 6,
-                    paddingHorizontal: 6,
-                    paddingVertical: 2,
-                  }}
-                >
-                  <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>MAIN</Text>
-                </View>
-              )}
-
-              <View
-                style={{
-                  position: 'absolute',
-                  top: 6,
-                  right: 6,
-                  gap: 4,
-                }}
+              <Pressable
+                style={{ flex: 1 }}
+                onLongPress={() => removePhoto(photo)}
+                delayLongPress={450}
               >
-                <TouchableOpacity
-                  onPress={() => removePhoto(photo)}
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
-                    backgroundColor: 'rgba(0,0,0,0.6)',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Ionicons name="trash-outline" size={14} color="#FFF" />
-                </TouchableOpacity>
-                {i !== 0 && (
+                <Image source={{ uri: photo }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                {i === 0 && (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      bottom: 6,
+                      left: 6,
+                      backgroundColor: COLORS.primary,
+                      borderRadius: 6,
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                    }}
+                  >
+                    <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>MAIN</Text>
+                  </View>
+                )}
+              </Pressable>
+
+              {i !== 0 && (
+                <View style={{ position: 'absolute', top: 6, right: 6 }}>
                   <TouchableOpacity
                     onPress={() => setMainPhoto(photo)}
                     style={{
@@ -194,8 +187,8 @@ export default function PhotosScreen() {
                   >
                     <Ionicons name="star-outline" size={14} color="#FFF" />
                   </TouchableOpacity>
-                )}
-              </View>
+                </View>
+              )}
             </View>
           ))}
 

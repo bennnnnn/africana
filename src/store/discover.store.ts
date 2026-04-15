@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { notifyUser } from '@/lib/notifications';
 import { MOCK_USERS } from '@/lib/mock-data';
 const interestedInToGender = (v: InterestedIn | undefined): string | null => {
-  if (v === 'men')   return 'male';
+  if (v === 'men') return 'male';
   if (v === 'women') return 'female';
   return null;
 };
@@ -15,6 +15,31 @@ function shuffleArray<T>(arr: T[]): void {
     const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
+}
+
+/** Location, religion, online, birthdate presence, and age — all in SQL so pagination matches the grid. */
+function applyDiscoverSheetFilters(
+  query: any,
+  params: { filters: FilterOptions; today: Date; effMin: number; effMax: number },
+) {
+  const { filters, today, effMin, effMax } = params;
+  if (filters.country) query = query.eq('country', filters.country);
+  if (filters.state) query = query.eq('state', filters.state);
+  if (filters.city) query = query.eq('city', filters.city);
+  if (filters.religion) query = query.eq('religion', filters.religion);
+  if (filters.online_only) query = query.eq('online_status', 'online');
+
+  query = query.not('birthdate', 'is', null);
+
+  if (effMin > 18) {
+    const d = new Date(today.getFullYear() - effMin, today.getMonth(), today.getDate());
+    query = query.lte('birthdate', d.toISOString().slice(0, 10));
+  }
+  if (effMax < 100) {
+    const d = new Date(today.getFullYear() - effMax - 1, today.getMonth(), today.getDate() + 1);
+    query = query.gte('birthdate', d.toISOString().slice(0, 10));
+  }
+  return query;
 }
 
 interface AgePref { min: number; max: number }
@@ -117,51 +142,47 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       const genderFilter = interestedInToGender(interestedIn);
       if (genderFilter) query = query.eq('gender', genderFilter);
 
-      // ── Age preference → birthdate range ──────────────────────────────────
-      if (agePref?.min && agePref.min > 18) {
-        const d = new Date(today.getFullYear() - agePref.min, today.getMonth(), today.getDate());
-        query = query.lte('birthdate', d.toISOString().slice(0, 10));
-      }
-      if (agePref?.max && agePref.max < 100) {
-        // Oldest person allowed: turned max_age this year but not yet max_age+1
-        const d = new Date(today.getFullYear() - agePref.max - 1, today.getMonth(), today.getDate() + 1);
-        query = query.gte('birthdate', d.toISOString().slice(0, 10));
+      // ── Age: intersect Discover sheet range with profile dating-age preference ──
+      const fMin = filters.min_age;
+      const fMax = filters.max_age;
+      const pMin = agePref?.min ?? 18;
+      const pMax = agePref?.max ?? 100;
+      const effMin = Math.max(fMin, pMin);
+      const effMax = Math.min(fMax, pMax);
+
+      if (effMin > effMax) {
+        set((state) => ({
+          users: reset || currentPage === 0 ? [] : state.users,
+          page: currentPage === 0 ? 0 : currentPage,
+          hasMore: false,
+        }));
+        return;
       }
 
-      // Manual filters
-      if (filters.country)        query = query.eq('country', filters.country);
-      if (filters.state)          query = query.eq('state', filters.state);
-      if (filters.city)           query = query.eq('city', filters.city);
-      if (filters.religion)       query = query.eq('religion', filters.religion);
-      if (filters.online_only)    query = query.eq('online_status', 'online');
+      query = applyDiscoverSheetFilters(query, { filters, today, effMin, effMax });
 
       query = query.order('last_seen', { ascending: false });
 
       const { data, error } = await query;
 
       const processRaw = (rows: any[]): User[] =>
-        rows
-          .map((u) => {
-            const bday = u.birthdate ? new Date(u.birthdate) : null;
-            const age = bday
-              ? today.getFullYear() - bday.getFullYear()
-                - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
-              : 0;
-            const effectiveOnlineStatus =
-              u.online_visible === false ? 'offline' : u.online_status;
-            return {
-              ...u,
-              age,
-              online_status: effectiveOnlineStatus,
-              profile_photos: u.profile_photos ?? [],
-              languages: u.languages ?? [],
-            };
-          })
-          .filter((u) => {
-            if (filters.min_age && u.age < filters.min_age) return false;
-            if (filters.max_age && u.age > filters.max_age) return false;
-            return true;
-          });
+        rows.map((u) => {
+          const bday = u.birthdate ? new Date(u.birthdate) : null;
+          const age = bday
+            ? today.getFullYear() -
+              bday.getFullYear() -
+              (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
+            : 0;
+          const effectiveOnlineStatus =
+            u.online_visible === false ? 'offline' : u.online_status;
+          return {
+            ...u,
+            age,
+            online_status: effectiveOnlineStatus,
+            profile_photos: u.profile_photos ?? [],
+            languages: u.languages ?? [],
+          };
+        });
 
       if (!error && data) {
         const processed = processRaw(data);
@@ -177,38 +198,35 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           const likedIdsArr = [...likedIds].filter((id) => !blockedIds.includes(id));
           if (likedIdsArr.length > 0) {
             const needed = PAGE_SIZE - result.length;
-            const { data: likedData } = await supabase
+            let likedQuery = supabase
               .from('profiles')
               .select('*')
               .in('id', likedIdsArr)
-              .eq('show_in_discover', true)
-              .limit(needed);
+              .eq('show_in_discover', true);
+            if (genderFilter) likedQuery = likedQuery.eq('gender', genderFilter);
+            likedQuery = applyDiscoverSheetFilters(likedQuery, { filters, today, effMin, effMax });
+            likedQuery = likedQuery.order('last_seen', { ascending: false }).limit(needed);
+            const { data: likedData } = await likedQuery;
             if (likedData) {
               const likedProcessed = (() => {
                 const rows = likedData;
-                return rows
-                  .map((u: any) => {
-                    const bday = u.birthdate ? new Date(u.birthdate) : null;
-                    const age = bday
-                      ? today.getFullYear() - bday.getFullYear()
-                        - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
-                      : 0;
-                    const effectiveOnlineStatus =
-                      u.online_visible === false ? 'offline' : u.online_status;
-                    return {
-                      ...u,
-                      age,
-                      online_status: effectiveOnlineStatus,
-                      profile_photos: u.profile_photos ?? [],
-                      languages: u.languages ?? [],
-                    };
-                  })
-                  .filter((u: User) => {
-                    const a = u.age ?? 0;
-                    if (filters.min_age && a < filters.min_age) return false;
-                    if (filters.max_age && a > filters.max_age) return false;
-                    return true;
-                  });
+                return rows.map((u: any) => {
+                  const bday = u.birthdate ? new Date(u.birthdate) : null;
+                  const age = bday
+                    ? today.getFullYear() -
+                      bday.getFullYear() -
+                      (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
+                    : 0;
+                  const effectiveOnlineStatus =
+                    u.online_visible === false ? 'offline' : u.online_status;
+                  return {
+                    ...u,
+                    age,
+                    online_status: effectiveOnlineStatus,
+                    profile_photos: u.profile_photos ?? [],
+                    languages: u.languages ?? [],
+                  };
+                });
               })();
               const likedUsers = likedProcessed;
               shuffleArray(likedUsers);
@@ -223,6 +241,13 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           result = MOCK_USERS.filter((u) => {
             if (u.id === userId || realIds.has(u.id)) return false;
             if (genderFilter && u.gender !== genderFilter) return false;
+            const a = u.age ?? 0;
+            if (a < effMin || a > effMax) return false;
+            if (filters.country && u.country !== filters.country) return false;
+            if (filters.state && u.state !== filters.state) return false;
+            if (filters.city && u.city !== filters.city) return false;
+            if (filters.religion && u.religion !== filters.religion) return false;
+            if (filters.online_only && u.online_status !== 'online') return false;
             return true;
           }).slice(0, PAGE_SIZE);
         }

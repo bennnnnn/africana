@@ -1,11 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
-
   ScrollView,
-  TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -14,86 +11,88 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { COLORS } from '@/constants';
+import { COLORS, FONT } from '@/constants';
+import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
+import { appDialog } from '@/lib/app-dialog';
+
+/** Email/password sign-in adds an `email` identity; pure OAuth (e.g. Google, Apple) does not. */
+function hasEmailPasswordIdentity(identities: { provider?: string }[] | undefined): boolean {
+  return !!identities?.some((i) => i.provider === 'email');
+}
 
 export default function DeleteAccountScreen() {
-  const { user, signOut } = useAuthStore();
+  const { user, session } = useAuthStore();
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Detect OAuth-only users (Google) — they have no password to verify
-  const isOAuthUser = !user?.email || user.email.includes('@googlemail') ||
-    (user as any).app_metadata?.provider === 'google';
+  const needsPasswordConfirmation = useMemo(
+    () => hasEmailPasswordIdentity(session?.user?.identities),
+    [session?.user?.identities],
+  );
 
   const doDelete = async () => {
     if (!user) return;
     setLoading(true);
 
-    // For email users: re-authenticate to verify identity
-    if (!isOAuthUser) {
+    if (needsPasswordConfirmation && user.email) {
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: user.email,
         password,
       });
       if (signInError) {
         setLoading(false);
-        Alert.alert('Incorrect Password', 'The password you entered is incorrect.');
+        appDialog({
+          title: 'Incorrect password',
+          message: 'The password you entered is incorrect.',
+          icon: 'lock-closed-outline',
+        });
         return;
       }
     }
 
-    // Call delete_user() — a SECURITY DEFINER function that removes the
-    // caller's auth.users row, cascading to profiles and all related data.
     const { error } = await supabase.rpc('delete_user');
     if (error) {
       setLoading(false);
-      Alert.alert('Error', 'Failed to delete account. Please contact support.');
+      appDialog({
+        title: 'Something went wrong',
+        message: 'Failed to delete account. Please contact support.',
+        icon: 'alert-circle-outline',
+      });
       return;
     }
 
     await supabase.auth.signOut();
     setLoading(false);
-    Alert.alert('Account Deleted', 'Your account has been permanently deleted.', [
-      { text: 'OK', onPress: () => router.replace('/(auth)/welcome') },
-    ]);
+    appDialog({
+      title: 'Account deleted',
+      message: 'Your account has been permanently deleted.',
+      icon: 'checkmark-circle-outline',
+      actions: [{ label: 'OK', style: 'primary', onPress: () => router.replace('/(auth)/welcome') }],
+    });
   };
 
   const handleDelete = async () => {
-    if (!isOAuthUser && !password) {
-      Alert.alert('Error', 'Please enter your password to confirm.');
+    if (needsPasswordConfirmation && !password) {
+      appDialog({ title: 'Password required', message: 'Please enter your password to confirm.' });
       return;
     }
     if (!user) return;
 
-    Alert.alert(
-      'Final Confirmation',
-      'This will permanently delete all your data including messages, likes, and your profile. This CANNOT be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete Forever', style: 'destructive', onPress: doDelete },
-      ]
-    );
+    appDialog({
+      title: 'Final confirmation',
+      message:
+        'This will permanently delete all your data including messages, likes, and your profile. This cannot be undone.',
+      icon: 'warning-outline',
+      actions: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Delete forever', style: 'destructive', onPress: doDelete },
+      ],
+    });
   };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingHorizontal: 20,
-          paddingVertical: 14,
-          backgroundColor: '#FFFFFF',
-          borderBottomWidth: 1,
-          borderBottomColor: COLORS.border,
-          gap: 12,
-        }}
-      >
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </TouchableOpacity>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>Delete Account</Text>
-      </View>
+      <SettingsHeaderBar title="Delete account" titleAlign="leading" />
 
       <ScrollView contentContainerStyle={{ padding: 24 }}>
         <View
@@ -110,11 +109,11 @@ export default function DeleteAccountScreen() {
           <Ionicons name="warning-outline" size={32} color={COLORS.error} />
         </View>
 
-        <Text style={{ fontSize: 22, fontWeight: '800', color: COLORS.text, marginBottom: 12 }}>
+        <Text style={{ fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.text, marginBottom: 12 }}>
           Delete your account?
         </Text>
 
-        <Text style={{ fontSize: 15, color: COLORS.textSecondary, lineHeight: 22, marginBottom: 24 }}>
+        <Text style={{ fontSize: FONT.md, color: COLORS.textSecondary, lineHeight: 22, marginBottom: 24 }}>
           This action is permanent and cannot be undone. Once deleted, all of your data will be erased, including:
         </Text>
 
@@ -126,7 +125,7 @@ export default function DeleteAccountScreen() {
         ].map((item, i) => (
           <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
             <Ionicons name="close-circle" size={18} color={COLORS.error} />
-            <Text style={{ fontSize: 14, color: COLORS.text }}>{item}</Text>
+            <Text style={{ fontSize: FONT.sm, color: COLORS.text }}>{item}</Text>
           </View>
         ))}
 
@@ -141,14 +140,14 @@ export default function DeleteAccountScreen() {
             borderColor: '#FECACA',
           }}
         >
-          <Text style={{ fontSize: 13, color: '#B91C1C', lineHeight: 18 }}>
-            {isOAuthUser
-              ? '⚠️ Tap "Delete Forever" below to permanently delete your account.'
-              : '⚠️ Enter your password below to confirm account deletion.'}
+          <Text style={{ fontSize: FONT.sm, color: '#B91C1C', lineHeight: 18 }}>
+            {needsPasswordConfirmation
+              ? '⚠️ Enter your password below to confirm account deletion.'
+              : '⚠️ Tap “Delete My Account Forever” below to permanently delete your account.'}
           </Text>
         </View>
 
-        {!isOAuthUser && (
+        {needsPasswordConfirmation && (
           <Input
             label="Confirm Password"
             value={password}

@@ -1,5 +1,5 @@
 export type Gender = 'male' | 'female';
-export type InterestedIn = 'men' | 'women' | 'everyone';
+export type InterestedIn = 'men' | 'women';
 export type LookingFor = 'relationship' | 'friendship' | 'marriage' | 'pen_pal';
 export type OnlineStatus = 'online' | 'offline';
 export type MaritalStatus = 'single' | 'divorced' | 'widowed' | 'separated';
@@ -10,7 +10,7 @@ export type Religion =
 export type Education =
   | 'high_school' | 'some_college' | 'vocational' | 'bachelors'
   | 'masters' | 'phd' | 'other';
-export type WantChildren = 'yes' | 'no' | 'open';
+export type WantChildren = 'yes' | 'no' ;
 export type VerificationStatus = 'pending' | 'approved' | 'rejected';
 export type PhysicalCondition =
   | 'slim'
@@ -87,6 +87,8 @@ export interface UserSettings {
   likes_seen_at?: string | null;
   views_seen_at?: string | null;
   favourites_seen_at?: string | null;
+  matches_seen_at?: string | null;
+  sent_seen_at?: string | null;
 }
 
 export interface Like {

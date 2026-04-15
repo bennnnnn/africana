@@ -11,17 +11,19 @@ import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
+import { uploadVerificationSelfie } from '@/lib/storage-image-upload';
 import { useTheme } from '@/theme/ThemeProvider';
 import { Button } from '@/components/ui/Button';
 import { useDialog } from '@/components/ui/DialogProvider';
+import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 
 export default function VerifyScreen() {
   const { colors } = useTheme();
   const { user, updateProfile } = useAuthStore();
   const { showDialog } = useDialog();
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
+  const [selfieMime, setSelfieMime] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const status = user?.verification_status;
@@ -42,7 +44,11 @@ export default function VerifyScreen() {
               allowsEditing: false,
               quality: 0.7,
             });
-            if (!result.canceled && result.assets[0]) setSelfieUri(result.assets[0].uri);
+            if (!result.canceled && result.assets[0]) {
+              const a = result.assets[0];
+              setSelfieUri(a.uri);
+              setSelfieMime(a.mimeType ?? null);
+            }
           },
         },
         {
@@ -54,7 +60,11 @@ export default function VerifyScreen() {
               allowsEditing: false,
               quality: 0.7,
             });
-            if (!result.canceled && result.assets[0]) setSelfieUri(result.assets[0].uri);
+            if (!result.canceled && result.assets[0]) {
+              const a = result.assets[0];
+              setSelfieUri(a.uri);
+              setSelfieMime(a.mimeType ?? null);
+            }
           },
         },
         { label: 'Cancel', style: 'secondary' },
@@ -66,18 +76,9 @@ export default function VerifyScreen() {
     if (!user || !selfieUri) return;
     setUploading(true);
     try {
-      const ext  = selfieUri.split('.').pop() ?? 'jpg';
-      const path = `${user.id}/verification-${Date.now()}.${ext}`;
-      const form = new FormData();
-      form.append('file', { uri: selfieUri, name: path, type: `image/${ext}` } as any);
-
-      const { error: uploadErr } = await supabase.storage
-        .from('profile-photos')
-        .upload(path, form, { upsert: true });
-
-      if (uploadErr) throw uploadErr;
-
-      const { data: { publicUrl } } = supabase.storage.from('profile-photos').getPublicUrl(path);
+      const out = await uploadVerificationSelfie(user.id, selfieUri, selfieMime);
+      if ('error' in out) throw new Error(out.error);
+      const publicUrl = out.publicUrl;
 
       await updateProfile({
         verification_status: 'pending',
@@ -101,18 +102,7 @@ export default function VerifyScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }}>
-      {/* Header */}
-      <View style={{
-        flexDirection: 'row', alignItems: 'center', gap: 12,
-        paddingHorizontal: 20, paddingVertical: 14,
-        backgroundColor: '#FFFFFF',
-        borderBottomWidth: 1, borderBottomColor: colors.border,
-      }}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#111111" />
-        </TouchableOpacity>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: '#111111' }}>Profile Verification</Text>
-      </View>
+      <SettingsHeaderBar title="Profile verification" titleAlign="leading" />
 
       <ScrollView contentContainerStyle={{ padding: 24 }}>
         {/* Status badge */}

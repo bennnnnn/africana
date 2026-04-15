@@ -41,6 +41,18 @@ export async function removeFavourite(userId: string, favouritedId: string) {
   if (error) throw error;
 }
 
+export async function hasExistingReport(reporterId: string, reportedId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('reports')
+    .select('id')
+    .eq('reporter_id', reporterId)
+    .eq('reported_id', reportedId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return !!data;
+}
+
 export async function reportUser(reporterId: string, reportedId: string, reason: string) {
   const { data: existingReport, error: existingError } = await supabase
     .from('reports')

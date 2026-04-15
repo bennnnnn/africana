@@ -114,25 +114,28 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
             onChange={(v) => update('religion', v as Religion | null)}
           />
 
-          {/* Location (country + optional state/city) */}
-          <SectionLabel label="Location" />
-          <LocationPicker
-            value={locationFilter}
-            onChange={handleLocationChange}
-            countryOnly={false}
-          />
-          {locationFilter.country && (
-            <TouchableOpacity
-              onPress={() => {
-                setLocationFilter({});
-                setLocal((prev) => ({ ...prev, country: null, state: null, city: null }));
-              }}
-              style={s.clearBtn}
-            >
-              <Ionicons name="close-circle-outline" size={16} color={COLORS.textSecondary} />
-              <Text style={s.clearBtnText}>Clear location filter</Text>
-            </TouchableOpacity>
-          )}
+          {/* Country / region — whose profiles to show (not “your” location) */}
+          <View style={{ marginTop: 20 }}>
+            <LocationPicker
+              value={locationFilter}
+              onChange={handleLocationChange}
+              countryOnly={false}
+              countryLabel="Country"
+              countryPlaceholder="Select country"
+            />
+            {locationFilter.country && (
+              <TouchableOpacity
+                onPress={() => {
+                  setLocationFilter({});
+                  setLocal((prev) => ({ ...prev, country: null, state: null, city: null }));
+                }}
+                style={s.clearBtn}
+              >
+                <Ionicons name="close-circle-outline" size={16} color={COLORS.textSecondary} />
+                <Text style={s.clearBtnText}>Clear country filter</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </ScrollView>
 
         <View style={{ padding: 20, borderTopWidth: 1, borderTopColor: COLORS.border }}>

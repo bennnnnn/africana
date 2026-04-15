@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -14,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { COLORS } from '@/constants';
+import { appDialog } from '@/lib/app-dialog';
 
 export default function ResetPasswordScreen() {
   const params = useLocalSearchParams<{ url?: string }>();
@@ -24,11 +24,11 @@ export default function ResetPasswordScreen() {
 
   const handleReset = async () => {
     if (password.length < 6) {
-      Alert.alert('Weak password', 'Password must be at least 6 characters.');
+      appDialog({ title: 'Weak password', message: 'Password must be at least 6 characters.', icon: 'key-outline' });
       return;
     }
     if (password !== confirm) {
-      Alert.alert('Mismatch', 'Passwords do not match.');
+      appDialog({ title: 'Mismatch', message: 'Passwords do not match.', icon: 'key-outline' });
       return;
     }
 
@@ -38,7 +38,7 @@ export default function ResetPasswordScreen() {
       // updateUser updates the password for the currently authenticated user.
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
-        Alert.alert('Error', error.message);
+        appDialog({ title: 'Something went wrong', message: error.message, icon: 'alert-circle-outline' });
       } else {
         setDone(true);
       }

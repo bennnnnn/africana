@@ -30,6 +30,10 @@ export const COLORS = {
   error:   '#EF4444',
   success: '#10B981',
   warning: '#F59E0B',
+  /** Unfilled profile fields — light red to invite action */
+  emptyField:        '#E57373',
+  emptyFieldSurface: '#FFF5F5',
+  emptyFieldBorder:  'rgba(229, 115, 115, 0.35)',
 
   // ── Status ─────────────────────────────────────────────────────────────────
   online:  '#10B981',

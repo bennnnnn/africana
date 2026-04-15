@@ -207,7 +207,7 @@ export function LocationPicker({
       {/* ── Country modal ── */}
       <PickerModal
         visible={openModal === 'country'}
-        title="Select Country"
+        title="Select country"
         onClose={() => setOpenModal(null)}
         search={search}
         onSearch={setSearch}
@@ -293,7 +293,7 @@ function PickerButton({ label, value, placeholder, icon, onPress }: {
 }) {
   return (
     <View style={{ marginBottom: 14 }}>
-      <Text style={s.inputLabel}>{label}</Text>
+      {label.trim().length > 0 ? <Text style={s.inputLabel}>{label}</Text> : null}
       <TouchableOpacity onPress={onPress} style={[s.dropdownBtn, value && s.dropdownBtnOn]} activeOpacity={0.8}>
         <Ionicons name={icon} size={17} color={value ? ACTIVE_COLOR : COLORS.textSecondary} style={{ marginRight: 10 }} />
         <Text style={[s.dropdownText, value && s.dropdownTextOn]} numberOfLines={1}>

@@ -194,21 +194,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    const cachedMessages = await getCachedMessages(conversationId);
-    if (cachedMessages.length > 0) {
-      set((state) => ({
-        messages: { ...state.messages, [conversationId]: cachedMessages },
-      }));
-    }
-
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true });
+    const [cachedMessages, { data, error }] = await Promise.all([
+      getCachedMessages(conversationId),
+      supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true }),
+    ]);
 
     if (error) {
       console.error('[fetchMessages]', conversationId, error.message);
+      if (cachedMessages.length > 0) {
+        set((state) => ({
+          messages: { ...state.messages, [conversationId]: cachedMessages },
+        }));
+      }
       return;
     }
     if (data !== null && data !== undefined) {
@@ -490,3 +491,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 }));
+
+/** Read chat state outside of render (layout effects, async). Not a hook — avoids `useChatStore` being mistaken for a hook call mid-file. */
+export function getChatStoreState(): ChatState {
+  return useChatStore.getState();
+}

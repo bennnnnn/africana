@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -21,6 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { COLORS } from '@/constants';
 import { getValidationState, validateEmail } from '@/lib/validation';
 import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
+import { appDialog } from '@/lib/app-dialog';
 
 export default function LoginScreen() {
   const { fetchProfile, fetchSettings } = useAuthStore();
@@ -51,12 +51,16 @@ export default function LoginScreen() {
     const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     setLoading(false);
     if (error) {
-      Alert.alert('Sign In Failed', error.message);
+      appDialog({ title: 'Sign in failed', message: error.message, icon: 'alert-circle-outline' });
       return;
     }
     const session = data.session;
     if (!session?.user) {
-      Alert.alert('Check your email', 'Confirm your email address, then sign in again.');
+      appDialog({
+        title: 'Check your email',
+        message: 'Confirm your email address, then sign in again.',
+        icon: 'mail-outline',
+      });
       return;
     }
     await fetchProfile(session.user.id);
@@ -89,7 +93,11 @@ export default function LoginScreen() {
       }
     } catch (e: any) {
       if (e?.message !== 'User cancelled') {
-        Alert.alert('Google Sign-In Failed', e?.message ?? 'Please try again.');
+        appDialog({
+          title: 'Google sign-in failed',
+          message: e?.message ?? 'Please try again.',
+          icon: 'logo-google',
+        });
       }
     } finally {
       setGoogleLoading(false);

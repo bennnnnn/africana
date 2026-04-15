@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Modal,
-  TextInput, Pressable, Alert, ActivityIndicator,
+  TextInput, Pressable, ActivityIndicator,
   Dimensions, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,9 +11,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
 import { useAuthStore } from '@/store/auth.store';
 import {
-  COLORS, RADIUS, FONT, DEFAULT_AVATAR,
+  COLORS, RADIUS, FONT, DEFAULT_AVATAR, MAX_PROFILE_PHOTOS,
   GENDER_OPTIONS, INTERESTED_IN_OPTIONS,
   LOOKING_FOR_OPTIONS, RELIGION_OPTIONS, EDUCATION_OPTIONS,
   MARITAL_STATUS_OPTIONS, WANT_CHILDREN_YES_NO, PHYSICAL_CONDITION_OPTIONS,
@@ -25,6 +26,11 @@ import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
 import * as ImagePicker from 'expo-image-picker';
 import { getEthnicityOptions, getLanguageOptions } from '@/lib/cultural-data';
 import { getCountryByName, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
+import { getProfileStrength } from '@/lib/profile-completion';
+import { oppositeInterestedIn } from '@/lib/gender-match';
+import type { Gender } from '@/types';
+import { ProfileSectionChips } from '@/components/profile/ProfileSectionChips';
+import { appDialog } from '@/lib/app-dialog';
 
 const { width } = Dimensions.get('window');
 
@@ -62,23 +68,36 @@ function EditModal({ visible, title, onClose, onSave, saving, children }: {
 }
 
 // ── Field row ─────────────────────────────────────────────────────────────────
-function FieldRow({ icon, label, value, onEdit }: {
+function FieldRow({ icon, label, value, onEdit, readOnly }: {
   icon: keyof typeof Ionicons.glyphMap; label: string;
   value: string | null | undefined; onEdit: () => void;
+  readOnly?: boolean;
 }) {
   const filled = !!value;
-  return (
-    <TouchableOpacity onPress={onEdit} activeOpacity={0.7} style={s.fieldRow}>
-      <View style={[s.fieldIcon, !filled && s.fieldIconEmpty]}>
-        <Ionicons name={icon} size={15} color={filled ? COLORS.textStrong : COLORS.textMuted} />
+  const inner = (
+    <>
+      <View style={[s.fieldIcon, !filled && !readOnly && s.fieldIconEmpty]}>
+        <Ionicons name={icon} size={15} color={filled || readOnly ? COLORS.textStrong : COLORS.emptyField} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={s.fieldLabel}>{label}</Text>
-        <Text style={[s.fieldValue, !filled && s.fieldValueEmpty]}>
-          {filled ? value : `Add ${label.toLowerCase()}`}
+        <Text style={[s.fieldValue, !filled && !readOnly && s.fieldValueEmpty]}>
+          {filled ? value : readOnly ? '—' : `Add ${label.toLowerCase()}`}
         </Text>
       </View>
-      <Ionicons name={filled ? 'pencil' : 'add-circle-outline'} size={16} color={filled ? COLORS.textStrong : COLORS.textMuted} />
+      {readOnly ? (
+        <Ionicons name="lock-closed-outline" size={14} color={COLORS.textMuted} />
+      ) : (
+        <Ionicons name={filled ? 'pencil' : 'add-circle-outline'} size={16} color={filled ? COLORS.textStrong : COLORS.emptyField} />
+      )}
+    </>
+  );
+  if (readOnly) {
+    return <View style={[s.fieldRow, { opacity: 0.92 }]}>{inner}</View>;
+  }
+  return (
+    <TouchableOpacity onPress={onEdit} activeOpacity={0.7} style={s.fieldRow}>
+      {inner}
     </TouchableOpacity>
   );
 }
@@ -86,6 +105,9 @@ function FieldRow({ icon, label, value, onEdit }: {
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function MyProfileScreen() {
   const { user, updateProfile, fetchProfile } = useAuthStore();
+  const scrollRef = useRef<ScrollView>(null);
+  const heroPhotoScrollRef = useRef<ScrollView>(null);
+  const sectionY = useRef<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -114,6 +136,46 @@ export default function MyProfileScreen() {
       void fetchProfile(user.id);
     }, [fetchProfile, user?.id]),
   );
+
+  const avatarForHero = useMemo(() => {
+    if (!user) return '';
+    return (
+      user.avatar_url ||
+      (user.profile_photos ?? [])[0] ||
+      `${DEFAULT_AVATAR}${encodeURIComponent((user.full_name ?? '?').charAt(0))}`
+    );
+  }, [user]);
+
+  const heroPhotos = useMemo(() => {
+    if (!user) return [] as string[];
+    const list = (user.profile_photos ?? [])
+      .filter((u) => typeof u === 'string' && u.trim().length > 0)
+      .slice(0, MAX_PROFILE_PHOTOS);
+    if (list.length > 0) return list;
+    return avatarForHero ? [avatarForHero] : [];
+  }, [user, avatarForHero]);
+
+  const mainPhotoIndex = useMemo(() => {
+    if (!user) return 0;
+    const list = user.profile_photos ?? [];
+    if (list.length === 0) return 0;
+    if (user.avatar_url) {
+      const i = list.indexOf(user.avatar_url);
+      if (i >= 0) return i;
+    }
+    return 0;
+  }, [user]);
+
+  const [heroPhotoIndex, setHeroPhotoIndex] = useState(0);
+
+  useEffect(() => {
+    if (!user || heroPhotos.length === 0 || width <= 0) return;
+    setHeroPhotoIndex(mainPhotoIndex);
+    const idx = Math.min(mainPhotoIndex, heroPhotos.length - 1);
+    requestAnimationFrame(() => {
+      heroPhotoScrollRef.current?.scrollTo({ x: idx * width, y: 0, animated: false });
+    });
+  }, [user?.id, mainPhotoIndex, heroPhotos.length]);
 
   if (!user) return (
     <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -168,7 +230,9 @@ export default function MyProfileScreen() {
   const save = async (updates: Record<string, any>) => {
     setSaving(true);
     try { await updateProfile(updates); close(); }
-    catch (e: any) { Alert.alert('Error', e?.message ?? 'Could not save.'); }
+    catch (e: any) {
+      appDialog({ title: 'Could not save', message: e?.message ?? 'Please try again.', icon: 'alert-circle-outline' });
+    }
     finally { setSaving(false); }
   };
 
@@ -204,7 +268,46 @@ export default function MyProfileScreen() {
     });
   };
 
+  const confirmRemovePhoto = (photoUrl: string) => {
+    appDialog({
+      title: 'Remove photo',
+      message: 'Remove this photo from your profile?',
+      icon: 'trash-outline',
+      actions: [
+        { label: 'Cancel', style: 'cancel' },
+        {
+          label: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const current = user.profile_photos ?? [];
+            const updated = current.filter((p) => p !== photoUrl);
+            try {
+              await updateProfile({
+                profile_photos: updated,
+                avatar_url: updated[0] ?? null,
+              });
+            } catch (e: unknown) {
+              appDialog({
+                title: 'Could not remove photo',
+                message: e instanceof Error ? e.message : 'Try again.',
+                icon: 'alert-circle-outline',
+              });
+            }
+          },
+        },
+      ],
+    });
+  };
+
   const pickAndUploadPhoto = async () => {
+    const currentPhotos = user.profile_photos ?? [];
+    if (currentPhotos.length >= MAX_PROFILE_PHOTOS) {
+      appDialog({
+        title: 'Photo limit',
+        message: `You can have up to ${MAX_PROFILE_PHOTOS} photos. Long press a photo below to remove one.`,
+      });
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true, aspect: [3, 4], quality: 0.8,
@@ -212,22 +315,17 @@ export default function MyProfileScreen() {
     if (result.canceled || !result.assets[0]) return;
     setPhotoUploading(true);
     try {
-      const uri = result.assets[0].uri;
-      const fileName = `${user.id}/${Date.now()}.jpg`;
-      const res = await fetch(uri);
-      const blob = await res.blob();
-      const { error: uploadErr } = await supabase.storage
-        .from('avatars').upload(fileName, blob, { contentType: 'image/jpeg' });
-      if (uploadErr) throw uploadErr;
-      const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
-      const newUrl = data.publicUrl;
-      const currentPhotos = user.profile_photos ?? [];
+      const asset = result.assets[0];
+      const out = await uploadToAvatarsBucket(user.id, asset.uri, asset.mimeType);
+      if ('error' in out) throw new Error(out.error);
+      const newUrl = out.publicUrl;
       await updateProfile({
         profile_photos: [...currentPhotos, newUrl],
         avatar_url: currentPhotos.length === 0 ? newUrl : user.avatar_url,
       });
-    } catch {
-      Alert.alert('Upload failed', 'Could not upload photo. Please try again.');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Please try again.';
+      appDialog({ title: 'Upload failed', message: msg, icon: 'cloud-offline-outline' });
     } finally {
       setPhotoUploading(false);
     }
@@ -243,8 +341,7 @@ export default function MyProfileScreen() {
   };
 
   // ── Display values ─────────────────────────────────────────────────────────
-  const avatar   = user.avatar_url || (user.profile_photos ?? [])[0]
-    || `${DEFAULT_AVATAR}${encodeURIComponent((user.full_name ?? '?').charAt(0))}`;
+  const avatar = avatarForHero;
   const photos   = user.profile_photos ?? [];
   const location = [user.city, user.state, user.country].filter(Boolean).join(', ');
   const today    = new Date();
@@ -260,9 +357,9 @@ export default function MyProfileScreen() {
   const bodyTypeLabel     = user.body_type      ? PHYSICAL_CONDITION_OPTIONS.find(o => o.value === user.body_type)?.label ?? user.body_type : null;
   const occupationLabel   = user.occupation     ? OCCUPATION_OPTIONS.find(o => o.value === user.occupation)?.label ?? user.occupation  : null;
   const interestedInLabel =
-    user.interested_in === 'everyone'
-      ? 'Everyone'
-      : INTERESTED_IN_OPTIONS.find((o) => o.value === user.interested_in)?.label ?? user.interested_in ?? null;
+    user.gender === 'male' || user.gender === 'female'
+      ? INTERESTED_IN_OPTIONS.find((o) => o.value === oppositeInterestedIn(user.gender))?.label ?? null
+      : null;
   const locationDisplay    = [user.city, user.state, user.country].filter(Boolean).join(', ');
   const originDisplay      = [user.origin_city, user.origin_state, user.origin_country].filter(Boolean).join(', ');
 
@@ -271,19 +368,15 @@ export default function MyProfileScreen() {
   const hasAfricanOrigin   = !!user.origin_country && AFRICAN_COUNTRY_CODES.has(getCountryByName(user.origin_country)?.code ?? '');
   const needsOriginForData = !livesInAfrica && !hasAfricanOrigin;
 
-  const completionFields = [
-    { label: 'Profile photo', done: photos.length > 0 },
-    { label: 'Bio',           done: !!user.bio },
-    { label: 'Religion',      done: !!user.religion },
-    { label: 'Education',     done: !!user.education },
-    { label: 'Occupation',    done: !!user.occupation },
-    { label: 'Height',        done: !!user.height_cm },
-    { label: 'Ethnicity',     done: !!user.ethnicity },
-    { label: 'Languages',     done: (user.languages ?? []).length > 0 },
-    { label: 'Hobbies',       done: (user.hobbies ?? []).length > 0 },
-  ];
-  const completionPct = Math.round(completionFields.filter(f => f.done).length / completionFields.length * 100);
-  const nextMissing   = completionFields.find(f => !f.done);
+  const strength = getProfileStrength(user);
+  const completionPct = strength.percent;
+  const nextMissing = strength.nextMissing;
+
+  const scrollToSection = (id: string) => {
+    const y = sectionY.current[id];
+    if (y == null) return;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 10), animated: true });
+  };
 
   // ── Reusable select list renderer ─────────────────────────────────────────
   const renderSelectList = (
@@ -324,7 +417,14 @@ export default function MyProfileScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      <ScrollView showsVerticalScrollIndicator={false} bounces alwaysBounceVertical>
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        bounces
+        alwaysBounceVertical
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+      >
 
         {/* Header */}
         <View style={s.header}>
@@ -334,17 +434,88 @@ export default function MyProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Hero */}
-        <View style={{ position: 'relative' }}>
-          <Image source={{ uri: avatar }} style={{ width, height: width * 1.1 }} contentFit="cover" />
+        <ProfileSectionChips
+          sections={[
+            { id: 'about', label: 'About' },
+            { id: 'personal', label: 'Personal' },
+            { id: 'physical', label: 'Physical' },
+            { id: 'work', label: 'Work' },
+            { id: 'family', label: 'Family' },
+            { id: 'looking', label: 'Looking for' },
+            { id: 'hobbies', label: 'Hobbies' },
+            { id: 'photos', label: 'Photos' },
+          ]}
+          onSelect={scrollToSection}
+        />
+
+        {/* Hero — swipe horizontally (ScrollView avoids FlatList-inside-ScrollView crash) */}
+        <View style={{ position: 'relative', backgroundColor: '#000' }}>
+          {heroPhotos.length > 0 ? (
+            <ScrollView
+              ref={heroPhotoScrollRef}
+              horizontal
+              pagingEnabled
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              showsHorizontalScrollIndicator={false}
+              style={{ width, height: width * 1.1 }}
+              onMomentumScrollEnd={(e) => {
+                if (width <= 0) return;
+                const i = Math.round(e.nativeEvent.contentOffset.x / width);
+                setHeroPhotoIndex(Math.max(0, Math.min(i, heroPhotos.length - 1)));
+              }}
+            >
+              {heroPhotos.map((uri, i) => (
+                <Image
+                  key={`${uri}-${i}`}
+                  source={{ uri }}
+                  style={{ width, height: width * 1.1 }}
+                  contentFit="cover"
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={{ width, height: width * 1.1, backgroundColor: '#222', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="image-outline" size={40} color="#666" />
+            </View>
+          )}
           <LinearGradient colors={['transparent', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.65)']}
+            pointerEvents="none"
             style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '65%' }} />
+          {heroPhotos.length > 1 ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                bottom: 88,
+                left: 0,
+                right: 0,
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 5,
+              }}
+            >
+              {heroPhotos.map((_, i) => (
+                <View
+                  key={i}
+                  style={{
+                    width: i === heroPhotoIndex ? 20 : 7,
+                    height: 7,
+                    borderRadius: 3.5,
+                    backgroundColor: i === heroPhotoIndex ? '#FFF' : 'rgba(255,255,255,0.5)',
+                  }}
+                />
+              ))}
+            </View>
+          ) : null}
           <View style={[s.onlineBadge, { backgroundColor: isOnline ? COLORS.online : 'rgba(0,0,0,0.45)' }]}>
             <View style={s.onlineDot} /><Text style={s.onlineText}>{isOnline ? 'Online' : 'Offline'}</Text>
           </View>
-          <TouchableOpacity style={s.cameraBtn} onPress={pickAndUploadPhoto} disabled={photoUploading}>
-            <Ionicons name={photoUploading ? 'hourglass-outline' : 'camera'} size={18} color="#FFF" />
-          </TouchableOpacity>
+          {photos.length < MAX_PROFILE_PHOTOS ? (
+            <TouchableOpacity style={s.cameraBtn} onPress={pickAndUploadPhoto} disabled={photoUploading}>
+              <Ionicons name={photoUploading ? 'hourglass-outline' : 'camera'} size={18} color="#FFF" />
+            </TouchableOpacity>
+          ) : null}
           <View style={s.heroInfo}>
             <Text style={s.heroName}>{user.full_name}{age ? `, ${age}` : ''}</Text>
             {location ? (
@@ -398,6 +569,11 @@ export default function MyProfileScreen() {
         )}
 
         {/* About Me */}
+        <View
+          onLayout={(e) => {
+            sectionY.current.about = e.nativeEvent.layout.y;
+          }}
+        >
         <View style={s.section}>
           <Text style={s.sectionTitle}>About Me</Text>
           {user.bio ? (
@@ -413,13 +589,19 @@ export default function MyProfileScreen() {
             </TouchableOpacity>
           )}
         </View>
+        </View>
 
         {/* Personal */}
+        <View
+          onLayout={(e) => {
+            sectionY.current.personal = e.nativeEvent.layout.y;
+          }}
+        >
         <View style={s.section}>
           <Text style={s.sectionTitle}>Personal</Text>
           <FieldRow icon="person-outline"      label="Gender"         value={user.gender ? (GENDER_OPTIONS.find(o => o.value === user.gender)?.label ?? user.gender) : null} onEdit={() => openSelect('gender', user.gender)} />
           <FieldRow icon="calendar-outline"    label="Date of birth"  value={user.birthdate ?? null} onEdit={openDate} />
-          <FieldRow icon="search-outline"      label="Interested in"  value={interestedInLabel} onEdit={() => openSelect('interested_in', user.interested_in)} />
+          <FieldRow icon="search-outline" label="Interested in" value={interestedInLabel} onEdit={() => {}} readOnly />
           <FieldRow icon="location-outline" label="Location" value={locationDisplay || null} onEdit={openLocation} />
           {!livesInAfrica && (
             <FieldRow icon="flag-outline" label="African origin" value={originDisplay || null} onEdit={openOriginLocation} />
@@ -428,8 +610,14 @@ export default function MyProfileScreen() {
           <FieldRow icon="globe-outline"       label="Ethnicity"      value={user.ethnicity ?? null} onEdit={openEthnicity} />
           <FieldRow icon="chatbubbles-outline" label="Languages"      value={(user.languages ?? []).join(', ') || null} onEdit={openLanguages} />
         </View>
+        </View>
 
         {/* Physical */}
+        <View
+          onLayout={(e) => {
+            sectionY.current.physical = e.nativeEvent.layout.y;
+          }}
+        >
         <View style={s.section}>
           <Text style={s.sectionTitle}>Physical</Text>
           <FieldRow icon="resize-outline" label="Height" value={user.height_cm ? `${(user.height_cm / 100).toFixed(2)} m` : null}
@@ -437,23 +625,41 @@ export default function MyProfileScreen() {
           <FieldRow icon="body-outline"   label="Body type" value={bodyTypeLabel} onEdit={() => openSelect('body_type', user.body_type)} />
           <FieldRow icon="barbell-outline" label="Weight"    value={user.weight_kg ? `${user.weight_kg} kg` : null} onEdit={() => { setEditing('weight_kg'); setEditHeight(user.weight_kg ?? 70); }} />
         </View>
+        </View>
 
         {/* Work & Education */}
+        <View
+          onLayout={(e) => {
+            sectionY.current.work = e.nativeEvent.layout.y;
+          }}
+        >
         <View style={s.section}>
           <Text style={s.sectionTitle}>Work & Education</Text>
           <FieldRow icon="briefcase-outline" label="Occupation" value={occupationLabel} onEdit={() => { openSelect('occupation', user.occupation); setListSearch(''); }} />
           <FieldRow icon="school-outline"    label="Education"  value={educationLabel}  onEdit={() => openSelect('education', user.education)} />
         </View>
+        </View>
 
         {/* Family */}
+        <View
+          onLayout={(e) => {
+            sectionY.current.family = e.nativeEvent.layout.y;
+          }}
+        >
         <View style={s.section}>
           <Text style={s.sectionTitle}>Family</Text>
           <FieldRow icon="heart-outline"  label="Marital status" value={maritalLabel} onEdit={() => openSelect('marital_status', user.marital_status)} />
           <FieldRow icon="people-outline" label="Children"      value={user.has_children == null ? null : user.has_children ? 'Has children' : 'No children'} onEdit={() => openBool('has_children', user.has_children)} />
           <FieldRow icon="happy-outline"  label="Wants children" value={wantChildrenLabel} onEdit={() => openSelect('want_children', user.want_children)} />
         </View>
+        </View>
 
         {/* Looking for */}
+        <View
+          onLayout={(e) => {
+            sectionY.current.looking = e.nativeEvent.layout.y;
+          }}
+        >
         <View style={s.section}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <Text style={s.sectionTitle}>Looking for</Text>
@@ -474,8 +680,14 @@ export default function MyProfileScreen() {
             </TouchableOpacity>
           )}
         </View>
+        </View>
 
         {/* Hobbies */}
+        <View
+          onLayout={(e) => {
+            sectionY.current.hobbies = e.nativeEvent.layout.y;
+          }}
+        >
         <View style={s.section}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <Text style={s.sectionTitle}>Hobbies & Interests</Text>
@@ -496,27 +708,56 @@ export default function MyProfileScreen() {
             </TouchableOpacity>
           )}
         </View>
+        </View>
 
         {/* Photos */}
+        <View
+          onLayout={(e) => {
+            sectionY.current.photos = e.nativeEvent.layout.y;
+          }}
+        >
         <View style={s.section}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <Text style={s.sectionTitle}>Photos</Text>
-            <TouchableOpacity onPress={pickAndUploadPhoto} style={s.sectionEditBtn}>
-              <Ionicons name="add" size={13} color="#111" />
-            </TouchableOpacity>
+            {photos.length < MAX_PROFILE_PHOTOS ? (
+              <TouchableOpacity onPress={pickAndUploadPhoto} style={s.sectionEditBtn}>
+                <Ionicons name="add" size={13} color="#111" />
+              </TouchableOpacity>
+            ) : (
+              <View style={s.sectionEditBtn} />
+            )}
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingBottom: 8 }}>
-            {photos.slice(0, 6).map((photo, i) => (
-              <Image key={i} source={{ uri: photo }}
-                style={{ width: (width - 60) / 3, height: (width - 60) / 3, borderRadius: 12 }} contentFit="cover" />
-            ))}
-            <TouchableOpacity onPress={pickAndUploadPhoto} disabled={photoUploading}
-              style={[{ width: (width - 60) / 3, height: (width - 60) / 3, borderRadius: 12 }, s.addPhotoTile]}>
-              {photoUploading
-                ? <ActivityIndicator size="small" color={COLORS.primary} />
-                : <><Ionicons name="add" size={28} color={COLORS.primary} /><Text style={{ fontSize: 11, color: COLORS.primary, fontWeight: '600', marginTop: 2 }}>Add photo</Text></>}
-            </TouchableOpacity>
+            {photos.slice(0, MAX_PROFILE_PHOTOS).map((photo, i) => {
+              const tile = (width - 60) / 3;
+              return (
+                <Pressable
+                  key={`${photo}-${i}`}
+                  onLongPress={() => confirmRemovePhoto(photo)}
+                  delayLongPress={450}
+                  style={{ width: tile, height: tile, borderRadius: 12, overflow: 'hidden' }}
+                >
+                  <Image
+                    source={{ uri: photo }}
+                    style={{ width: tile, height: tile, borderRadius: 12 }}
+                    contentFit="cover"
+                  />
+                </Pressable>
+              );
+            })}
+            {photos.length < MAX_PROFILE_PHOTOS ? (
+              <TouchableOpacity onPress={pickAndUploadPhoto} disabled={photoUploading}
+                style={[{ width: (width - 60) / 3, height: (width - 60) / 3, borderRadius: 12 }, s.addPhotoTile]}>
+                {photoUploading
+                  ? <ActivityIndicator size="small" color={COLORS.primary} />
+                  : <><Ionicons name="add" size={28} color={COLORS.primary} /><Text style={{ fontSize: 11, color: COLORS.primary, fontWeight: '600', marginTop: 2 }}>Add photo</Text></>}
+              </TouchableOpacity>
+            ) : null}
           </View>
+          {photos.length > 0 && (
+            <Text style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Long press a photo to remove it</Text>
+          )}
+        </View>
         </View>
 
         <View style={{ height: 40 }} />
@@ -558,12 +799,6 @@ export default function MyProfileScreen() {
       <EditModal visible={editing === 'birthdate'} title="Date of Birth" onClose={close} saving={saving}
         onSave={() => save({ birthdate: editDate ? editDate.toISOString().split('T')[0] : null })}>
         <DatePicker label="Date of Birth" value={editDate} onChange={setEditDate} placeholder="Tap to select" />
-      </EditModal>
-
-      {/* ════ INTERESTED IN ════ */}
-      <EditModal visible={editing === 'interested_in'} title="Interested in" onClose={close} saving={saving}
-        onSave={() => save({ interested_in: editSelect })}>
-        {renderSelectList(INTERESTED_IN_OPTIONS, editSelect, setEditSelect)}
       </EditModal>
 
       {/* ════ HEIGHT — same slider as onboarding ════ */}
@@ -694,7 +929,14 @@ export default function MyProfileScreen() {
 
       {/* ════ GENDER ════ */}
       <EditModal visible={editing === 'gender'} title="I am a" onClose={close} saving={saving}
-        onSave={() => save({ gender: editSelect })}>
+        onSave={() =>
+          save({
+            gender: editSelect,
+            ...(editSelect === 'male' || editSelect === 'female'
+              ? { interested_in: oppositeInterestedIn(editSelect as Gender) }
+              : {}),
+          })
+        }>
         {renderSelectList(GENDER_OPTIONS, editSelect, setEditSelect)}
       </EditModal>
 
@@ -806,10 +1048,14 @@ const s = StyleSheet.create({
   emptyPrompt: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADIUS.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08`, marginBottom: 8 },
   fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   fieldIcon: { width: 32, height: 32, borderRadius: 9, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
-  fieldIconEmpty: { backgroundColor: COLORS.surface },
+  fieldIconEmpty: {
+    backgroundColor: COLORS.emptyFieldSurface,
+    borderWidth: 1,
+    borderColor: COLORS.emptyFieldBorder,
+  },
   fieldLabel: { fontSize: FONT.xs, color: COLORS.textSecondary, fontWeight: FONT.medium, marginBottom: 1 },
   fieldValue: { fontSize: 14, color: COLORS.textStrong, fontWeight: FONT.semibold },
-  fieldValueEmpty: { color: COLORS.textMuted, fontWeight: FONT.regular, fontStyle: 'italic' },
+  fieldValueEmpty: { color: COLORS.emptyField, fontWeight: FONT.semibold, fontStyle: 'italic' },
   badge: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.xl, backgroundColor: COLORS.savanna, borderWidth: 1, borderColor: COLORS.border },
   badgeText: { fontSize: FONT.sm, color: COLORS.textStrong, fontWeight: FONT.semibold },
   addPhotoTile: { backgroundColor: `${COLORS.primary}08`, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },

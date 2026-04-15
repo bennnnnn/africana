@@ -30,7 +30,6 @@ interface UserCardProps {
   user: User;
   isLiked: boolean;
   onLike: (userId: string) => void;
-  onMessage: (userId: string) => void;
   /** Runs before navigating to profile (e.g. set fullscreen browse order). */
   beforeNavigate?: () => void;
 }
@@ -39,7 +38,7 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH  = (width - 48) / 2;
 const CARD_HEIGHT = CARD_WIDTH * 1.45;
 
-export function UserCard({ user, isLiked, onLike, onMessage, beforeNavigate }: UserCardProps) {
+export function UserCard({ user, isLiked, onLike, beforeNavigate }: UserCardProps) {
   const photoUrl     = user.profile_photos?.[0] || user.avatar_url || null;
   const hasPhoto     = !!photoUrl;
   const initial      = (user.full_name || 'U').charAt(0).toUpperCase();

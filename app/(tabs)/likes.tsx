@@ -20,6 +20,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 type Tab = 'matches' | 'received' | 'sent' | 'viewers' | 'favourites';
 
 const PAGE_SIZE = 20;
+/** Refetch list on focus only if older than this (industry standard: avoid work on every tab switch). */
+const LIST_STALE_MS = 90_000;
 
 const TABS: { key: Tab; icon: string; activeIcon: string }[] = [
   { key: 'matches',    icon: 'flame-outline',       activeIcon: 'flame'        },
@@ -71,6 +73,7 @@ export default function LikesScreen() {
     matches: true, received: true, sent: true, viewers: true, favourites: true,
   });
   const blockedIdsRef = useRef<Set<string> | null>(null);
+  const lastListFetchAtRef = useRef<Partial<Record<Tab, number>>>({});
   const loadedTabsRef = useRef(loadedTabs);
   const pagesRef = useRef(pages);
   loadedTabsRef.current = loadedTabs;
@@ -194,22 +197,43 @@ export default function LikesScreen() {
       if (loadMore || force) {
         setPages((s) => ({ ...s, [targetTab]: currentPage + 1 }));
       }
+      lastListFetchAtRef.current[targetTab] = Date.now();
     } finally {
       setLoadingTabs((state) => ({ ...state, [targetTab]: false }));
     }
   }, [fetchBlockedSet, profileSelect, user]);
 
-  // Mark the current tab as seen — resets its badge to 0 and persists the timestamp
+  const fetchActivityCounts = useCallback(async (): Promise<Record<Tab, number> | null> => {
+    if (!user) return null;
+    const { data, error } = await supabase.rpc('activity_unseen_counts');
+    if (error || data == null) return null;
+    const d = data as Record<string, unknown>;
+    const next: Record<Tab, number> = {
+      matches: Number(d.matches) || 0,
+      received: Number(d.received) || 0,
+      sent: Number(d.sent) || 0,
+      viewers: Number(d.viewers) || 0,
+      favourites: Number(d.favourites) || 0,
+    };
+    setCounts(next);
+    return next;
+  }, [user]);
+
+  const fetchActivityCountsRef = useRef(fetchActivityCounts);
+  fetchActivityCountsRef.current = fetchActivityCounts;
+
+  // Mark the current tab as seen — resets its badge to 0 and persists *_seen_at (server counts use these).
   const markTabSeen = useCallback(async (t: Tab) => {
     if (!user) return;
     const now = new Date().toISOString();
-    const colMap: Partial<Record<Tab, string>> = {
-      received:   'likes_seen_at',
-      viewers:    'views_seen_at',
+    const colMap: Record<Tab, string> = {
+      matches: 'matches_seen_at',
+      received: 'likes_seen_at',
+      sent: 'sent_seen_at',
+      viewers: 'views_seen_at',
       favourites: 'favourites_seen_at',
     };
     const col = colMap[t];
-    if (!col) return; // matches + sent have no "new" badge
     setCounts((s) => ({ ...s, [t]: 0 }));
     await supabase.from('user_settings').update({ [col]: now }).eq('user_id', user.id);
   }, [user]);
@@ -217,22 +241,31 @@ export default function LikesScreen() {
   useEffect(() => {
     if (!user) return;
     blockedIdsRef.current = null;
-
-    const interactionHandle = InteractionManager.runAfterInteractions(() => {
-      loadTab(tab, true);
-    });
-
-    return () => {
-      interactionHandle.cancel();
-    };
   }, [user?.id]);
 
   useEffect(() => {
     if (!user) return;
-    loadTab(tab);
-    // Clear badge when user opens a tab with unseen activity
-    if (counts[tab] > 0) markTabSeen(tab);
-  }, [tab, user?.id]);
+    let cancelled = false;
+    let interactionHandle: { cancel: () => void } | undefined;
+    const openedTab = tab;
+
+    void (async () => {
+      const next = await fetchActivityCounts();
+      if (cancelled) return;
+      if (next && (next[openedTab] ?? 0) > 0 && !cancelled) {
+        await markTabSeen(openedTab);
+      }
+      if (cancelled) return;
+      interactionHandle = InteractionManager.runAfterInteractions(() => {
+        if (!cancelled) loadTab(openedTab);
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      interactionHandle?.cancel();
+    };
+  }, [tab, user?.id, loadTab, markTabSeen, fetchActivityCounts]);
 
   const tabRef = useRef(tab);
   tabRef.current = tab;
@@ -249,6 +282,8 @@ export default function LikesScreen() {
     if (!user) return;
 
     const debouncers: Partial<Record<Tab, ReturnType<typeof setTimeout>>> = {};
+    let countDebounce: ReturnType<typeof setTimeout> | null = null;
+
     const scheduleReload = (t: Tab) => {
       const prev = debouncers[t];
       if (prev) clearTimeout(prev);
@@ -257,9 +292,11 @@ export default function LikesScreen() {
       }, 200);
     };
 
-    const incrementIfHidden = (targetTab: Tab) => {
-      if (tabRef.current === targetTab) return;
-      setCounts((state) => ({ ...state, [targetTab]: state[targetTab] + 1 }));
+    const scheduleCountRefresh = () => {
+      if (countDebounce) clearTimeout(countDebounce);
+      countDebounce = setTimeout(() => {
+        void fetchActivityCountsRef.current();
+      }, 280);
     };
 
     const channel = supabase
@@ -269,13 +306,12 @@ export default function LikesScreen() {
         if (!row.from_user_id || !row.to_user_id) return;
 
         if (row.to_user_id === user.id) {
-          const isMatch = sentIdsRef.current.has(row.from_user_id);
-          incrementIfHidden(isMatch ? 'matches' : 'received');
+          scheduleCountRefresh();
           scheduleReload('received');
           scheduleReload('matches');
         }
         if (row.from_user_id === user.id) {
-          incrementIfHidden('sent');
+          scheduleCountRefresh();
           sentIdsRef.current.add(row.to_user_id);
           scheduleReload('sent');
           scheduleReload('matches');
@@ -284,19 +320,20 @@ export default function LikesScreen() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'profile_views' }, (payload) => {
         const row = payload.new as { viewed_id?: string };
         if (row.viewed_id !== user.id) return;
-        incrementIfHidden('viewers');
+        scheduleCountRefresh();
         scheduleReload('viewers');
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'favourites' }, (payload) => {
         const row = payload.new as { favourited_id?: string };
         if (row.favourited_id !== user.id) return;
-        incrementIfHidden('favourites');
+        scheduleCountRefresh();
         scheduleReload('favourites');
       })
       .subscribe();
 
     return () => {
       Object.values(debouncers).forEach((id) => id && clearTimeout(id));
+      if (countDebounce) clearTimeout(countDebounce);
       supabase.removeChannel(channel);
     };
   }, [user?.id]);
@@ -304,7 +341,11 @@ export default function LikesScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!user) return;
-      loadTab(tab, true);
+      void fetchActivityCountsRef.current();
+      const last = lastListFetchAtRef.current[tab] ?? 0;
+      if (Date.now() - last > LIST_STALE_MS) {
+        void loadTab(tab, true);
+      }
     }, [loadTab, tab, user?.id]),
   );
 
@@ -313,6 +354,7 @@ export default function LikesScreen() {
     setRefreshing(true);
     setPages((s) => ({ ...s, [tab]: 0 }));
     await loadTab(tab, true);
+    await fetchActivityCounts();
     setRefreshing(false);
   };
 
@@ -363,7 +405,9 @@ export default function LikesScreen() {
                 <Ionicons name={(active ? activeIcon : icon) as any} size={22} color={active ? COLORS.primary : COLORS.textSecondary} />
                 {counts[key] > 0 && (
                   <View style={[s.badge, active && s.badgeOn]}>
-                    <Text style={[s.badgeTxt, active && s.badgeTxtOn]}>{counts[key]}</Text>
+                    <Text style={[s.badgeTxt, active && s.badgeTxtOn]}>
+                      {counts[key] > 99 ? '99+' : counts[key]}
+                    </Text>
                   </View>
                 )}
               </TouchableOpacity>

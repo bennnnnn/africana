@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   StyleSheet,
   Dimensions,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { signInWithGoogle } from '@/lib/google-auth';
 import { useAuthStore } from '@/store/auth.store';
 import { COLORS } from '@/constants';
 import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
+import { appDialog } from '@/lib/app-dialog';
 
 const { height } = Dimensions.get('window');
 
@@ -38,7 +38,11 @@ export default function WelcomeScreen() {
       }
     } catch (e: any) {
       if (e?.message !== 'User cancelled') {
-        Alert.alert('Google Sign-In Failed', e?.message ?? 'Please try again.');
+        appDialog({
+          title: 'Google sign-in failed',
+          message: e?.message ?? 'Please try again.',
+          icon: 'logo-google',
+        });
       }
     } finally {
       setGoogleLoading(false);

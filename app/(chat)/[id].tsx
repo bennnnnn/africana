@@ -14,11 +14,14 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import {
   useChatStore,
+  getChatStoreState,
   ERROR_RECIPIENT_MESSAGES_DISABLED,
   ERROR_SENDER_MESSAGES_DISABLED,
 } from '@/store/chat.store';
 import { useDiscoverStore } from '@/store/discover.store';
 import { useDialog } from '@/components/ui/DialogProvider';
+import { ReportUserModal } from '@/components/ui/ReportUserModal';
+import { hasExistingReport } from '@/lib/social-actions';
 import { User, Message } from '@/types';
 import { COLORS, RADIUS, FONT, SHADOWS, DEFAULT_AVATAR } from '@/constants';
 import { getHiddenMessageIds, persistHiddenMessageIds } from '@/lib/hidden-messages';
@@ -53,7 +56,6 @@ let lastChatRouteKey: string | null = null;
 const { width } = Dimensions.get('window');
 /** Stable empty array so memoized rows are not invalidated every parent render. */
 const NO_REACTIONS: string[] = [];
-const REPORT_REASONS = ['Fake profile', 'Scam', 'Harassment', 'Nudity', 'Underage', 'Other'] as const;
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 function normalizeRouteParam(v: string | string[] | undefined): string | undefined {
@@ -90,6 +92,7 @@ export default function ChatScreen() {
   const [loading, setLoading]             = useState(true);
   const [messagingDisabled, setMessagingDisabled] = useState(false);
   const [menuVisible, setMenuVisible]     = useState(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
   const [isFavourite, setIsFavourite]     = useState(false);
   const menuAnim  = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList>(null);
@@ -98,6 +101,8 @@ export default function ChatScreen() {
   const pendingScrollModeRef = useRef<'none' | 'instant' | 'smooth'>('instant');
   const prevMessageCountRef = useRef(0);
   const prevLatestMessageKeyRef = useRef<string | undefined>(undefined);
+  /** After switching threads, scroll to bottom before paint so we never flash the wrong end of the list. */
+  const pendingInitialScrollRef = useRef(false);
   const [inputFocused, setInputFocused] = useState(false);
   // Unified overlay — one at a time; isOwn=true → own message (trash only), isOwn=false → other's (emojis + trash)
   const [msgSheet, setMsgSheet] = useState<{ messageId: string; isOwn: boolean } | null>(null);
@@ -182,7 +187,15 @@ export default function ChatScreen() {
     prevLatestMessageKeyRef.current = undefined;
     isNearBottomRef.current = true;
     pendingScrollModeRef.current = 'instant';
+    pendingInitialScrollRef.current = true;
+    setReportModalVisible(false);
   }, [conversationId]);
+
+  useLayoutEffect(() => {
+    if (!pendingInitialScrollRef.current || listItems.length === 0) return;
+    pendingInitialScrollRef.current = false;
+    flatListRef.current?.scrollToEnd({ animated: false });
+  }, [conversationId, listItems.length]);
 
   const scrollToBottom = useCallback((animated: boolean) => {
     requestAnimationFrame(() => {
@@ -258,9 +271,7 @@ export default function ChatScreen() {
     const switched = lastChatRouteKey !== routeKey;
     if (switched) lastChatRouteKey = routeKey;
 
-    const storePeer = useChatStore
-      .getState()
-      .conversations.find((c) => c.id === conversationId)?.other_user;
+    const storePeer = getChatStoreState().conversations.find((c) => c.id === conversationId)?.other_user;
     const snap = peerSnapshotByConversationId.get(conversationId);
     const seed = storePeer ?? snap ?? null;
 
@@ -302,25 +313,25 @@ export default function ChatScreen() {
         const mockUserId = conversationId.replace('mock-conv-', '');
         const mockUser = MOCK_USERS.find((u) => u.id === mockUserId);
         if (mockUser) setOtherUser(mockUser);
-        await fetchMessages(conversationId);
         setLoading(false);
+        await fetchMessages(conversationId);
         return;
       }
 
-      const seeded = useChatStore.getState().conversations.find((c) => c.id === conversationId);
+      const seeded = getChatStoreState().conversations.find((c) => c.id === conversationId);
       if (seeded?.other_user) {
         setOtherUser(seeded.other_user);
         setLoading(false);
         const otherId = seeded.other_user.id;
-        await Promise.all([
+        void markMessagesRead(conversationId, user.id);
+        const [, { data: privacy }] = await Promise.all([
           fetchMessages(conversationId),
-          markMessagesRead(conversationId, user.id),
+          supabase
+            .from('profiles')
+            .select('accepts_messages, online_visible, online_status')
+            .eq('id', otherId)
+            .maybeSingle(),
         ]);
-        const { data: privacy } = await supabase
-          .from('profiles')
-          .select('accepts_messages, online_visible, online_status')
-          .eq('id', otherId)
-          .maybeSingle();
         if (privacy?.accepts_messages === false) setMessagingDisabled(true);
         if (privacy && seeded.other_user) {
           const effectiveOnline =
@@ -336,6 +347,8 @@ export default function ChatScreen() {
         ? peerIdHintByConversationRef.current.get(conversationId)
         : undefined;
       if (peerFromRoute && peerFromRoute !== user.id) {
+        void fetchMessages(conversationId);
+        void markMessagesRead(conversationId, user.id);
         const { data: raw } = await supabase.from('profiles').select('*').eq('id', peerFromRoute).maybeSingle();
         if (raw) {
           const effectiveOnline =
@@ -343,12 +356,10 @@ export default function ChatScreen() {
           setOtherUser({ ...raw, online_status: effectiveOnline });
           if (raw.accepts_messages === false) setMessagingDisabled(true);
           setLoading(false);
-          await Promise.all([
-            fetchMessages(conversationId),
-            markMessagesRead(conversationId, user.id),
-          ]);
           return;
         }
+        setLoading(false);
+        return;
       }
 
       const [convResult] = await Promise.all([
@@ -356,6 +367,8 @@ export default function ChatScreen() {
         fetchMessages(conversationId),
         markMessagesRead(conversationId, user.id),
       ]);
+
+      setLoading(false);
 
       if (convResult.data) {
         const otherId = convResult.data.participant_ids.find((id: string) => id !== user.id);
@@ -369,7 +382,6 @@ export default function ChatScreen() {
           }
         }
       }
-      setLoading(false);
     };
 
     void init();
@@ -519,20 +531,27 @@ export default function ChatScreen() {
     }
   };
 
-  const handleReport = () => {
+  const handleReport = async () => {
     closeMenu();
     if (!user || !peer) return;
-    showDialog({
-      title: `Report ${peer.full_name}`,
-      message: 'Select a reason. Our team will review it.',
-      actions: REPORT_REASONS.map((reason) => ({
-        label: reason,
-        onPress: async () => {
-          await supabase.from('reports').insert({ reporter_id: user.id, reported_id: peer.id, reason });
-          showToast({ message: 'Report submitted' });
-        },
-      })),
-    });
+    try {
+      if (await hasExistingReport(user.id, peer.id)) {
+        showDialog({
+          title: 'Already reported',
+          message: 'You have already submitted a report for this user.',
+          actions: [{ label: 'OK', style: 'primary' }],
+        });
+        return;
+      }
+    } catch {
+      showDialog({
+        title: 'Something went wrong',
+        message: 'Could not check report status. Please try again.',
+        actions: [{ label: 'OK', style: 'primary' }],
+      });
+      return;
+    }
+    setReportModalVisible(true);
   };
 
   const composerBottomPad = keyboardHeight > 0 ? 10 : Math.max(insets.bottom, 10);
@@ -774,6 +793,15 @@ export default function ChatScreen() {
         </>
       )}
 
+      {user && peer ? (
+        <ReportUserModal
+          visible={reportModalVisible}
+          onClose={() => setReportModalVisible(false)}
+          reporterId={user.id}
+          reportedUserId={peer.id}
+          reportedUserName={peer.full_name ?? 'User'}
+        />
+      ) : null}
     </View>
   );
 }

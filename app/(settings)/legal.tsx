@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@/constants';
+import { COLORS, FONT } from '@/constants';
+import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 
 type Tab = 'privacy' | 'terms';
 
@@ -12,13 +11,7 @@ export default function LegalScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Legal</Text>
-        <View style={{ width: 24 }} />
-      </View>
+      <SettingsHeaderBar title="Legal" titleAlign="center" />
 
       {/* Tab switch */}
       <View style={s.tabs}>
@@ -156,17 +149,6 @@ function PrivacyContent() {
 }
 
 const s = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   tabs: {
     flexDirection: 'row',
     backgroundColor: '#FFF',
@@ -181,10 +163,10 @@ const s = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabBtnOn: { borderBottomColor: COLORS.primary },
-  tabText: { fontSize: 14, fontWeight: '500', color: COLORS.textSecondary },
-  tabTextOn: { color: COLORS.primary, fontWeight: '700' },
+  tabText: { fontSize: FONT.sm, fontWeight: FONT.medium, color: COLORS.textSecondary },
+  tabTextOn: { color: COLORS.primary, fontWeight: FONT.bold },
   content: { padding: 20, paddingBottom: 60 },
-  lastUpdated: { fontSize: 12, color: COLORS.textMuted, marginBottom: 20 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
-  body: { fontSize: 14, color: COLORS.textSecondary, lineHeight: 22 },
+  lastUpdated: { fontSize: FONT.xs, color: COLORS.textMuted, marginBottom: 20 },
+  sectionTitle: { fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.text, marginBottom: 6 },
+  body: { fontSize: FONT.sm, color: COLORS.textSecondary, lineHeight: 22 },
 });

@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -18,6 +17,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { COLORS } from '@/constants';
 import { getValidationState, validateEmail, validatePassword } from '@/lib/validation';
+import { appDialog } from '@/lib/app-dialog';
 
 export default function RegisterScreen() {
   const { fetchProfile, fetchSettings } = useAuthStore();
@@ -53,25 +53,28 @@ export default function RegisterScreen() {
 
     if (error) {
       if (error.message.includes('rate') || error.message.includes('limit')) {
-        Alert.alert(
-          'Too many attempts',
-          'You\'ve reached the email limit. Please wait 1 hour, or sign in with Google instead — it\'s instant! ⚡',
-          [
-            { text: 'Sign In with Google', onPress: () => router.replace('/(auth)/login') },
-            { text: 'OK', style: 'cancel' },
-          ]
-        );
+        appDialog({
+          title: 'Too many attempts',
+          message:
+            "You've reached the email limit. Please wait 1 hour, or sign in with Google instead — it's instant.",
+          icon: 'time-outline',
+          actions: [
+            { label: 'Sign in with Google', style: 'primary', onPress: () => router.replace('/(auth)/login') },
+            { label: 'OK', style: 'cancel' },
+          ],
+        });
       } else if (error.message.includes('already')) {
-        Alert.alert(
-          'Account exists',
-          'An account with this email already exists. Try signing in instead.',
-          [
-            { text: 'Sign In', onPress: () => router.replace('/(auth)/login') },
-            { text: 'Cancel', style: 'cancel' },
-          ]
-        );
+        appDialog({
+          title: 'Account exists',
+          message: 'An account with this email already exists. Try signing in instead.',
+          icon: 'person-outline',
+          actions: [
+            { label: 'Sign in', style: 'primary', onPress: () => router.replace('/(auth)/login') },
+            { label: 'Cancel', style: 'cancel' },
+          ],
+        });
       } else {
-        Alert.alert('Registration Failed', error.message);
+        appDialog({ title: 'Registration failed', message: error.message, icon: 'alert-circle-outline' });
       }
       return;
     }

@@ -2,11 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   Animated,
   ScrollView,
   TouchableOpacity,
   Pressable,
-  Alert,
   Platform,
   KeyboardAvoidingView,
   StyleSheet,
@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
 import { useAuthStore } from '@/store/auth.store';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -27,15 +28,17 @@ import { SelectOption, SelectPicker } from '@/components/ui/SelectPicker';
 import { RangeSlider as AgeRangeSlider, SliderPicker } from '@/components/ui/SliderPicker';
 import {
   COLORS,
+  FONT,
   GENDER_OPTIONS,
+  INTERESTED_IN_OPTIONS,
   RELIGION_OPTIONS,
   EDUCATION_OPTIONS,
   OCCUPATION_OPTIONS,
   PHYSICAL_CONDITION_OPTIONS,
   MARITAL_STATUS_OPTIONS,
-  WANT_CHILDREN_OPTIONS,
 } from '@/constants';
-import { Gender, InterestedIn, LookingFor, Religion, Education, MaritalStatus, WantChildren } from '@/types';
+import { Gender, LookingFor, Religion, Education, MaritalStatus, WantChildren } from '@/types';
+import { oppositeInterestedIn } from '@/lib/gender-match';
 import { ALL_COUNTRIES, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
 import {
   getValidationState,
@@ -44,26 +47,24 @@ import {
   validateOptionalText,
 } from '@/lib/validation';
 import { DEFAULT_MAX_AGE_PREFERENCE, DEFAULT_MIN_AGE_PREFERENCE } from '@/lib/utils';
+import { saveOnboardingSkippedHints } from '@/lib/post-onboarding-nudges';
+import { appDialog } from '@/lib/app-dialog';
 import { CultureOptionSet, getEthnicityOptions, getLanguageOptions } from '@/lib/cultural-data';
 
 const { width } = Dimensions.get('window');
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 const ACTIVE_COLOR = COLORS.success;
 
 const STEPS = [
-  { title: "What's your name?",         subtitle: 'Share your name and a little about yourself.',        bg: '#FFF3E0' },
-  { title: 'Tell us about yourself',    subtitle: 'Help others understand who you are.',                 bg: '#E8F5E9' },
-  { title: 'What are you looking for?', subtitle: 'Optional — you can skip and set this later in your profile.', bg: '#FCE4EC' },
-  { title: 'Work & study',              subtitle: 'Share your education and occupation.',                bg: '#E3F2FD' },
-  { title: 'Your preferences',          subtitle: 'Age range and marital status help guide matching.',   bg: '#F3E5F5' },
-  { title: 'More about you',            subtitle: 'Help others get to know you better.',              bg: '#EDE7F6' },
-  { title: 'Where do you live?',        subtitle: 'Your location helps people near you find you.',       bg: '#E0F7FA' },
-  { title: 'Add your best photo',       subtitle: 'Profiles with a photo get 6× more attention.',        bg: '#FFF8E1' },
-];
-
-const INTEREST_OPTIONS: { value: InterestedIn; label: string }[] = [
-  { value: 'women',    label: 'Women' },
-  { value: 'men',      label: 'Men' },
+  { title: "Welcome — let's meet you",  subtitle: 'Let\'s get to know you better.', bg: '#FFF3E0' },
+  { title: 'Birthday & identity',       subtitle: 'We use this to show you the right people and keep the community genuine.', bg: '#E8F5E9' },
+  { title: 'What are you looking for?',   subtitle: 'Select what kind of relationship you are looking for.', bg: '#FCE4EC' },
+  { title: 'What do you do?',              subtitle: 'School, job, or craft — it sparks great conversations.', bg: '#E3F2FD' },
+  { title: 'Your preferences',          subtitle: 'Age range and relationship status help surface compatible people.', bg: '#F3E5F5' },
+  { title: 'Faith & family',            subtitle: 'Religion and children — share what you’re comfortable with.', bg: '#EDE7F6' },
+  { title: 'physical attributes',             subtitle: 'How tall you are, your build, and weight if you like — separate from faith & family.', bg: '#E8EAF6' },
+  { title: 'Where do you live?',        subtitle: 'Tell us where you live so we can show you the right people.', bg: '#E0F7FA' },
+  { title: 'Add your best photo',       subtitle: 'A clear face photo helps you stand out — you can add more later.', bg: '#FFF8E1' },
 ];
 
 const LOOKING_FOR_OPTS = [
@@ -161,7 +162,6 @@ export default function OnboardingScreen() {
   // Step 2
   const [birthdate, setBirthdate]       = useState<Date | null>(null);
   const [gender, setGender]             = useState<Gender | null>(null);
-  const [interestedIn, setInterestedIn] = useState<InterestedIn | null>(null);
 
   // Step 3
   const [lookingFor, setLookingFor] = useState<LookingFor[]>([]);
@@ -177,11 +177,11 @@ export default function OnboardingScreen() {
   // Step 5 — preferences
   const [maritalStatus, setMaritalStatus] = useState<MaritalStatus | null>(null);
 
-  // Step 6 — background
+  // Step 6 — faith & family
   const [religion, setReligion]           = useState<Religion | null>(null);
   const [ethnicity, setEthnicity]         = useState('');
 
-  // Step 6 — physical (merged)
+  // Step 7 — height, body type, weight
   const [heightCm, setHeightCm]         = useState('');
   const [weightKg, setWeightKg]         = useState<number | null>(null);
   const [physicalCondition, setPhysicalCondition] = useState<string | null>(null);
@@ -196,6 +196,7 @@ export default function OnboardingScreen() {
   // Step 9
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [loading, setLoading]   = useState(false);
+  const [skippedMoreAboutStep, setSkippedMoreAboutStep] = useState(false);
   const [cultureEthnicityOptions, setCultureEthnicityOptions] = useState<CultureOptionSet | null>(null);
   const [cultureLanguageOptions, setCultureLanguageOptions] = useState<CultureOptionSet | null>(null);
   const [cultureOptionsLoading, setCultureOptionsLoading] = useState(false);
@@ -323,28 +324,28 @@ export default function OnboardingScreen() {
   };
 
   const uploadPhoto = async (uri: string): Promise<string | null> => {
-    try {
-      const fileName = `${params.userId}/${Date.now()}.jpg`;
-      const res  = await fetch(uri);
-      const blob = await res.blob();
-      const { error } = await supabase.storage.from('avatars').upload(fileName, blob, { contentType: 'image/jpeg' });
-      if (error) return null;
-      const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
-      return data.publicUrl;
-    } catch { return null; }
+    if (!params.userId) return null;
+    const out = await uploadToAvatarsBucket(params.userId, uri);
+    return 'error' in out ? null : out.publicUrl;
   };
 
   const handleFinish = async () => {
     if (!params.userId || !params.email) {
-      Alert.alert('Session error', 'Please go back and try again.');
+      appDialog({ title: 'Session error', message: 'Please go back and try again.', icon: 'alert-circle-outline' });
       return;
     }
     if (!firstNameValidation.valid) { setStep(1); markTouched('fullName'); return; }
-    if (!birthdate || !gender || !interestedIn) { Alert.alert('Incomplete', 'Please complete step 2.'); return; }
-    if (!location.country) { Alert.alert('Missing location', 'Please select your country.'); return; }
+    if (!birthdate || !gender) {
+      appDialog({ title: 'Incomplete', message: 'Please complete step 2.' });
+      return;
+    }
+    if (!location.country) {
+      appDialog({ title: 'Missing location', message: 'Please select your country.', icon: 'location-outline' });
+      return;
+    }
     if (!heightValidation.valid || !ethnicityValidation.valid) {
-      if (!heightValidation.valid) setStep(6);
-      else setStep(7);
+      if (!heightValidation.valid) setStep(7);
+      else setStep(8);
       markTouched('heightCm');
       markTouched('ethnicity');
       return;
@@ -359,7 +360,11 @@ export default function OnboardingScreen() {
       if (photoUri) {
         avatarUrl = await uploadPhoto(photoUri);
         if (!avatarUrl) {
-          Alert.alert('Photo upload failed', 'We could not upload your photo. You can add it later in your profile.');
+          appDialog({
+            title: 'Photo upload failed',
+            message: 'We could not upload your photo. You can add it later in your profile.',
+            icon: 'cloud-offline-outline',
+          });
         }
       }
 
@@ -371,7 +376,7 @@ export default function OnboardingScreen() {
         bio: bio.trim() || null,
         birthdate: birthdate.toISOString().split('T')[0],
         gender,
-        interested_in: interestedIn,
+        interested_in: oppositeInterestedIn(gender),
         looking_for: lookingFor,
         min_age_pref: minAgePref,
         max_age_pref: maxAgePref,
@@ -398,12 +403,26 @@ export default function OnboardingScreen() {
 
       if (error) {
         if (error.message.includes('security policy') || error.code === '42501') {
-          Alert.alert('One more step', 'Go to Supabase → Authentication → Email → turn OFF "Confirm email" → Save. Then try again.');
+          appDialog({
+            title: 'One more step',
+            message:
+              'Go to Supabase → Authentication → Email → turn OFF "Confirm email" → Save. Then try again.',
+            icon: 'settings-outline',
+          });
         } else {
-          Alert.alert('Error', error.message);
+          appDialog({ title: 'Something went wrong', message: error.message, icon: 'alert-circle-outline' });
         }
         return;
       }
+
+      await saveOnboardingSkippedHints({
+        bio: !bio.trim(),
+        photo: !avatarUrl,
+        goals: lookingFor.length === 0,
+        work: !education && !occupation?.trim(),
+        moreDetails: skippedMoreAboutStep,
+      });
+
       // Load the new profile into the store before navigating
       await Promise.all([
         fetchProfile(params.userId),
@@ -417,16 +436,21 @@ export default function OnboardingScreen() {
 
   const canProceed = () => {
     if (step === 1) return firstNameValidation.valid;
-    if (step === 2) return birthdate !== null && gender !== null && interestedIn !== null;
+    if (step === 2) return birthdate !== null && gender !== null;
     if (step === 3) return true;
     if (step === 4) return true;
     if (step === 5) return true;
-    if (step === 6) return heightValidation.valid;
-    if (step === 7) return !!location.country;
+    if (step === 6) return true;
+    if (step === 7) return heightValidation.valid;
+    if (step === 8) return !!location.country;
     return true;
   };
 
-  const goNext = () => step < TOTAL_STEPS ? setStep(step + 1) : handleFinish();
+  const goNext = () => {
+    if (step === 6) setSkippedMoreAboutStep(false);
+    if (step < TOTAL_STEPS) setStep(step + 1);
+    else handleFinish();
+  };
   const cur = STEPS[step - 1];
 
   return (
@@ -479,20 +503,27 @@ export default function OnboardingScreen() {
                 error={touched.fullName ? firstNameValidation.message : undefined}
                 autoFocus
               />
-              <Input
-                label="Tell us about you (optional)"
-                value={bio}
-                onChangeText={setBio}
-                placeholder="Share something about yourself..."
-                multiline
-                numberOfLines={4}
-                maxLength={300}
-                leftIcon="create-outline"
-                validationState={bio.trim() ? 'success' : 'default'}
-              />
-              <Text style={{ fontSize: 11, color: COLORS.textMuted, marginTop: -6, textAlign: 'right' }}>
-                {bio.length}/300
-              </Text>
+              
+              <View style={{ marginBottom: 8 }}>
+                <Text style={s.label}>Tell us about you</Text>
+                <Text style={s.bioHelper}>
+                    This helps us match you with the right people.
+                </Text>
+                <View style={s.bioFieldOuter}>
+                  <Ionicons name="create-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 10, marginTop: 2 }} />
+                  <TextInput
+                    value={bio}
+                    onChangeText={setBio}
+                    placeholder="e.g. I love jazz, cooking, and honest conversation."
+                    placeholderTextColor={COLORS.textMuted}
+                    multiline
+                    maxLength={300}
+                    textAlignVertical="top"
+                    style={s.bioInput}
+                  />
+                </View>
+                <Text style={s.bioCounter}>{bio.length}/300</Text>
+              </View>
             </View>
           )}
 
@@ -512,14 +543,28 @@ export default function OnboardingScreen() {
                 ))}
               </View>
 
-              <Text style={[s.label, { marginTop: 20 }]}>Interested in</Text>
-              <View style={s.row}>
-                {INTEREST_OPTIONS.map((opt) => (
-                  <Pressable key={opt.value} onPress={() => setInterestedIn(opt.value)} style={[s.bigChip, interestedIn === opt.value && s.chipOn]}>
-                    <Text style={[s.chipTxt, interestedIn === opt.value && s.chipTxtOn]}>{opt.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
+              {gender === 'male' || gender === 'female' ? (
+                <View style={{ marginTop: 22 }}>
+                  <Text style={s.label}> I want to meet</Text>
+                  <View style={s.row}>
+                    {INTERESTED_IN_OPTIONS.map((opt) => {
+                      const selected = oppositeInterestedIn(gender) === opt.value;
+                      return (
+                        <View
+                          key={opt.value}
+                          style={[s.bigChip, selected && s.chipOn]}
+                          accessibilityState={{ selected }}
+                        >
+                          <Text style={[s.chipTxt, selected && s.chipTxtOn]}>{opt.label}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                  <Text style={{ marginTop: 12, fontSize: 13, color: COLORS.textSecondary, lineHeight: 19 }}>
+                   
+                  </Text>
+                </View>
+              ) : null}
             </View>
           )}
 
@@ -551,7 +596,7 @@ export default function OnboardingScreen() {
           {step === 4 && (
             <View>
               <SelectPicker
-                label="Highest Education"
+                label="Highest Education you have achieved"
                 placeholder="Select education level..."
                 options={EDUCATION_OPTIONS}
                 value={education}
@@ -588,8 +633,8 @@ export default function OnboardingScreen() {
                 }}
               />
               <SelectPicker
-                label="Marital Status"
-                placeholder="Select marital status..."
+                label="Your marital Status"
+                placeholder="Select your marital status..."
                 options={MARITAL_STATUS_OPTIONS}
                 value={maritalStatus}
                 onChange={(v) => setMaritalStatus(v as MaritalStatus | null)}
@@ -599,12 +644,12 @@ export default function OnboardingScreen() {
           )}
 
           {/* ════════════════════════════════════════
-              STEP 6 — Background & Physical (merged)
+              STEP 6 — Faith & family
           ════════════════════════════════════════ */}
           {step === 6 && (
             <View>
               <SelectPicker
-                label="Religion"
+                label="What is your religion?"
                 placeholder="Select your religion..."
                 options={RELIGION_OPTIONS}
                 value={religion}
@@ -630,8 +675,14 @@ export default function OnboardingScreen() {
                 onSelect={(v) => setWantChildren(v as WantChildren | null)}
                 stretch
               />
+            </View>
+          )}
 
-              <View style={s.divider} />
+          {/* ════════════════════════════════════════
+              STEP 7 — Height, body type, weight
+          ════════════════════════════════════════ */}
+          {step === 7 && (
+            <View>
               <SliderPicker
                 label="Height"
                 value={heightCm ? Number(heightCm) : 170}
@@ -682,14 +733,13 @@ export default function OnboardingScreen() {
                   </TouchableOpacity>
                 </View>
               )}
-
             </View>
           )}
 
           {/* ════════════════════════════════════════
-              STEP 7 — Location
+              STEP 8 — Location
           ════════════════════════════════════════ */}
-          {step === 7 && (
+          {step === 8 && (
             <View>
               <LocationPicker value={location} onChange={handleLivingLocationChange} />
 
@@ -779,9 +829,9 @@ export default function OnboardingScreen() {
           )}
 
           {/* ════════════════════════════════════════
-              STEP 8 — Photo
+              STEP 9 — Photo
           ════════════════════════════════════════ */}
-          {step === 8 && (
+          {step === 9 && (
             <View style={{ alignItems: 'center' }}>
               <TouchableOpacity onPress={pickPhoto} activeOpacity={0.9} style={s.photoBox}>
                 {photoUri ? (
@@ -819,13 +869,21 @@ export default function OnboardingScreen() {
               disabled={!canProceed()}
             />
             {step === 3 && (
-              <Button title="Skip for now" variant="ghost" onPress={() => setStep(step + 1)} fullWidth />
+              <Button title="Skip for now — I’ll add this later" variant="ghost" onPress={() => setStep(step + 1)} fullWidth />
             )}
             {step === 6 && (
-              <Button title="Skip for now" variant="ghost" onPress={() => setStep(step + 1)} fullWidth />
+              <Button
+                title="Skip for now — I’ll add this later"
+                variant="ghost"
+                onPress={() => {
+                  setSkippedMoreAboutStep(true);
+                  setStep(step + 1);
+                }}
+                fullWidth
+              />
             )}
             {step === TOTAL_STEPS && !photoUri && (
-              <Button title="Skip photo for now" variant="ghost" onPress={handleFinish} fullWidth loading={loading} />
+              <Button title="Skip photo — add one from my profile" variant="ghost" onPress={handleFinish} fullWidth loading={loading} />
             )}
           </View>
         </ScrollView>
@@ -859,4 +917,19 @@ const s = StyleSheet.create({
   divider:    { height: 1, backgroundColor: COLORS.border, marginVertical: 16 },
   hint:       { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
   photoBox:   { width: width * 0.6, height: width * 0.75, borderRadius: 28, backgroundColor: COLORS.savanna, borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.earthLight, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  bioHelper:  { fontSize: 13, color: COLORS.textSecondary, lineHeight: 20, marginBottom: 12 },
+  bioFieldOuter: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    backgroundColor: COLORS.inputBg,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
+    minHeight: 148,
+  },
+  bioInput:   { flex: 1, fontSize: FONT.md, color: COLORS.text, minHeight: 120, lineHeight: 22 },
+  bioCounter: { fontSize: 11, color: COLORS.textMuted, marginTop: 8, textAlign: 'right' },
 });

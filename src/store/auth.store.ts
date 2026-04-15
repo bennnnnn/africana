@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { Session } from '@supabase/supabase-js';
-import { User, UserSettings } from '@/types';
+import { User, UserSettings, InterestedIn } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { oppositeInterestedIn } from '@/lib/gender-match';
 
 interface AuthState {
   session: Session | null;
@@ -19,7 +20,9 @@ interface AuthState {
   fetchProfile: (userId: string) => Promise<void>;
   fetchSettings: (userId: string) => Promise<void>;
   updateProfile: (updates: Partial<User>) => Promise<void>;
-  updateSettings: (updates: Partial<UserSettings>) => Promise<void>;
+  updateSettings: (
+    updates: Partial<UserSettings>,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>;
   signOut: () => Promise<void>;
 }
 
@@ -58,7 +61,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       ? today.getFullYear() - bday.getFullYear()
         - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
       : undefined;
-    set({ user: { ...data, age, profile_photos: data.profile_photos ?? [], languages: data.languages ?? [], hobbies: data.hobbies ?? [] } });
+
+    let interested_in = data.interested_in as InterestedIn;
+    if (data.gender === 'male' || data.gender === 'female') {
+      const aligned = oppositeInterestedIn(data.gender);
+      if (data.interested_in !== aligned) {
+        void supabase.from('profiles').update({ interested_in: aligned }).eq('id', userId);
+      }
+      interested_in = aligned;
+    }
+
+    set({
+      user: {
+        ...data,
+        interested_in,
+        age,
+        profile_photos: data.profile_photos ?? [],
+        languages: data.languages ?? [],
+        hobbies: data.hobbies ?? [],
+      },
+    });
   },
 
   fetchSettings: async (userId) => {
@@ -86,6 +108,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         likes_seen_at: null,
         views_seen_at: null,
         favourites_seen_at: null,
+        matches_seen_at: null,
+        sent_seen_at: null,
       };
       const { data: created } = await supabase
         .from('user_settings')
@@ -115,7 +139,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   updateSettings: async (updates) => {
     const { user, settings } = get();
-    if (!user) return;
+    if (!user) return { ok: false as const, message: 'Not signed in' };
 
     const previous = settings;
     const merged = { ...(settings ?? {}), ...updates, user_id: user.id };
@@ -131,7 +155,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.error('[updateSettings]', error.message);
       set({ settings: previous });
       await get().fetchSettings(user.id);
-      return;
+      return { ok: false as const, message: error.message || 'Could not save settings' };
     }
     if (data) {
       set({ settings: data });
@@ -143,6 +167,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         void get().fetchProfile(user.id);
       }
     }
+    return { ok: true as const };
   },
 
   signOut: async () => {

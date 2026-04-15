@@ -10,12 +10,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useDiscoverStore } from '@/store/discover.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
-import { useChatStore } from '@/store/chat.store';
 import { UserCard } from '@/components/discover/UserCard';
 import { FilterSheet } from '@/components/discover/FilterSheet';
 import { MatchModal } from '@/components/ui/MatchModal';
-import { COLORS, RADIUS, FONT, SHADOWS } from '@/constants';
+import { PostOnboardingProfileBanner } from '@/components/profile/PostOnboardingProfileBanner';
+import { COLORS, RADIUS, FONT } from '@/constants';
 import { User } from '@/types';
+import {
+  loadOnboardingSkippedHints,
+  clearOnboardingSkippedHints,
+  type SkippedOnboardingHints,
+} from '@/lib/post-onboarding-nudges';
+import { useDialog } from '@/components/ui/DialogProvider';
 
 const HEADER_HEIGHT = 64; // height of the header content row (excludes status bar)
 
@@ -25,24 +31,12 @@ export default function DiscoverScreen() {
   const { user } = useAuthStore();
   const { users, isLoading, hasMore, filters, fetchUsers, fetchLikedUserIds, toggleLike, likedUserIds, setFilters, resetFilters, subscribeToOnlineStatus, unsubscribeFromOnlineStatus } =
     useDiscoverStore();
-  const { getOrCreateConversation } = useChatStore();
   const [showFilters, setShowFilters] = useState(false);
   const [refreshing, setRefreshing]   = useState(false);
   const [matchUser, setMatchUser]     = useState<User | null>(null);
   const [localBlocked, setLocalBlocked] = useState<Set<string>>(new Set());
-
-  // ── Toast ────────────────────────────────────────────────────────────────────
-  const toastAnim = useRef(new Animated.Value(0)).current;
-  const [toast, setToast] = useState<{ icon: string; msg: string } | null>(null);
-  const showToast = (icon: string, msg: string) => {
-    setToast({ icon, msg });
-    toastAnim.setValue(0);
-    Animated.sequence([
-      Animated.timing(toastAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.delay(1500),
-      Animated.timing(toastAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
-    ]).start(() => setToast(null));
-  };
+  const [postOnboardHints, setPostOnboardHints] = useState<SkippedOnboardingHints | null>(null);
+  const { showToast } = useDialog();
 
   // ── Scroll-driven header animations ─────────────────────────────────────────
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -77,8 +71,32 @@ export default function DiscoverScreen() {
   useFocusEffect(
     useCallback(() => {
       if (user) fetchLikedUserIds(user.id);
+      loadOnboardingSkippedHints().then(setPostOnboardHints);
     }, [fetchLikedUserIds, user?.id]),
   );
+
+  const postOnboardReminders = useMemo(() => {
+    if (!postOnboardHints || !user) return [];
+    const r: string[] = [];
+    if (postOnboardHints.bio && !user.bio?.trim()) r.push('a short bio');
+    if (postOnboardHints.photo && !user.avatar_url && !(user.profile_photos?.length)) r.push('a profile photo');
+    if (postOnboardHints.goals && !(user.looking_for?.length)) r.push('what you’re looking for');
+    if (postOnboardHints.work && !user.education && !user.occupation?.trim()) r.push('work and education');
+    if (
+      postOnboardHints.moreDetails &&
+      (user.religion == null || user.has_children === null || user.want_children == null)
+    ) {
+      r.push('a bit more background (religion, family plans, etc.)');
+    }
+    return r;
+  }, [postOnboardHints, user]);
+
+  useEffect(() => {
+    if (!postOnboardHints) return;
+    if (postOnboardReminders.length === 0) {
+      clearOnboardingSkippedHints().then(() => setPostOnboardHints(null));
+    }
+  }, [postOnboardHints, postOnboardReminders]);
 
   const handleRefresh = useCallback(async () => {
     if (!user) return;
@@ -89,14 +107,6 @@ export default function DiscoverScreen() {
 
   const handleLoadMore = () => {
     if (!isLoading && hasMore && user) fetchUsers(user.id, user.interested_in, false, agePref);
-  };
-
-  const handleMessage = async (toUserId: string) => {
-    if (!user) return;
-    const convId = await getOrCreateConversation(user.id, toUserId);
-    if (convId) {
-      router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: toUserId } });
-    }
   };
 
   const browseOrderIds = useMemo(
@@ -124,6 +134,7 @@ export default function DiscoverScreen() {
         numColumns={2}
         style={{ flex: 1 }}
         contentContainerStyle={{
+          flexGrow: 1,
           paddingTop: totalHeaderHeight + 8,
           paddingHorizontal: 16,
           paddingBottom: tabBarHeight + 16,
@@ -149,6 +160,18 @@ export default function DiscoverScreen() {
             progressViewOffset={totalHeaderHeight}
           />
         }
+        ListHeaderComponent={
+          postOnboardReminders.length > 0 ? (
+            <PostOnboardingProfileBanner
+              reminders={postOnboardReminders}
+              onProfilePress={() => router.push('/(tabs)/me')}
+              onDismiss={async () => {
+                await clearOnboardingSkippedHints();
+                setPostOnboardHints(null);
+              }}
+            />
+          ) : null
+        }
         renderItem={({ item }) => (
           localBlocked.has(item.id) ? null : (
             <UserCard
@@ -161,12 +184,14 @@ export default function DiscoverScreen() {
                 const isMatch = await toggleLike(user.id, id);
                 if (isMatch && !wasLiked) {
                   setMatchUser(users.find((u) => u.id === id) ?? null);
-                  showToast('🔥', "It's a match!");
+                  showToast({ message: "It's a match!", icon: 'flame' });
                 } else {
-                  showToast(wasLiked ? '💔' : '❤️', wasLiked ? 'Unliked' : 'Liked!');
+                  showToast({
+                    message: wasLiked ? 'Unliked' : 'Liked!',
+                    icon: wasLiked ? 'heart-dislike-outline' : 'heart',
+                  });
                 }
               }}
-              onMessage={handleMessage}
             />
           )
         )}
@@ -192,9 +217,15 @@ export default function DiscoverScreen() {
           ) : null
         }
         ListFooterComponent={
-          isLoading ? (
+          users.length === 0 ? null : isLoading && hasMore ? (
             <View style={{ paddingVertical: 20, alignItems: 'center' }}>
               <ActivityIndicator size="small" color={COLORS.primary} />
+            </View>
+          ) : !hasMore ? (
+            <View style={{ paddingVertical: 28, alignItems: 'center', paddingHorizontal: 16 }}>
+              <Text style={{ fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.textSecondary }}>
+                All caught up
+              </Text>
             </View>
           ) : null
         }
@@ -237,17 +268,6 @@ export default function DiscoverScreen() {
       />
 
       <MatchModal visible={!!matchUser} matchedUser={matchUser} onClose={() => setMatchUser(null)} />
-
-      {/* ── Toast ── */}
-      {toast && (
-        <Animated.View pointerEvents="none" style={[
-          s.toast,
-          { opacity: toastAnim, transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }] },
-        ]}>
-          <Text style={{ fontSize: 18 }}>{toast.icon}</Text>
-          <Text style={{ color: COLORS.white, fontSize: 14, fontWeight: FONT.semibold }}>{toast.msg}</Text>
-        </Animated.View>
-      )}
     </View>
   );
 }
@@ -295,17 +315,5 @@ const s = StyleSheet.create({
     fontSize: FONT.sm,
     fontWeight: FONT.semibold,
     color: COLORS.earth,
-  },
-  toast: {
-    position: 'absolute',
-    top: 90,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: COLORS.toastBg,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
-    borderRadius: RADIUS.full,
   },
 });

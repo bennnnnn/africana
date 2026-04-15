@@ -3,19 +3,17 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Alert,
   Modal,
   ActivityIndicator,
   Animated,
   StyleSheet,
-  Share,
   Pressable,
   PanResponder,
   FlatList,
   useWindowDimensions,
   StatusBar,
-  Platform,
   InteractionManager,
+  LayoutChangeEvent,
 } from 'react-native';
 import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -33,14 +31,22 @@ import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { User } from '@/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, DEFAULT_AVATAR, FONT, GENDER_OPTIONS, INTERESTED_IN_OPTIONS, RELIGION_OPTIONS, EDUCATION_OPTIONS, MARITAL_STATUS_OPTIONS, LOOKING_FOR_OPTIONS, WANT_CHILDREN_YES_NO, OCCUPATION_OPTIONS, PHYSICAL_CONDITION_OPTIONS, RADIUS, SHADOWS } from '@/constants';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Avatar } from '@/components/ui/Avatar';
 import { MatchModal } from '@/components/ui/MatchModal';
 import { calculateAge, getEffectiveAgePreferenceRange } from '@/lib/utils';
+import {
+  getProfileStrength,
+  isProfileCompleteForDiscover,
+  onboardingHrefFromSession,
+} from '@/lib/profile-completion';
+import { oppositeInterestedIn } from '@/lib/gender-match';
+import { ProfileSectionChips } from '@/components/profile/ProfileSectionChips';
+import { ProfileCompletionNudgeBanner } from '@/components/profile/ProfileCompletionNudgeBanner';
+import { useDialog } from '@/components/ui/DialogProvider';
+import { ReportUserModal } from '@/components/ui/ReportUserModal';
+import { hasExistingReport } from '@/lib/social-actions';
 
 const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female' };
-const REPORT_REASONS = ['Fake profile', 'Scam', 'Harassment', 'Nudity', 'Underage', 'Other'] as const;
 const profileGalleryCache = new Map<string, string[]>();
 const prefetchedPhotoUris = new Set<string>();
 
@@ -124,6 +130,14 @@ function useProfileGalleryPhotos(userId: string | null) {
       setLoading(false);
       return;
     }
+    const cached = profileGalleryCache.get(userId);
+    if (cached && cached.length > 0) {
+      setPhotos(cached);
+      setLoading(false);
+      void warmPhotoUris(cached.slice(0, 4));
+      return;
+    }
+
     setLoading(true);
     void supabase
       .from('profiles')
@@ -144,8 +158,10 @@ function useProfileGalleryPhotos(userId: string | null) {
             : data.avatar_url
               ? [data.avatar_url]
               : [`${DEFAULT_AVATAR}${encodeURIComponent((data.full_name ?? '?').charAt(0))}`];
+        profileGalleryCache.set(userId, list);
         setPhotos(list);
         setLoading(false);
+        void warmPhotoUris(list.slice(0, 4));
       });
     return () => {
       cancelled = true;
@@ -171,6 +187,8 @@ function ProfilePhotoGalleryPage({
   onHorizontalIndexChange: (i: number) => void;
 }) {
   const { photos, loading } = useProfileGalleryPhotos(userId);
+  const listRef = useRef<FlatList<string>>(null);
+  const scrollSyncedRef = useRef<{ userId: string; index: number } | null>(null);
   const clampedIndex = Math.min(activePhotoIndex, Math.max(photos.length - 1, 0));
 
   useEffect(() => {
@@ -179,6 +197,17 @@ function ProfilePhotoGalleryPage({
       onHorizontalIndexChange(clampedIndex);
     }
   }, [activePhotoIndex, clampedIndex, loading, onHorizontalIndexChange]);
+
+  useEffect(() => {
+    if (loading || photos.length === 0) return;
+    const idx = Math.min(activePhotoIndex, photos.length - 1);
+    const s = scrollSyncedRef.current;
+    if (s?.userId === userId && s.index === idx) return;
+    scrollSyncedRef.current = { userId, index: idx };
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({ index: idx, animated: false });
+    });
+  }, [loading, photos.length, userId, activePhotoIndex]);
 
   if (loading) {
     return (
@@ -193,14 +222,46 @@ function ProfilePhotoGalleryPage({
 
   return (
     <View style={{ width: winWidth, height: winHeight, backgroundColor: '#000' }}>
-      <View style={{ width: winWidth, height: winHeight, justifyContent: 'center', alignItems: 'center' }}>
-        <Image
-          source={{ uri: photos[clampedIndex] }}
-          style={{ width: winWidth, height: winHeight }}
-          contentFit="cover"
-          transition={180}
-        />
-      </View>
+      <FlatList
+        ref={listRef}
+        data={photos}
+        keyExtractor={(uri, i) => `${uri}-${i}`}
+        horizontal
+        pagingEnabled
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        removeClippedSubviews={false}
+        initialScrollIndex={Math.min(activePhotoIndex, photos.length - 1)}
+        getItemLayout={(_, index) => ({
+          length: winWidth,
+          offset: winWidth * index,
+          index,
+        })}
+        onMomentumScrollEnd={(e) => {
+          const i = Math.round(e.nativeEvent.contentOffset.x / winWidth);
+          const next = Math.max(0, Math.min(i, photos.length - 1));
+          scrollSyncedRef.current = { userId, index: next };
+          if (next !== activePhotoIndex) {
+            onHorizontalIndexChange(next);
+          }
+        }}
+        onScrollToIndexFailed={(info) => {
+          requestAnimationFrame(() => {
+            listRef.current?.scrollToIndex({ index: info.index, animated: false });
+          });
+        }}
+        renderItem={({ item: uri }) => (
+          <View style={{ width: winWidth, height: winHeight }}>
+            <Image
+              source={{ uri }}
+              style={{ width: winWidth, height: winHeight }}
+              contentFit="cover"
+              transition={180}
+            />
+          </View>
+        )}
+      />
       {photos.length > 1 ? (
         <View
           pointerEvents="none"
@@ -238,7 +299,7 @@ function ReadOnlyRow({ icon, label, value, isLast }: {
   return (
     <View style={[pr.fieldRow, isLast && pr.fieldRowLast]}>
       <View style={[pr.fieldIcon, !filled && pr.fieldIconEmpty]}>
-        <Ionicons name={icon} size={16} color={filled ? COLORS.primary : COLORS.textMuted} />
+        <Ionicons name={icon} size={16} color={filled ? COLORS.primary : COLORS.emptyField} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={pr.fieldLabel}>{label}</Text>
@@ -268,13 +329,27 @@ export default function ProfileViewScreen() {
   const photoParam = normalizeParam(rawPhoto);
   const routeWantsPhotoViewer = viewerParam === '1';
   const routePhotoIndex = Math.max(0, Number.parseInt(photoParam ?? '0', 10) || 0);
-  const { user: currentUser } = useAuthStore();
+  const { user: currentUser, session } = useAuthStore();
+  const profileScrollRef = useRef<ScrollView>(null);
+  const sectionY = useRef<Record<string, number>>({});
+  const [strengthBannerDismissed, setStrengthBannerDismissed] = useState(false);
+
+  const captureSectionLayout = (key: string) => (e: LayoutChangeEvent) => {
+    sectionY.current[key] = e.nativeEvent.layout.y;
+  };
+
+  const scrollToProfileSection = useCallback((key: string) => {
+    const y = sectionY.current[key];
+    if (y == null) return;
+    profileScrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+  }, []);
   const { getOrCreateConversation } = useChatStore();
   const { likedUserIds, toggleLike, fetchLikedUserIds } = useDiscoverStore();
+  const { showDialog } = useDialog();
   const insets = useSafeAreaInsets();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
-  const heroPhotoScrollRef = useRef<FlatList<string> | null>(null);
+  const heroPhotoScrollRef = useRef<ScrollView>(null);
   const prevProfileIdInPhotoViewerRef = useRef<string | null>(null);
   const photoViewerSwipeX = useRef(new Animated.Value(0)).current;
   const photoViewerSwipeY = useRef(new Animated.Value(0)).current;
@@ -290,9 +365,6 @@ export default function ProfileViewScreen() {
   const [isFavourite, setIsFavourite] = useState(false);
   const [compatibilityExpanded, setCompatibilityExpanded] = useState(false);
   const [reportPromptVisible, setReportPromptVisible] = useState(false);
-  const [selectedReportReason, setSelectedReportReason] = useState<typeof REPORT_REASONS[number] | null>(null);
-  const [reportValidationVisible, setReportValidationVisible] = useState(false);
-  const [blockPromptVisible, setBlockPromptVisible] = useState(false);
 
   // Toast
   const toastAnim = useRef(new Animated.Value(0)).current;
@@ -311,9 +383,11 @@ export default function ProfileViewScreen() {
     setCompatibilityExpanded(false);
     setIsFavourite(false);
     setReportPromptVisible(false);
-    setSelectedReportReason(null);
-    setReportValidationVisible(false);
-    setBlockPromptVisible(false);
+    setStrengthBannerDismissed(false);
+    setPhotoIndex(0);
+    requestAnimationFrame(() => {
+      heroPhotoScrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+    });
   }, [id]);
 
   useEffect(() => {
@@ -339,6 +413,13 @@ export default function ProfileViewScreen() {
             - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
           : undefined;
         setProfile({ ...mock, age, profile_photos: mock.profile_photos ?? [], languages: mock.languages ?? [] });
+        if (mock) {
+          const plist =
+            mock.profile_photos && mock.profile_photos.length > 0
+              ? mock.profile_photos
+              : buildFallbackPhotoList(mock.full_name, mock.avatar_url);
+          profileGalleryCache.set(id, plist);
+        }
       }
       setIsLoading(false);
       return;
@@ -363,10 +444,14 @@ export default function ProfileViewScreen() {
             ? today.getFullYear() - bday.getFullYear()
               - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
             : undefined;
+          const pphotos = data.profile_photos ?? [];
+          const galleryList =
+            pphotos.length > 0 ? pphotos : buildFallbackPhotoList(data.full_name, data.avatar_url);
+          profileGalleryCache.set(id, galleryList);
           setProfile({
             ...data,
             age,
-            profile_photos: data.profile_photos ?? [],
+            profile_photos: pphotos,
             languages: data.languages ?? [],
             looking_for: data.looking_for ?? [],
             hobbies: data.hobbies ?? [],
@@ -396,10 +481,12 @@ export default function ProfileViewScreen() {
     });
   }, [profile?.id, currentUser?.id]);
 
+  // Hydrate likes once if Discover (or elsewhere) has not already loaded them.
   useEffect(() => {
-    if (!currentUser?.id || !id || currentUser.id === id || String(id).startsWith('mock-')) return;
+    if (!currentUser?.id) return;
+    if (useDiscoverStore.getState().likedUserIds.size > 0) return;
     void fetchLikedUserIds(currentUser.id);
-  }, [currentUser?.id, id, fetchLikedUserIds]);
+  }, [currentUser?.id, fetchLikedUserIds]);
 
   useEffect(() => {
     if (!currentUser || !profile || currentUser.id === profile.id) return;
@@ -447,7 +534,10 @@ export default function ProfileViewScreen() {
   useEffect(() => {
     const idsToWarm = adjacentBrowse.pages.filter(Boolean);
     if (idsToWarm.length === 0) return;
-    void Promise.allSettled(idsToWarm.map((uid) => loadProfilePhotoList(uid)));
+    const handle = InteractionManager.runAfterInteractions(() => {
+      void Promise.allSettled(idsToWarm.map((uid) => loadProfilePhotoList(uid)));
+    });
+    return () => handle.cancel();
   }, [adjacentBrowse.pages.join('|')]);
 
   useEffect(() => {
@@ -520,37 +610,20 @@ export default function ProfileViewScreen() {
   const photoViewerPanResponder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_, gestureState) =>
       photoViewerVisible &&
-      (Math.abs(gestureState.dy) > 16 || Math.abs(gestureState.dx) > 16),
+      Math.abs(gestureState.dy) > Math.abs(gestureState.dx) &&
+      Math.abs(gestureState.dy) > 14,
     onPanResponderGrant: () => {
       photoViewerSwipeX.stopAnimation();
       photoViewerSwipeY.stopAnimation();
     },
     onPanResponderMove: (_, gestureState) => {
-      const horizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
-      if (horizontal) {
-        const clampedX = Math.max(-120, Math.min(120, gestureState.dx * 0.35));
-        photoViewerSwipeX.setValue(clampedX);
-        photoViewerSwipeY.setValue(0);
-      } else {
-        const clampedY = Math.max(-120, Math.min(120, gestureState.dy * 0.38));
-        photoViewerSwipeY.setValue(clampedY);
-        photoViewerSwipeX.setValue(0);
-      }
+      const clampedY = Math.max(-120, Math.min(120, gestureState.dy * 0.38));
+      photoViewerSwipeY.setValue(clampedY);
+      photoViewerSwipeX.setValue(0);
     },
     onPanResponderRelease: (_, gestureState) => {
       const horizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
       if (horizontal) {
-        const triggerX = 56;
-        if (gestureState.dx <= -triggerX && viewerPhotoIndex < photos.length - 1) {
-          setViewerPhotoIndex((prev) => prev + 1);
-          resetPhotoViewerSwipe();
-          return;
-        }
-        if (gestureState.dx >= triggerX && viewerPhotoIndex > 0) {
-          setViewerPhotoIndex((prev) => prev - 1);
-          resetPhotoViewerSwipe();
-          return;
-        }
         resetPhotoViewerSwipe();
         return;
       }
@@ -578,12 +651,10 @@ export default function ProfileViewScreen() {
     galleryHasPrevProfile,
     goNextProfileInGallery,
     goPrevProfileInGallery,
-    photos.length,
     photoViewerSwipeX,
     photoViewerSwipeY,
     photoViewerVisible,
     resetPhotoViewerSwipe,
-    viewerPhotoIndex,
   ]);
 
   if (isLoading) {
@@ -610,8 +681,8 @@ export default function ProfileViewScreen() {
   const bodyTypeLabel    = profile.body_type      ? PHYSICAL_CONDITION_OPTIONS.find(o => o.value === profile.body_type)?.label ?? profile.body_type : null;
   const occupationLabel   = profile.occupation     ? OCCUPATION_OPTIONS.find(o => o.value === profile.occupation)?.label ?? profile.occupation    : null;
   const interestedInLabel =
-    profile.interested_in === 'everyone'
-      ? 'Everyone'
+    profile.gender === 'male' || profile.gender === 'female'
+      ? INTERESTED_IN_OPTIONS.find((o) => o.value === oppositeInterestedIn(profile.gender))?.label ?? null
       : INTERESTED_IN_OPTIONS.find((o) => o.value === profile.interested_in)?.label ?? profile.interested_in ?? null;
 
   const location = [profile.city, profile.state, profile.country].filter(Boolean).join(', ');
@@ -750,6 +821,35 @@ export default function ProfileViewScreen() {
       : null;
   const canShowCompatibility = !isOwnProfile && currentUser && compatibilityCriteria.length > 0;
 
+  const viewerStrength = getProfileStrength(currentUser);
+  const showStrengthNudge =
+    !isOwnProfile &&
+    !!currentUser &&
+    isProfileCompleteForDiscover(currentUser) &&
+    viewerStrength.percent < 100 &&
+    !strengthBannerDismissed;
+
+  const needsDiscoverGate =
+    !isOwnProfile && !!currentUser && !!session && !isProfileCompleteForDiscover(currentUser);
+
+  // Plain array (not useMemo) — hooks must not run after the isLoading / !profile early returns above.
+  const profileNavSections: { id: string; label: string }[] = (() => {
+    const rows: { id: string; label: string }[] = [{ id: 'about', label: 'About' }];
+    if (canShowCompatibility && compatibilityPercent !== null) {
+      rows.push({ id: 'match', label: 'Match' });
+    }
+    rows.push(
+      { id: 'personal', label: 'Personal' },
+      { id: 'physical', label: 'Physical' },
+      { id: 'work', label: 'Work' },
+      { id: 'family', label: 'Family' },
+    );
+    if ((profile.hobbies ?? []).length > 0) {
+      rows.push({ id: 'hobbies', label: 'Hobbies' });
+    }
+    return rows;
+  })();
+
   const handleLike = async () => {
     if (!currentUser) return;
     const wasLiked = likedUserIds.has(profile.id);
@@ -804,8 +904,9 @@ export default function ProfileViewScreen() {
     prevProfileIdInPhotoViewerRef.current = null;
     setPhotoIndex(viewerPhotoIndex);
     requestAnimationFrame(() => {
-      heroPhotoScrollRef.current?.scrollToOffset({
-        offset: viewerPhotoIndex * winWidth,
+      heroPhotoScrollRef.current?.scrollTo({
+        x: viewerPhotoIndex * winWidth,
+        y: 0,
         animated: false,
       });
     });
@@ -814,12 +915,37 @@ export default function ProfileViewScreen() {
   };
 
   const handleBlock = () => {
-    setBlockPromptVisible(true);
+    if (!profile) return;
+    showDialog({
+      title: 'Block user',
+      message: `Block ${profile.full_name}? They won't be able to see your profile or send you messages.`,
+      icon: 'ban-outline',
+      actions: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Block', style: 'destructive', onPress: () => void confirmBlockUser() },
+      ],
+    });
   };
 
-  const handleReport = () => {
-    setSelectedReportReason(null);
-    setReportValidationVisible(false);
+  const handleReport = async () => {
+    if (!currentUser || !profile) return;
+    try {
+      if (await hasExistingReport(currentUser.id, profile.id)) {
+        showDialog({
+          title: 'Already reported',
+          message: 'You have already submitted a report for this user.',
+          actions: [{ label: 'OK', style: 'primary' }],
+        });
+        return;
+      }
+    } catch {
+      showDialog({
+        title: 'Something went wrong',
+        message: 'Could not check report status. Please try again.',
+        actions: [{ label: 'OK', style: 'primary' }],
+      });
+      return;
+    }
     setReportPromptVisible(true);
   };
 
@@ -829,26 +955,8 @@ export default function ProfileViewScreen() {
       blocker_id: currentUser.id,
       blocked_id: profile.id,
     });
-    setBlockPromptVisible(false);
     showToast('🚫', `${profile.full_name} blocked`);
     setTimeout(() => router.back(), 1300);
-  };
-
-  const submitReport = async () => {
-    if (!currentUser) return;
-    if (!selectedReportReason) {
-      setReportValidationVisible(true);
-      return;
-    }
-    await supabase.from('reports').insert({
-      reporter_id: currentUser.id,
-      reported_id: profile.id,
-      reason: selectedReportReason,
-    });
-    setReportPromptVisible(false);
-    setSelectedReportReason(null);
-    setReportValidationVisible(false);
-    showToast('🚩', 'Report submitted. Thank you.');
   };
 
   const toastOverlay = toast ? (
@@ -879,6 +987,7 @@ export default function ProfileViewScreen() {
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
       {!photoViewerVisible ? toastOverlay : null}
       <ScrollView
+        ref={profileScrollRef}
         style={{ flex: 1, backgroundColor: 'transparent' }}
         showsVerticalScrollIndicator={false}
         bounces
@@ -893,24 +1002,33 @@ export default function ProfileViewScreen() {
               : Math.max(insets.bottom + 24, 32),
         }}
       >
+        {showStrengthNudge ? (
+          <ProfileCompletionNudgeBanner
+            percent={viewerStrength.percent}
+            nextLabel={viewerStrength.nextMissing?.label ?? null}
+            onCompletePress={() => router.push('/(tabs)/me')}
+            onDismiss={() => setStrengthBannerDismissed(true)}
+          />
+        ) : null}
+
         {/* Photo Carousel — rounded bottom for handoff into identity card */}
         <View style={{ position: 'relative', backgroundColor: '#000', overflow: 'hidden', borderBottomLeftRadius: RADIUS.xxl, borderBottomRightRadius: RADIUS.xxl }}>
-          <FlatList
+          <ScrollView
             ref={heroPhotoScrollRef}
-            data={photos}
-            keyExtractor={(photo, index) => `${photo}-${index}`}
             horizontal
             pagingEnabled
-            directionalLockEnabled={Platform.OS === 'ios'}
             nestedScrollEnabled
             showsHorizontalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            removeClippedSubviews={false}
+            style={{ width: winWidth, height: winWidth * 1.1 }}
             onMomentumScrollEnd={(e) => {
+              if (winWidth <= 0) return;
               setPhotoIndex(Math.round(e.nativeEvent.contentOffset.x / winWidth));
             }}
-            renderItem={({ item: photo, index: i }) => (
+          >
+            {photos.map((photo, i) => (
               <Pressable
+                key={`${photo}-${i}`}
                 onPress={() => openPhotoViewer(i)}
                 style={{ width: winWidth, height: winWidth * 1.1 }}
               >
@@ -921,8 +1039,8 @@ export default function ProfileViewScreen() {
                   transition={180}
                 />
               </Pressable>
-            )}
-          />
+            ))}
+          </ScrollView>
           <LinearGradient
             pointerEvents="none"
             colors={['transparent', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.60)']}
@@ -1000,6 +1118,7 @@ export default function ProfileViewScreen() {
         </View>
 
         {/* Identity — overlaps hero */}
+        <View onLayout={captureSectionLayout('about')}>
         <View style={pr.identityCard}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
             <Text style={pr.displayName}>
@@ -1058,8 +1177,12 @@ export default function ProfileViewScreen() {
             </View>
           )}
         </View>
+        </View>
+
+        <ProfileSectionChips sections={profileNavSections} onSelect={scrollToProfileSection} />
 
         {canShowCompatibility && compatibilityPercent !== null && (
+          <View onLayout={captureSectionLayout('match')}>
           <View style={pr.compatibilityCard}>
             <TouchableOpacity
               activeOpacity={0.85}
@@ -1139,9 +1262,11 @@ export default function ProfileViewScreen() {
               </View>
             )}
           </View>
+          </View>
         )}
 
         {/* Personal — ReadOnlyRow auto-hides null fields */}
+        <View onLayout={captureSectionLayout('personal')}>
         <View style={pr.sectionCard}>
           <Text style={pr.sectionTitle}>Personal</Text>
           <ReadOnlyRow icon="person-outline"      label="Gender"         value={GENDER_LABEL[profile.gender] ?? profile.gender} />
@@ -1153,30 +1278,38 @@ export default function ProfileViewScreen() {
           <ReadOnlyRow icon="globe-outline"       label="Ethnicity"      value={profile.ethnicity ?? null} />
           <ReadOnlyRow icon="chatbubbles-outline" label="Languages"      value={(profile.languages ?? []).join(', ') || null} isLast />
         </View>
+        </View>
 
         {/* Physical */}
+        <View onLayout={captureSectionLayout('physical')}>
         <View style={pr.sectionCard}>
           <Text style={pr.sectionTitle}>Physical</Text>
           <ReadOnlyRow icon="resize-outline" label="Height"    value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null} />
           <ReadOnlyRow icon="body-outline"   label="Body type" value={bodyTypeLabel} isLast />
         </View>
+        </View>
 
         {/* Work & Education */}
+        <View onLayout={captureSectionLayout('work')}>
         <View style={pr.sectionCard}>
           <Text style={pr.sectionTitle}>Work & Education</Text>
           <ReadOnlyRow icon="briefcase-outline" label="Occupation" value={occupationLabel} />
           <ReadOnlyRow icon="school-outline"    label="Education"  value={educationLabel} isLast />
         </View>
+        </View>
 
         {/* Family */}
+        <View onLayout={captureSectionLayout('family')}>
         <View style={pr.sectionCard}>
           <Text style={pr.sectionTitle}>Family</Text>
           <ReadOnlyRow icon="people-outline" label="Children"      value={profile.has_children == null ? null : profile.has_children ? 'Has children' : 'No children'} />
           <ReadOnlyRow icon="happy-outline"  label="Wants children" value={wantChildLabel} isLast />
         </View>
+        </View>
 
         {/* Hobbies */}
         {(profile.hobbies ?? []).length > 0 && (
+          <View onLayout={captureSectionLayout('hobbies')}>
           <View style={pr.sectionCard}>
             <Text style={pr.sectionTitle}>Hobbies & Interests</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4 }}>
@@ -1186,6 +1319,7 @@ export default function ProfileViewScreen() {
                 </View>
               ))}
             </View>
+          </View>
           </View>
         )}
       </ScrollView>
@@ -1292,16 +1426,18 @@ export default function ProfileViewScreen() {
             }}
             {...photoViewerPanResponder.panHandlers}
           >
-            <ProfilePhotoGalleryPage
-              userId={profile.id}
-              winWidth={winWidth}
-              winHeight={winHeight}
-              activePhotoIndex={viewerPhotoIndex}
-              dotBottom={photoModalDotBottom}
-              onHorizontalIndexChange={(i) => {
-                setViewerPhotoIndex(i);
-              }}
-            />
+            {photoViewerVisible && profile ? (
+              <ProfilePhotoGalleryPage
+                userId={profile.id}
+                winWidth={winWidth}
+                winHeight={winHeight}
+                activePhotoIndex={viewerPhotoIndex}
+                dotBottom={photoModalDotBottom}
+                onHorizontalIndexChange={(i) => {
+                  setViewerPhotoIndex(i);
+                }}
+              />
+            ) : null}
           </Animated.View>
           <SafeAreaView
             pointerEvents="box-none"
@@ -1449,118 +1585,30 @@ export default function ProfileViewScreen() {
         onClose={() => setMatchUser(null)}
       />
 
-      <Modal
-        visible={reportPromptVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setReportPromptVisible(false);
-          setReportValidationVisible(false);
-        }}
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(17,17,17,0.34)', justifyContent: 'center', padding: 24 }}>
-          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22 }}>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', lineHeight: 27 }}>
-              Reason reporting {profile.full_name}
-            </Text>
-            <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 22, color: '#555555' }}>
-              Select one reason before submitting your report.
-            </Text>
-            <View style={{ marginTop: 18, gap: 10 }}>
-              {REPORT_REASONS.map((reason) => {
-                const selected = selectedReportReason === reason;
-                return (
-                  <TouchableOpacity
-                    key={reason}
-                    activeOpacity={0.85}
-                    onPress={() => {
-                      setSelectedReportReason(reason);
-                      setReportValidationVisible(false);
-                    }}
-                    style={{
-                      minHeight: 50,
-                      borderRadius: 16,
-                      paddingHorizontal: 14,
-                      paddingVertical: 13,
-                      backgroundColor: selected ? '#FFF5F1' : '#FFFFFF',
-                      borderWidth: 1,
-                      borderColor: selected ? COLORS.primary : '#E7E1DC',
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>{reason}</Text>
-                    {selected ? <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} /> : null}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            {reportValidationVisible ? (
-              <View style={{ marginTop: 12, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#FFF7E8' }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#A06A00' }}>Select a reason</Text>
-              </View>
-            ) : null}
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => {
-                  setReportPromptVisible(false);
-                  setReportValidationVisible(false);
-                }}
-                style={{
-                  flex: 1,
-                  minHeight: 50,
-                  borderRadius: 16,
-                  borderWidth: 1,
-                  borderColor: '#E7E1DC',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#FFFFFF',
-                }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => void submitReport()}
-                style={{
-                  flex: 1,
-                  minHeight: 50,
-                  borderRadius: 16,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#111111',
-                  flexDirection: 'row',
-                  gap: 8,
-                }}
-              >
-                <Ionicons name="flag-outline" size={17} color="#FFFFFF" />
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Report</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {currentUser && profile ? (
+        <ReportUserModal
+          visible={reportPromptVisible}
+          onClose={() => setReportPromptVisible(false)}
+          reporterId={currentUser.id}
+          reportedUserId={profile.id}
+          reportedUserName={profile.full_name ?? 'User'}
+        />
+      ) : null}
 
-      <Modal
-        visible={blockPromptVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setBlockPromptVisible(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(17,17,17,0.34)', justifyContent: 'center', padding: 24 }}>
+      <Modal visible={needsDiscoverGate} transparent animationType="fade"
+        onRequestClose={() => router.back()}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(17,17,17,0.5)', justifyContent: 'center', padding: 24 }}>
           <View style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22 }}>
             <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', lineHeight: 27 }}>
-              Block user
+              Finish your profile
             </Text>
             <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 22, color: '#555555' }}>
-              Block {profile.full_name}?
+              Add your basics (name, birthday, gender, and country) before browsing others. Who you see is based on your gender.
             </Text>
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={() => setBlockPromptVisible(false)}
+                onPress={() => router.back()}
                 style={{
                   flex: 1,
                   minHeight: 50,
@@ -1572,21 +1620,23 @@ export default function ProfileViewScreen() {
                   backgroundColor: '#FFFFFF',
                 }}
               >
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>Cancel</Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>Go back</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={() => void confirmBlockUser()}
+                onPress={() => {
+                  if (session) router.replace(onboardingHrefFromSession(session));
+                }}
                 style={{
                   flex: 1,
                   minHeight: 50,
                   borderRadius: 16,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: '#111111',
+                  backgroundColor: COLORS.primary,
                 }}
               >
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Block</Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Continue setup</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1738,8 +1788,17 @@ const pr = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  fieldIconEmpty: { backgroundColor: COLORS.savanna },
+  fieldIconEmpty: {
+    backgroundColor: COLORS.emptyFieldSurface,
+    borderWidth: 1,
+    borderColor: COLORS.emptyFieldBorder,
+  },
   fieldLabel: { fontSize: FONT.xs, color: COLORS.textSecondary, fontWeight: FONT.semibold, marginBottom: 2 },
   fieldValue: { fontSize: FONT.md, color: COLORS.textStrong, fontWeight: FONT.semibold },
-  fieldValueEmpty: { fontSize: FONT.md, color: COLORS.textMuted, fontWeight: FONT.regular, fontStyle: 'italic' },
+  fieldValueEmpty: {
+    fontSize: FONT.md,
+    color: COLORS.emptyField,
+    fontWeight: FONT.semibold,
+    fontStyle: 'italic',
+  },
 });

@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -14,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { COLORS } from '@/constants';
+import { appDialog } from '@/lib/app-dialog';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail]     = useState('');
@@ -22,7 +22,11 @@ export default function ForgotPasswordScreen() {
 
   const handleSend = async () => {
     if (!email.trim()) {
-      Alert.alert('Enter your email', 'Please enter the email address linked to your account.');
+      appDialog({
+        title: 'Enter your email',
+        message: 'Please enter the email address linked to your account.',
+        icon: 'mail-outline',
+      });
       return;
     }
     setLoading(true);
@@ -31,7 +35,7 @@ export default function ForgotPasswordScreen() {
     });
     setLoading(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      appDialog({ title: 'Something went wrong', message: error.message, icon: 'alert-circle-outline' });
     } else {
       setSent(true);
     }

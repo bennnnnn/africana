@@ -6,40 +6,38 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@/constants';
+import { COLORS, FONT } from '@/constants';
+import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { PAYMENTS_ENABLED, PLANS } from '@/lib/payments';
+import { appDialog } from '@/lib/app-dialog';
 
 const { width } = Dimensions.get('window');
 
 export default function UpgradeScreen() {
   const handlePurchase = (plan: 'gold' | 'platinum') => {
     if (!PAYMENTS_ENABLED) {
-      Alert.alert(
-        'Coming Soon 🚀',
-        "Premium features are launching soon. You'll be notified when they're available!",
-        [{ text: 'Got it' }],
-      );
+      appDialog({
+        title: 'Coming soon',
+        message:
+          "Premium features are launching soon. You'll be notified when they're available!",
+        icon: 'rocket-outline',
+      });
       return;
     }
     // TODO: call purchasePlan(userId, plan) when PAYMENTS_ENABLED = true
-    Alert.alert('Purchase', `Starting purchase for ${PLANS[plan].name}...`);
+    appDialog({
+      title: 'Purchase',
+      message: `Starting purchase for ${PLANS[plan].name}...`,
+      icon: 'card-outline',
+    });
   };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      {/* Header */}
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Go Premium</Text>
-        <View style={{ width: 24 }} />
-      </View>
+      <SettingsHeaderBar title="Go Premium" titleAlign="center" />
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Hero */}
@@ -100,17 +98,6 @@ export default function UpgradeScreen() {
 }
 
 const s = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   scroll: { padding: 20, paddingBottom: 48 },
   hero: { alignItems: 'center', marginBottom: 28 },
   heroEmoji: { fontSize: 56, marginBottom: 10 },
