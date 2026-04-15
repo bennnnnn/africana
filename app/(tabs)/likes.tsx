@@ -23,12 +23,12 @@ const PAGE_SIZE = 20;
 /** Refetch list on focus only if older than this (industry standard: avoid work on every tab switch). */
 const LIST_STALE_MS = 90_000;
 
-const TABS: { key: Tab; icon: string; activeIcon: string }[] = [
-  { key: 'matches',    icon: 'flame-outline',       activeIcon: 'flame'        },
-  { key: 'received',   icon: 'heart-outline',        activeIcon: 'heart'        },
-  { key: 'sent',       icon: 'paper-plane-outline',  activeIcon: 'paper-plane'  },
-  { key: 'viewers',    icon: 'eye-outline',           activeIcon: 'eye'          },
-  { key: 'favourites', icon: 'star-outline',          activeIcon: 'star'         },
+const TABS: { key: Tab; icon: string; activeIcon: string; label: string }[] = [
+  { key: 'matches',    icon: 'flame-outline',       activeIcon: 'flame',        label: 'Matches'    },
+  { key: 'received',   icon: 'heart-outline',        activeIcon: 'heart',        label: 'Likes'      },
+  { key: 'sent',       icon: 'paper-plane-outline',  activeIcon: 'paper-plane',  label: 'Sent'       },
+  { key: 'viewers',    icon: 'eye-outline',           activeIcon: 'eye',          label: 'Views'      },
+  { key: 'favourites', icon: 'star-outline',          activeIcon: 'star',         label: 'Stars'      },
 ];
 
 export default function LikesScreen() {
@@ -36,7 +36,7 @@ export default function LikesScreen() {
   const tabBarHeight = 56 + insets.bottom;
   const { user } = useAuthStore();
   const { getOrCreateConversation } = useChatStore();
-  const [tab, setTab] = useState<Tab>('received');
+  const [tab, setTab] = useState<Tab>('matches');
   const [lists, setLists] = useState<Record<Tab, User[]>>({
     matches: [],
     received: [],
@@ -378,7 +378,7 @@ export default function LikesScreen() {
   const emptyMap: Record<Tab, { icon: string; title: string; desc: string }> = {
     matches:    { icon: 'flame-outline',     title: 'No matches yet',            desc: 'Like someone who already liked you to get a match.'      },
     received:   { icon: 'heart-outline',     title: 'No likes yet',              desc: 'Complete your profile to attract more attention.'        },
-    sent:       { icon: 'heart-outline',     title: "You haven't liked anyone",  desc: 'Browse Discover to find someone you like.'              },
+    sent:       { icon: 'paper-plane-outline', title: "You haven't liked anyone",  desc: 'Browse Discover to find someone you like.'              },
     viewers:    { icon: 'eye-outline',       title: 'No profile views yet',      desc: 'A complete profile with a photo gets more views.'        },
     favourites: { icon: 'star-outline',      title: 'No favourites yet',         desc: 'When someone stars your profile, they appear here.'      },
   };
@@ -398,11 +398,12 @@ export default function LikesScreen() {
           favourites: 'Favourites',
         }[tab]}</Text>
         <View style={s.tabBar}>
-          {TABS.map(({ key, icon, activeIcon }) => {
+          {TABS.map(({ key, icon, activeIcon, label }) => {
             const active = tab === key;
             return (
               <TouchableOpacity key={key} onPress={() => setTab(key)} style={[s.tabBtn, active && s.tabBtnOn]}>
-                <Ionicons name={(active ? activeIcon : icon) as any} size={22} color={active ? COLORS.primary : COLORS.textSecondary} />
+                <Ionicons name={(active ? activeIcon : icon) as any} size={20} color={active ? COLORS.primary : COLORS.textSecondary} />
+                <Text style={[s.tabLabel, active && s.tabLabelOn]}>{label}</Text>
                 {counts[key] > 0 && (
                   <View style={[s.badge, active && s.badgeOn]}>
                     <Text style={[s.badgeTxt, active && s.badgeTxtOn]}>
@@ -464,7 +465,7 @@ export default function LikesScreen() {
                   <Image source={{ uri: avatar }} style={s.avatar} contentFit="cover" />
                   <View style={[s.onlineDot, { backgroundColor: isOnline ? COLORS.online : COLORS.offline }]} />
                 </View>
-              <View style={{ flex: 1 }}>
+                <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={s.rowName} numberOfLines={1}>{item.full_name}{age ? `, ${age}` : ''}</Text>
                     {isMutual && <Text style={{ fontSize: 12 }}>🔥</Text>}
@@ -476,7 +477,17 @@ export default function LikesScreen() {
                     </View>
                   ) : null}
                 </View>
-                <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+                {tab === 'matches' ? (
+                  <TouchableOpacity
+                    onPress={(e) => { e.stopPropagation(); handleMessage(item.id); }}
+                    style={s.msgBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="chatbubble-ellipses" size={20} color={COLORS.primary} />
+                  </TouchableOpacity>
+                ) : (
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+                )}
               </TouchableOpacity>
             );
           }}
@@ -489,8 +500,10 @@ const s = StyleSheet.create({
   header:   { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 0, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   title:    { fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.text, marginBottom: 10 },
   tabBar:   { flexDirection: 'row' },
-  tabBtn:   { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderBottomWidth: 2.5, borderBottomColor: 'transparent' },
+  tabBtn:   { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderBottomWidth: 2.5, borderBottomColor: 'transparent', gap: 2 },
   tabBtnOn: { borderBottomColor: COLORS.primary },
+  tabLabel:    { fontSize: 9, fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 0.3 },
+  tabLabelOn:  { color: COLORS.primary },
   badge:    { position: 'absolute', top: 4, right: '20%', minWidth: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   badgeOn:  { backgroundColor: COLORS.primary },
   badgeTxt:    { fontSize: 9, fontWeight: FONT.extrabold, color: COLORS.textSecondary },
@@ -503,6 +516,7 @@ const s = StyleSheet.create({
   onlineDot:{ position: 'absolute', bottom: 1, right: 1, width: 11, height: 11, borderRadius: 6, borderWidth: 2, borderColor: COLORS.white },
   rowName:  { fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.text },
   rowLoc:   { fontSize: 12, color: COLORS.textSecondary, flex: 1 },
+  msgBtn:   { width: 36, height: 36, borderRadius: 18, backgroundColor: `${COLORS.primary}12`, alignItems: 'center', justifyContent: 'center' },
   inlineLoading: { paddingVertical: 48, alignItems: 'center', justifyContent: 'center' },
   footerLoading: { paddingVertical: 20, alignItems: 'center', justifyContent: 'center' },
 });

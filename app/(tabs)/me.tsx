@@ -117,6 +117,7 @@ export default function MyProfileScreen() {
   const [editMulti, setEditMulti]   = useState<string[]>([]);
   const [editBool, setEditBool]     = useState<boolean | null>(null);
   const [editHeight, setEditHeight] = useState(170);
+  const [editWeight, setEditWeight] = useState(70);
   const [editDate, setEditDate]               = useState<Date | null>(null);
   const [editLocation, setEditLocation]       = useState<Partial<LocationValue>>({});
   const [editOriginLocation, setEditOriginLocation] = useState<Partial<LocationValue>>({});
@@ -301,7 +302,8 @@ export default function MyProfileScreen() {
 
   const pickAndUploadPhoto = async () => {
     const currentPhotos = user.profile_photos ?? [];
-    if (currentPhotos.length >= MAX_PROFILE_PHOTOS) {
+    const remaining = MAX_PROFILE_PHOTOS - currentPhotos.length;
+    if (remaining <= 0) {
       appDialog({
         title: 'Photo limit',
         message: `You can have up to ${MAX_PROFILE_PHOTOS} photos. Long press a photo below to remove one.`,
@@ -310,18 +312,23 @@ export default function MyProfileScreen() {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, aspect: [3, 4], quality: 0.8,
+      allowsMultipleSelection: true,
+      quality: 0.8,
     });
-    if (result.canceled || !result.assets[0]) return;
+    if (result.canceled || result.assets.length === 0) return;
     setPhotoUploading(true);
     try {
-      const asset = result.assets[0];
-      const out = await uploadToAvatarsBucket(user.id, asset.uri, asset.mimeType);
-      if ('error' in out) throw new Error(out.error);
-      const newUrl = out.publicUrl;
+      const toUpload = result.assets.slice(0, remaining);
+      const uploaded: string[] = [];
+      for (const asset of toUpload) {
+        const out = await uploadToAvatarsBucket(user.id, asset.uri, asset.mimeType);
+        if (!('error' in out)) uploaded.push(out.publicUrl);
+      }
+      if (uploaded.length === 0) throw new Error('Could not upload photos.');
+      const updatedPhotos = [...currentPhotos, ...uploaded];
       await updateProfile({
-        profile_photos: [...currentPhotos, newUrl],
-        avatar_url: currentPhotos.length === 0 ? newUrl : user.avatar_url,
+        profile_photos: updatedPhotos,
+        avatar_url: currentPhotos.length === 0 ? updatedPhotos[0] : user.avatar_url,
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Please try again.';
@@ -527,31 +534,36 @@ export default function MyProfileScreen() {
           </View>
         </View>
 
-        {/* Photo strip — shown when user has multiple photos; tap to set as profile picture */}
+        {/* Photo strip — tap a thumbnail to set it as main profile picture */}
         {photos.length > 1 && (
-          <View style={s.photoStrip}>
-            {photos.map((photo, i) => {
-              const isMain = photo === user.avatar_url || (i === 0 && !user.avatar_url);
-              return (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => save({ avatar_url: photo })}
-                  style={[s.stripThumb, isMain && s.stripThumbActive]}
-                  activeOpacity={0.8}
-                >
-                  <Image source={{ uri: photo }} style={s.stripImg} contentFit="cover" />
-                  {isMain && (
-                    <View style={s.stripCheck}>
-                      <Ionicons name="checkmark" size={10} color="#FFF" />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
+          <View>
+            <Text style={{ fontSize: 11, color: COLORS.textMuted, textAlign: 'center', paddingTop: 10, paddingBottom: 4 }}>
+              Tap a photo to set it as your main picture
+            </Text>
+            <View style={s.photoStrip}>
+              {photos.map((photo, i) => {
+                const isMain = photo === user.avatar_url || (i === 0 && !user.avatar_url);
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    onPress={() => save({ avatar_url: photo })}
+                    style={[s.stripThumb, isMain && s.stripThumbActive]}
+                    activeOpacity={0.8}
+                  >
+                    <Image source={{ uri: photo }} style={s.stripImg} contentFit="cover" />
+                    {isMain && (
+                      <View style={s.stripCheck}>
+                        <Ionicons name="checkmark" size={10} color="#FFF" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         )}
 
-        {/* Completion */}
+        {/* Completion — between photo strip and About Me so it's easy to see */}
         {completionPct < 100 && (
           <View style={s.completion}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -601,7 +613,7 @@ export default function MyProfileScreen() {
           <Text style={s.sectionTitle}>Personal</Text>
           <FieldRow icon="person-outline"      label="Gender"         value={user.gender ? (GENDER_OPTIONS.find(o => o.value === user.gender)?.label ?? user.gender) : null} onEdit={() => openSelect('gender', user.gender)} />
           <FieldRow icon="calendar-outline"    label="Date of birth"  value={user.birthdate ?? null} onEdit={openDate} />
-          <FieldRow icon="search-outline" label="Interested in" value={interestedInLabel} onEdit={() => {}} readOnly />
+          <FieldRow icon="search-outline" label="Interested in" value={interestedInLabel} onEdit={() => openSelect('interested_in', user.interested_in)} />
           <FieldRow icon="location-outline" label="Location" value={locationDisplay || null} onEdit={openLocation} />
           {!livesInAfrica && (
             <FieldRow icon="flag-outline" label="African origin" value={originDisplay || null} onEdit={openOriginLocation} />
@@ -623,7 +635,7 @@ export default function MyProfileScreen() {
           <FieldRow icon="resize-outline" label="Height" value={user.height_cm ? `${(user.height_cm / 100).toFixed(2)} m` : null}
             onEdit={() => { setEditing('height'); setEditHeight(user.height_cm ?? 170); }} />
           <FieldRow icon="body-outline"   label="Body type" value={bodyTypeLabel} onEdit={() => openSelect('body_type', user.body_type)} />
-          <FieldRow icon="barbell-outline" label="Weight"    value={user.weight_kg ? `${user.weight_kg} kg` : null} onEdit={() => { setEditing('weight_kg'); setEditHeight(user.weight_kg ?? 70); }} />
+          <FieldRow icon="barbell-outline" label="Weight"    value={user.weight_kg ? `${user.weight_kg} kg` : null} onEdit={() => { setEditing('weight_kg'); setEditWeight(user.weight_kg ?? 70); }} />
         </View>
         </View>
 
@@ -815,12 +827,12 @@ export default function MyProfileScreen() {
 
       {/* ════ WEIGHT ════ */}
       <EditModal visible={editing === 'weight_kg'} title="Weight" onClose={close} saving={saving}
-        onSave={() => save({ weight_kg: editHeight })}>
+        onSave={() => save({ weight_kg: editWeight })}>
         <SliderPicker
           label="Weight"
-          value={editHeight}
+          value={editWeight}
           min={35} max={180} unit="kg"
-          onChange={setEditHeight}
+          onChange={setEditWeight}
         />
       </EditModal>
 
@@ -940,6 +952,12 @@ export default function MyProfileScreen() {
         {renderSelectList(GENDER_OPTIONS, editSelect, setEditSelect)}
       </EditModal>
 
+      {/* ════ INTERESTED IN ════ */}
+      <EditModal visible={editing === 'interested_in'} title="Interested in" onClose={close} saving={saving}
+        onSave={() => save({ interested_in: editSelect })}>
+        {renderSelectList(INTERESTED_IN_OPTIONS, editSelect, setEditSelect)}
+      </EditModal>
+
       {/* ════ RELIGION ════ */}
       <EditModal visible={editing === 'religion'} title="Religion" onClose={close} saving={saving}
         onSave={() => save({ religion: editSelect })}>
@@ -1042,7 +1060,7 @@ const s = StyleSheet.create({
   statLabel: { fontSize: FONT.xs, color: COLORS.textSecondary },
   completion: { margin: 12, marginBottom: 8, padding: 16, borderRadius: RADIUS.lg, backgroundColor: `${COLORS.primary}10`, borderWidth: 1.5, borderColor: `${COLORS.primary}30` },
   section: { backgroundColor: COLORS.white, marginBottom: 8, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 8 },
-  sectionTitle: { fontSize: FONT.md, fontWeight: FONT.extrabold, color: COLORS.textStrong, letterSpacing: 0.2, marginBottom: 10 },
+  sectionTitle: { fontSize: FONT.xs, fontWeight: FONT.extrabold, color: COLORS.earth, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 },
   sectionEditBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
   bioText: { flex: 1, fontSize: FONT.md, color: COLORS.textStrong, lineHeight: 23 },
   emptyPrompt: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADIUS.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08`, marginBottom: 8 },

@@ -15,7 +15,6 @@ import { COLORS, RADIUS, FONT, SHADOWS, DEFAULT_AVATAR } from '@/constants';
 import { User } from '@/types';
 import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
-import { sendLocalNotification } from '@/lib/notifications';
 
 const { width } = Dimensions.get('window');
 
@@ -52,12 +51,6 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
         Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 55, friction: 7 }),
         Animated.timing(opacityAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
       ]).start(startHeartbeat);
-      sendLocalNotification(
-        '🔥 It\'s a Match!',
-        `You and ${matchedUser.full_name} liked each other.`,
-        'match',
-        { userId: matchedUser.id },
-      );
     } else if (!visible) {
       scaleAnim.setValue(0);
       opacityAnim.setValue(0);

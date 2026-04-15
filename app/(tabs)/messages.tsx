@@ -8,6 +8,8 @@ import {
   RefreshControl,
   TextInput,
   StyleSheet,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,6 +37,7 @@ export default function MessagesScreen() {
   const [search, setSearch] = useState('');
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const scheduleRefresh = useCallback(() => {
     if (!user) return;
@@ -42,6 +45,17 @@ export default function MessagesScreen() {
     refreshTimeoutRef.current = setTimeout(() => {
       fetchConversations(user.id);
     }, 120);
+  }, [fetchConversations, user?.id]);
+
+  // Re-fetch when app returns from background — catches messages missed while suspended
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active' && appStateRef.current !== 'active' && user) {
+        fetchConversations(user.id);
+      }
+      appStateRef.current = next;
+    });
+    return () => sub.remove();
   }, [fetchConversations, user?.id]);
 
   useEffect(() => {

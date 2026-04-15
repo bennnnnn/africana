@@ -333,9 +333,8 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
 
     const isMatch = !!mutual;
     if (isMatch) {
-      notifyUser({ type: 'match', recipientId: toUserId,   senderId: fromUserId, senderName,        extra: { userId: fromUserId } });
-      const { data: likedProfile } = await supabase.from('profiles').select('full_name').eq('id', toUserId).single();
-      notifyUser({ type: 'match', recipientId: fromUserId, senderId: toUserId,   senderName: likedProfile?.full_name ?? 'Someone', extra: { userId: toUserId } });
+      // Only notify the OTHER user — the current user is in the app and will see the MatchModal
+      notifyUser({ type: 'match', recipientId: toUserId, senderId: fromUserId, senderName, extra: { userId: fromUserId } });
     } else {
       notifyUser({ type: 'like', recipientId: toUserId, senderId: fromUserId, senderName, extra: { userId: fromUserId } });
     }

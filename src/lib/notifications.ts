@@ -7,24 +7,28 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { supabase } from './supabase';
 
-// Lazy-load expo-notifications so Expo Go doesn't crash on import
-let Notifications: typeof import('expo-notifications') | null = null;
-try {
-  const loadedNotifications = require('expo-notifications') as typeof import('expo-notifications');
-  Notifications = loadedNotifications;
+// expo-notifications removed from Expo Go in SDK 53 — skip loading entirely to avoid console.error spam
+const isExpoGo = Constants.appOwnership === 'expo';
 
-  // Configure foreground notification display (only when available)
-  loadedNotifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
-  });
-} catch {
-  // Running in Expo Go — notifications not supported, continue silently
+let Notifications: typeof import('expo-notifications') | null = null;
+if (!isExpoGo) {
+  try {
+    const loadedNotifications = require('expo-notifications') as typeof import('expo-notifications');
+    Notifications = loadedNotifications;
+
+    // Configure foreground notification display (only when available)
+    loadedNotifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+  } catch {
+    // Unsupported environment — continue silently
+  }
 }
 
 // ── Android notification channels ─────────────────────────────────────────────
@@ -97,13 +101,13 @@ export async function registerForPushNotifications(userId: string): Promise<void
 export async function sendLocalNotification(
   title: string,
   body: string,
-  _channelId: 'message' | 'like' | 'match' | 'view' = 'match',
+  channelId: 'message' | 'like' | 'match' | 'view' = 'match',
   data?: Record<string, string>,
 ): Promise<void> {
   if (!Notifications) return;
   try {
     await Notifications.scheduleNotificationAsync({
-      content: { title, body, sound: true, data },
+      content: { title, body, sound: 'default', data, ...(Platform.OS === 'android' ? { channelId } : {}) },
       trigger: null,
     });
   } catch {}

@@ -60,11 +60,10 @@ export default function ForgotPasswordScreen() {
               <Ionicons name="mail-open-outline" size={38} color={COLORS.success} />
             </View>
             <Text style={{ fontSize: 24, fontWeight: '800', color: COLORS.text, textAlign: 'center' }}>
-              Check your inbox
+              Request received
             </Text>
             <Text style={{ fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
-              We sent a password reset link to{'\n'}
-              <Text style={{ fontWeight: '700', color: COLORS.text }}>{email.trim()}</Text>
+              If <Text style={{ fontWeight: '700', color: COLORS.text }}>{email.trim()}</Text> is linked to an Africana account, you'll receive a reset link shortly.{'\n\n'}Check your inbox and spam folder.
             </Text>
             <TouchableOpacity
               onPress={() => router.replace('/(auth)/login')}

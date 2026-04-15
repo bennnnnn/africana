@@ -49,6 +49,8 @@ import { hasExistingReport } from '@/lib/social-actions';
 const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female' };
 const profileGalleryCache = new Map<string, string[]>();
 const prefetchedPhotoUris = new Set<string>();
+/** Profiles we've already fired a view notification for this app session — prevents spam on repeated visits. */
+const notifiedProfileViews = new Set<string>();
 
 const FLOAT_ACTION_SIZE = 56;
 const floatingActionCircle = {
@@ -295,17 +297,15 @@ function ProfilePhotoGalleryPage({
 function ReadOnlyRow({ icon, label, value, isLast }: {
   icon: keyof typeof Ionicons.glyphMap; label: string; value: string | null | undefined; isLast?: boolean;
 }) {
-  const filled = !!value;
+  if (!value) return null;
   return (
     <View style={[pr.fieldRow, isLast && pr.fieldRowLast]}>
-      <View style={[pr.fieldIcon, !filled && pr.fieldIconEmpty]}>
-        <Ionicons name={icon} size={16} color={filled ? COLORS.primary : COLORS.emptyField} />
+      <View style={pr.fieldIcon}>
+        <Ionicons name={icon} size={16} color={COLORS.primary} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={pr.fieldLabel}>{label}</Text>
-        <Text style={[pr.fieldValue, !filled && pr.fieldValueEmpty]}>
-          {value ?? '—'}
-        </Text>
+        <Text style={pr.fieldValue}>{value}</Text>
       </View>
     </View>
   );
@@ -333,6 +333,33 @@ export default function ProfileViewScreen() {
   const profileScrollRef = useRef<ScrollView>(null);
   const sectionY = useRef<Record<string, number>>({});
   const [strengthBannerDismissed, setStrengthBannerDismissed] = useState(false);
+
+  // Scroll-driven action button animation
+  const btnScaleAnim   = useRef(new Animated.Value(1)).current;
+  const btnOpacityAnim = useRef(new Animated.Value(1)).current;
+  const lastScrollY    = useRef(0);
+
+  const handleProfileScroll = useCallback((e: any) => {
+    const y    = e.nativeEvent.contentOffset.y;
+    const prev = lastScrollY.current;
+    lastScrollY.current = y;
+
+    const springCfg = { useNativeDriver: true, tension: 90, friction: 10 };
+
+    if (y < 30) {
+      // Back near the top — restore full size
+      Animated.spring(btnScaleAnim,   { toValue: 1,    ...springCfg }).start();
+      Animated.spring(btnOpacityAnim, { toValue: 1,    ...springCfg }).start();
+    } else if (y > prev + 5) {
+      // Scrolling down — shrink
+      Animated.spring(btnScaleAnim,   { toValue: 0.72, ...springCfg }).start();
+      Animated.spring(btnOpacityAnim, { toValue: 0.75, ...springCfg }).start();
+    } else if (y < prev - 5) {
+      // Scrolling up — restore
+      Animated.spring(btnScaleAnim,   { toValue: 1,    ...springCfg }).start();
+      Animated.spring(btnOpacityAnim, { toValue: 1,    ...springCfg }).start();
+    }
+  }, [btnScaleAnim, btnOpacityAnim]);
 
   const captureSectionLayout = (key: string) => (e: LayoutChangeEvent) => {
     sectionY.current[key] = e.nativeEvent.layout.y;
@@ -472,13 +499,17 @@ export default function ProfileViewScreen() {
       { viewer_id: currentUser.id, viewed_id: profile.id, viewed_at: new Date().toISOString() },
       { onConflict: 'viewer_id,viewed_id' },
     );
-    notifyUser({
-      type: 'view',
-      recipientId: profile.id,
-      senderId: currentUser.id,
-      senderName: currentUser.full_name ?? 'Someone',
-      extra: { userId: currentUser.id },
-    });
+    // Only notify once per app session — the DB upsert deduplicates the row but not the push
+    if (!notifiedProfileViews.has(profile.id)) {
+      notifiedProfileViews.add(profile.id);
+      notifyUser({
+        type: 'view',
+        recipientId: profile.id,
+        senderId: currentUser.id,
+        senderName: currentUser.full_name ?? 'Someone',
+        extra: { userId: currentUser.id },
+      });
+    }
   }, [profile?.id, currentUser?.id]);
 
   // Hydrate likes once if Discover (or elsewhere) has not already loaded them.
@@ -832,21 +863,16 @@ export default function ProfileViewScreen() {
   const needsDiscoverGate =
     !isOwnProfile && !!currentUser && !!session && !isProfileCompleteForDiscover(currentUser);
 
-  // Plain array (not useMemo) — hooks must not run after the isLoading / !profile early returns above.
   const profileNavSections: { id: string; label: string }[] = (() => {
     const rows: { id: string; label: string }[] = [{ id: 'about', label: 'About' }];
     if (canShowCompatibility && compatibilityPercent !== null) {
       rows.push({ id: 'match', label: 'Match' });
     }
-    rows.push(
-      { id: 'personal', label: 'Personal' },
-      { id: 'physical', label: 'Physical' },
-      { id: 'work', label: 'Work' },
-      { id: 'family', label: 'Family' },
-    );
-    if ((profile.hobbies ?? []).length > 0) {
-      rows.push({ id: 'hobbies', label: 'Hobbies' });
-    }
+    rows.push({ id: 'personal', label: 'Personal' });
+    if (!!profile.height_cm || !!profile.body_type) rows.push({ id: 'physical', label: 'Physical' });
+    if (!!occupationLabel || !!educationLabel)       rows.push({ id: 'work',     label: 'Work' });
+    if (profile.has_children != null || !!profile.want_children) rows.push({ id: 'family', label: 'Family' });
+    if ((profile.hobbies ?? []).length > 0)          rows.push({ id: 'hobbies',  label: 'Hobbies' });
     return rows;
   })();
 
@@ -856,7 +882,7 @@ export default function ProfileViewScreen() {
     const isMatch = await toggleLike(currentUser.id, profile.id);
     if (isMatch && !wasLiked) {
       setMatchUser(profile);
-      showToast('🔥', 'It’s a match!');
+      showToast('🔥', "It's a match!");
     } else {
       showToast(wasLiked ? '💔' : '❤️', wasLiked ? 'Unliked' : 'Liked!');
     }
@@ -993,6 +1019,8 @@ export default function ProfileViewScreen() {
         bounces
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
+        scrollEventThrottle={16}
+        onScroll={handleProfileScroll}
         contentContainerStyle={{
           flexGrow: 1,
           backgroundColor: COLORS.surface,
@@ -1002,15 +1030,6 @@ export default function ProfileViewScreen() {
               : Math.max(insets.bottom + 24, 32),
         }}
       >
-        {showStrengthNudge ? (
-          <ProfileCompletionNudgeBanner
-            percent={viewerStrength.percent}
-            nextLabel={viewerStrength.nextMissing?.label ?? null}
-            onCompletePress={() => router.push('/(tabs)/me')}
-            onDismiss={() => setStrengthBannerDismissed(true)}
-          />
-        ) : null}
-
         {/* Photo Carousel — rounded bottom for handoff into identity card */}
         <View style={{ position: 'relative', backgroundColor: '#000', overflow: 'hidden', borderBottomLeftRadius: RADIUS.xxl, borderBottomRightRadius: RADIUS.xxl }}>
           <ScrollView
@@ -1075,7 +1094,7 @@ export default function ProfileViewScreen() {
             </View>
           )}
 
-          {/* Back button + report/block — row at top of photo */}
+          {/* Back button + report/block */}
           <SafeAreaView pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 16 }}>
               <TouchableOpacity
@@ -1133,7 +1152,7 @@ export default function ProfileViewScreen() {
             >
               <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: displayOnlineStatus === 'online' ? COLORS.online : COLORS.textMuted }} />
               <Text style={{ fontSize: 11, fontWeight: '700', color: displayOnlineStatus === 'online' ? COLORS.online : COLORS.textSecondary }}>
-                {displayOnlineStatus === 'online' ? 'Online' : `Last seen ${formatLastSeen(profile.last_seen)}`}
+                {displayOnlineStatus === 'online' ? 'Online' : 'Offline'}
               </Text>
             </View>
           </View>
@@ -1144,6 +1163,28 @@ export default function ProfileViewScreen() {
                 <Ionicons name="location" size={14} color={COLORS.primary} />
               </View>
               <Text style={pr.locationText}>{location}</Text>
+            </View>
+          ) : null}
+
+          {(profile.languages ?? []).length > 0 ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+              <View style={pr.locationIconWrap}>
+                <Ionicons name="chatbubbles-outline" size={14} color={COLORS.primary} />
+              </View>
+              <Text style={pr.locationText} numberOfLines={1}>
+                Speaks: {(profile.languages ?? []).join(', ')}
+              </Text>
+            </View>
+          ) : null}
+
+          {profile.religion ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+              <View style={pr.locationIconWrap}>
+                <Ionicons name="sunny-outline" size={14} color={COLORS.primary} />
+              </View>
+              <Text style={pr.locationText}>
+                {RELIGION_OPTIONS.find((r) => r.value === profile.religion)?.label ?? profile.religion}
+              </Text>
             </View>
           ) : null}
 
@@ -1167,19 +1208,27 @@ export default function ProfileViewScreen() {
                 <Text style={pr.aboutBody}>{profile.bio}</Text>
               </View>
             </View>
-          ) : (
+          ) : isOwnProfile ? (
             <View style={{ marginTop: 14, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: `${COLORS.savanna}88`, borderRadius: RADIUS.md }}>
               <Text style={{ fontSize: 14, color: COLORS.textSecondary, fontStyle: 'italic', lineHeight: 21 }}>
-                {isOwnProfile
-                  ? 'You haven’t added a bio yet — edit your profile from Me to tell your story.'
-                  : 'No bio yet — say hi and get the conversation started.'}
+                {"You haven't added a bio yet — edit your profile from Me to tell your story."}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
         </View>
 
         <ProfileSectionChips sections={profileNavSections} onSelect={scrollToProfileSection} />
+
+        {/* Strength nudge — shown to the viewer after they've seen the profile, not over the photo */}
+        {showStrengthNudge ? (
+          <ProfileCompletionNudgeBanner
+            percent={viewerStrength.percent}
+            nextLabel={viewerStrength.nextMissing?.label ?? null}
+            onCompletePress={() => router.push('/(tabs)/me')}
+            onDismiss={() => setStrengthBannerDismissed(true)}
+          />
+        ) : null}
 
         {canShowCompatibility && compatibilityPercent !== null && (
           <View onLayout={captureSectionLayout('match')}>
@@ -1234,10 +1283,10 @@ export default function ProfileViewScreen() {
                             style={{
                               flex: 1,
                               fontSize: 14,
-                              fontWeight: criterion.matched ? '700' : '600',
-                              color: criterion.matched ? COLORS.text : '#C45A5A',
-                              fontStyle: criterion.matched ? 'normal' : 'italic',
-                              textDecorationLine: criterion.matched ? 'none' : 'line-through',
+                              fontWeight: '500',
+                              color: criterion.matched ? COLORS.text : COLORS.textMuted,
+                              fontStyle: 'normal',
+                              textDecorationLine: 'none',
                             }}
                             numberOfLines={5}
                           >
@@ -1280,32 +1329,38 @@ export default function ProfileViewScreen() {
         </View>
         </View>
 
-        {/* Physical */}
-        <View onLayout={captureSectionLayout('physical')}>
-        <View style={pr.sectionCard}>
-          <Text style={pr.sectionTitle}>Physical</Text>
-          <ReadOnlyRow icon="resize-outline" label="Height"    value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null} />
-          <ReadOnlyRow icon="body-outline"   label="Body type" value={bodyTypeLabel} isLast />
-        </View>
-        </View>
+        {/* Physical — hidden when nothing is filled */}
+        {(!!profile.height_cm || !!profile.body_type) && (
+          <View onLayout={captureSectionLayout('physical')}>
+          <View style={pr.sectionCard}>
+            <Text style={pr.sectionTitle}>Physical</Text>
+            <ReadOnlyRow icon="resize-outline" label="Height"    value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null} />
+            <ReadOnlyRow icon="body-outline"   label="Body type" value={bodyTypeLabel} isLast />
+          </View>
+          </View>
+        )}
 
-        {/* Work & Education */}
-        <View onLayout={captureSectionLayout('work')}>
-        <View style={pr.sectionCard}>
-          <Text style={pr.sectionTitle}>Work & Education</Text>
-          <ReadOnlyRow icon="briefcase-outline" label="Occupation" value={occupationLabel} />
-          <ReadOnlyRow icon="school-outline"    label="Education"  value={educationLabel} isLast />
-        </View>
-        </View>
+        {/* Work & Education — hidden when nothing is filled */}
+        {(!!occupationLabel || !!educationLabel) && (
+          <View onLayout={captureSectionLayout('work')}>
+          <View style={pr.sectionCard}>
+            <Text style={pr.sectionTitle}>Work & Education</Text>
+            <ReadOnlyRow icon="briefcase-outline" label="Occupation" value={occupationLabel} />
+            <ReadOnlyRow icon="school-outline"    label="Education"  value={educationLabel} isLast />
+          </View>
+          </View>
+        )}
 
-        {/* Family */}
-        <View onLayout={captureSectionLayout('family')}>
-        <View style={pr.sectionCard}>
-          <Text style={pr.sectionTitle}>Family</Text>
-          <ReadOnlyRow icon="people-outline" label="Children"      value={profile.has_children == null ? null : profile.has_children ? 'Has children' : 'No children'} />
-          <ReadOnlyRow icon="happy-outline"  label="Wants children" value={wantChildLabel} isLast />
-        </View>
-        </View>
+        {/* Family — hidden when nothing is filled */}
+        {(profile.has_children != null || !!profile.want_children) && (
+          <View onLayout={captureSectionLayout('family')}>
+          <View style={pr.sectionCard}>
+            <Text style={pr.sectionTitle}>Family</Text>
+            <ReadOnlyRow icon="people-outline" label="Children"      value={profile.has_children == null ? null : profile.has_children ? 'Has children' : 'No children'} />
+            <ReadOnlyRow icon="happy-outline"  label="Wants children" value={wantChildLabel} isLast />
+          </View>
+          </View>
+        )}
 
         {/* Hobbies */}
         {(profile.hobbies ?? []).length > 0 && (
@@ -1337,13 +1392,15 @@ export default function ProfileViewScreen() {
             backgroundColor: 'transparent',
           }}
         >
-          <View
+          <Animated.View
             style={{
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 14,
               backgroundColor: 'transparent',
+              transform: [{ scale: btnScaleAnim }],
+              opacity: btnOpacityAnim,
             }}
           >
             <TouchableOpacity
@@ -1355,20 +1412,30 @@ export default function ProfileViewScreen() {
             >
               <Ionicons
                 name={isFavourite ? 'star' : 'star-outline'}
-                size={26}
-                color={isFavourite ? COLORS.primary : COLORS.text}
+                size={24}
+                color={isFavourite ? COLORS.gold : COLORS.text}
               />
             </TouchableOpacity>
+            {/* Like — primary CTA, larger and filled */}
             <TouchableOpacity
               onPress={handleLike}
               activeOpacity={0.85}
               accessibilityRole="button"
               accessibilityLabel={isLiked ? 'Unlike' : 'Like'}
-              style={floatingActionCircle}
+              style={[
+                floatingActionCircle,
+                {
+                  width: 68,
+                  height: 68,
+                  borderRadius: 34,
+                  backgroundColor: COLORS.white,
+                  ...SHADOWS.lg,
+                },
+              ]}
             >
               <Ionicons
                 name={isLiked ? 'heart' : 'heart-outline'}
-                size={26}
+                size={32}
                 color={isLiked ? COLORS.primary : COLORS.text}
               />
             </TouchableOpacity>
@@ -1390,7 +1457,7 @@ export default function ProfileViewScreen() {
                 color={recipientMessagesPaused ? COLORS.textMuted : COLORS.primary}
               />
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         </View>
       ) : null}
 
@@ -1484,32 +1551,6 @@ export default function ProfileViewScreen() {
                 backgroundColor: 'transparent',
               }}
             >
-              <View
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  bottom: FLOAT_ACTION_SIZE + 18,
-                  left: 18,
-                  right: 18,
-                  alignItems: 'center',
-                }}
-              >
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    maxWidth: winWidth - 52,
-                    color: '#FFF',
-                    fontSize: 22,
-                    fontWeight: '800',
-                    textAlign: 'center',
-                    textShadowColor: 'rgba(0,0,0,0.45)',
-                    textShadowOffset: { width: 0, height: 1 },
-                    textShadowRadius: 10,
-                  }}
-                >
-                  {profile.full_name}
-                </Text>
-              </View>
                 <TouchableOpacity
                   onPress={handleFavourite}
                   activeOpacity={0.85}

@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMe
 import type { KeyboardEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
-  Animated, Keyboard, Platform,
+  Animated, Keyboard, Platform, AppState, AppStateStatus,
   StyleSheet, Dimensions, Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -418,6 +418,20 @@ export default function ChatScreen() {
 
     return () => { supabase.removeChannel(channel); };
   }, [conversationId, user?.id]);
+
+  // Re-fetch messages when app returns from background — catches messages missed while suspended
+  useEffect(() => {
+    if (!conversationId || !user || conversationId.startsWith('mock-conv-')) return;
+    const appStateRef = { current: AppState.currentState };
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active' && appStateRef.current !== 'active') {
+        void fetchMessages(conversationId);
+        void markMessagesRead(conversationId, user.id);
+      }
+      appStateRef.current = next;
+    });
+    return () => sub.remove();
+  }, [conversationId, fetchMessages, markMessagesRead, user?.id]);
 
   useFocusEffect(
     useCallback(() => {

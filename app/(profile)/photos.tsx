@@ -23,49 +23,55 @@ const PHOTO_SIZE = (width - 56) / 3;
 export default function PhotosScreen() {
   const { user, updateProfile } = useAuthStore();
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
 
   if (!user) return null;
 
   const photos = user.profile_photos ?? [];
 
-  const addPhoto = async () => {
-    if (photos.length >= MAX_PROFILE_PHOTOS) {
+  const addPhotos = async () => {
+    const remaining = MAX_PROFILE_PHOTOS - photos.length;
+    if (remaining <= 0) {
       appDialog({ title: 'Limit reached', message: `You can have at most ${MAX_PROFILE_PHOTOS} photos.` });
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [3, 4],
+      allowsMultipleSelection: true,
       quality: 0.8,
     });
 
-    if (result.canceled || !result.assets[0]) return;
+    if (result.canceled || result.assets.length === 0) return;
 
+    const toUpload = result.assets.slice(0, remaining);
     setUploading(true);
+    const uploaded: string[] = [];
+
     try {
-      const asset = result.assets[0];
-      const out = await uploadToAvatarsBucket(user.id, asset.uri, asset.mimeType);
-      if ('error' in out) {
-        appDialog({ title: 'Upload failed', message: out.error, icon: 'cloud-offline-outline' });
+      for (let i = 0; i < toUpload.length; i++) {
+        setUploadProgress(`Uploading ${i + 1} of ${toUpload.length}…`);
+        const asset = toUpload[i];
+        const out = await uploadToAvatarsBucket(user.id, asset.uri, asset.mimeType);
+        if (!('error' in out)) uploaded.push(out.publicUrl);
+      }
+
+      if (uploaded.length === 0) {
+        appDialog({ title: 'Upload failed', message: 'Could not upload photos.', icon: 'cloud-offline-outline' });
         return;
       }
 
-      const updatedPhotos = [...photos, out.publicUrl];
-      if (updatedPhotos.length > MAX_PROFILE_PHOTOS) {
-        appDialog({ title: 'Photo limit', message: `You can have at most ${MAX_PROFILE_PHOTOS} photos.` });
-        return;
-      }
+      const updatedPhotos = [...photos, ...uploaded];
       await updateProfile({
         profile_photos: updatedPhotos,
         avatar_url: updatedPhotos[0],
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Something went wrong.';
-      appDialog({ title: 'Could not save photo', message: msg, icon: 'alert-circle-outline' });
+      appDialog({ title: 'Could not save photos', message: msg, icon: 'alert-circle-outline' });
     } finally {
       setUploading(false);
+      setUploadProgress('');
     }
   };
 
@@ -120,7 +126,7 @@ export default function PhotosScreen() {
         </TouchableOpacity>
         <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>My Photos</Text>
         {photos.length < MAX_PROFILE_PHOTOS ? (
-          <TouchableOpacity onPress={addPhoto} disabled={uploading}>
+          <TouchableOpacity onPress={addPhotos} disabled={uploading}>
             {uploading ? (
               <ActivityIndicator size="small" color={COLORS.primary} />
             ) : (
@@ -134,7 +140,9 @@ export default function PhotosScreen() {
 
       <View style={{ padding: 16 }}>
         <Text style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 16, textAlign: 'center' }}>
-          {photos.length}/{MAX_PROFILE_PHOTOS} photos • First is your main picture • Long press to remove
+          {uploading
+            ? uploadProgress
+            : `${photos.length}/${MAX_PROFILE_PHOTOS} photos • First is your main picture • Long press to remove`}
         </Text>
 
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -194,7 +202,7 @@ export default function PhotosScreen() {
 
           {photos.length < MAX_PROFILE_PHOTOS && (
             <TouchableOpacity
-              onPress={addPhoto}
+              onPress={addPhotos}
               style={{
                 width: PHOTO_SIZE,
                 height: PHOTO_SIZE * 1.3,
