@@ -223,8 +223,6 @@ export const RELIGION_OPTIONS = [
   { value: 'buddhism',           label: 'Buddhism',            emoji: '☸️' },
   { value: 'hinduism',           label: 'Hinduism',            emoji: '🕉️' },
   { value: 'atheist',            label: 'Atheist',             emoji: '⚛️' },
-  { value: 'agnostic',           label: 'Agnostic',            emoji: '🤔' },
-  { value: 'spiritual',          label: 'Spiritual',           emoji: '🌟' },
   { value: 'other',              label: 'Other',               emoji: '🙏' },
 ];
 
@@ -304,11 +302,11 @@ export const MARITAL_STATUS_OPTIONS = [
   { value: 'separated', label: 'Separated', emoji: '↔️' },
 ];
 
-export const WANT_CHILDREN_OPTIONS = [
-  { value: 'yes',  label: 'Yes, I want kids' },
-  { value: 'no',   label: "No, I don't" },
-  { value: 'open', label: 'Open to it' },
-];
+// export const WANT_CHILDREN_OPTIONS = [
+//   { value: 'yes',  label: 'Yes, I want kids' },
+//   { value: 'no',   label: "No, I don't" },
+//   { value: 'open', label: 'Open to it' },
+// ];
 
 export const APP_NAME = 'Africana';
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
