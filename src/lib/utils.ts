@@ -42,6 +42,27 @@ export function calculateAge(birthdate: string | null | undefined): number | und
   return age;
 }
 
+/**
+ * Returns a human-readable "Last seen …" string for a user who is offline.
+ * Returns null if last_seen is missing or unparseable (caller should fall back
+ * to a generic label or hide the status line).
+ */
+export function formatLastSeen(lastSeen: string | null | undefined): string | null {
+  if (!lastSeen) return null;
+  const seenAt = new Date(lastSeen).getTime();
+  if (Number.isNaN(seenAt)) return null;
+  const diffMs = Date.now() - seenAt;
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1)  return 'Last seen just now';
+  if (diffMin < 60) return `Last seen ${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24)  return `Last seen ${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return 'Last seen yesterday';
+  if (diffDay < 7)  return `Last seen ${diffDay} days ago`;
+  return 'Last seen a while ago';
+}
+
 export function isUserEffectivelyOnline(
   onlineStatus: string | null | undefined,
   lastSeen: string | null | undefined,

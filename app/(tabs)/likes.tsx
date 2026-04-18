@@ -7,7 +7,6 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
-  Animated,
   InteractionManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,7 +21,6 @@ import { useChatStore } from '@/store/chat.store';
 import { useActivityStore } from '@/store/activity.store';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { isUserEffectivelyOnline } from '@/lib/utils';
-import { SETTLE } from '@/lib/motion';
 import haptics from '@/lib/haptics';
 import { User } from '@/types';
 import { COLORS, FONT, DEFAULT_AVATAR } from '@/constants';
@@ -313,13 +311,13 @@ export default function LikesScreen() {
     let cancelled = false;
 
     void (async () => {
-      const next = await fetchActivityCountsRef.current();
+      await fetchActivityCountsRef.current();
       if (cancelled) return;
-      if (next) {
-        await Promise.all(
-          TAB_ORDER.filter((t) => (next[t] ?? 0) > 0).map((t) => markTabSeen(t)),
-        );
-      }
+      // Only mark the initially-visible tab (matches) as seen on mount.
+      // All other tabs are marked seen in handleTabPress when the user
+      // actually taps them — bulk-marking everything here was clearing
+      // badges (received, viewers, etc.) that the user hadn't looked at yet.
+      void markTabSeen(activeTab);
       if (cancelled) return;
       // Load the tab the user actually sees first, then warm the rest in the
       // background after interactions settle. Switching tabs after the warm-up
@@ -421,15 +419,6 @@ export default function LikesScreen() {
     }
   }, [user, getOrCreateConversation]);
 
-  // Drives the sliding indicator under the tab strip. We measure the strip
-  // once and animate `translateX` between four equal segments — much smoother
-  // than swapping background colors on the icon circles.
-  const [tabStripWidth, setTabStripWidth] = useState(0);
-  const indicatorAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const idx = TAB_ORDER.indexOf(activeTab);
-    Animated.spring(indicatorAnim, { toValue: idx, ...SETTLE }).start();
-  }, [activeTab, indicatorAnim]);
 
   const handleTabPress = (t: Tab) => {
     if (t === activeTab) return;
@@ -489,7 +478,6 @@ export default function LikesScreen() {
   };
 
   const showMessageButton = activeTab === 'matches';
-  const segmentWidth = tabStripWidth > 0 ? tabStripWidth / TAB_ORDER.length : 0;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.surface }}>
@@ -497,32 +485,7 @@ export default function LikesScreen() {
         <ScreenTitle>Activity</ScreenTitle>
       </View>
 
-      <View
-        style={s.tabsWrap}
-        onLayout={(e) => {
-          const w = e.nativeEvent.layout.width;
-          if (w > 0 && Math.abs(w - tabStripWidth) > 0.5) setTabStripWidth(w);
-        }}
-      >
-        {segmentWidth > 0 ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              s.tabIndicator,
-              {
-                width: segmentWidth - 16,
-                transform: [
-                  {
-                    translateX: indicatorAnim.interpolate({
-                      inputRange: [0, TAB_ORDER.length - 1],
-                      outputRange: [8, 8 + segmentWidth * (TAB_ORDER.length - 1)],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-        ) : null}
+      <View style={s.tabsWrap}>
         {TAB_ORDER.map((t) => {
           const isActive = activeTab === t;
           const meta = TAB_META[t];
@@ -539,22 +502,24 @@ export default function LikesScreen() {
               <View style={s.tabIconRow}>
                 <Ionicons
                   name={isActive ? meta.iconActive : meta.icon}
-                  size={16}
-                  color={isActive ? COLORS.white : COLORS.textSecondary}
+                  size={20}
+                  color={isActive ? COLORS.primary : COLORS.textSecondary}
                 />
-                <Text
-                  style={[s.tabLabel, isActive && s.tabLabelActive]}
-                  numberOfLines={1}
-                >
-                  {meta.label}
-                </Text>
-                {c > 0 ? (
-                  <View style={[s.tabBadge, isActive && s.tabBadgeActive]}>
-                    <Text style={[s.tabBadgeTxt, isActive && s.tabBadgeTxtActive]}>
-                      {c > 99 ? '99+' : c}
-                    </Text>
-                  </View>
-                ) : null}
+                <View style={s.tabLabelRow}>
+                  <Text
+                    style={[s.tabLabel, isActive && s.tabLabelActive]}
+                    numberOfLines={1}
+                  >
+                    {meta.label}
+                  </Text>
+                  {c > 0 ? (
+                    <View style={[s.tabBadge, isActive && s.tabBadgeActive]}>
+                      <Text style={[s.tabBadgeTxt, isActive && s.tabBadgeTxtActive]}>
+                        {c > 99 ? '99+' : c}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
               </View>
             </Pressable>
           );
@@ -628,14 +593,6 @@ const s = StyleSheet.create({
     paddingBottom: 10,
     position: 'relative',
   },
-  tabIndicator: {
-    position: 'absolute',
-    top: 4,
-    left: 0,
-    bottom: 10,
-    backgroundColor: COLORS.primary,
-    borderRadius: 999,
-  },
   tabItem: {
     flex: 1,
     alignItems: 'center',
@@ -643,10 +600,16 @@ const s = StyleSheet.create({
     paddingVertical: 8,
   },
   tabIconRow: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  tabLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 4,
   },
   tabLabel: {
     fontSize: 13,
@@ -655,7 +618,7 @@ const s = StyleSheet.create({
     letterSpacing: 0.1,
   },
   tabLabelActive: {
-    color: COLORS.white,
+    color: COLORS.primary,
     fontWeight: FONT.extrabold,
   },
   tabBadge: {

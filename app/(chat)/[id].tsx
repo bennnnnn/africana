@@ -32,7 +32,7 @@ import { User, Message } from '@/types';
 import { COLORS, RADIUS, FONT, SHADOWS, DEFAULT_AVATAR } from '@/constants';
 import { getHiddenMessageIds, persistHiddenMessageIds } from '@/lib/hidden-messages';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
-import { isUserEffectivelyOnline } from '@/lib/utils';
+import { isUserEffectivelyOnline, formatLastSeen } from '@/lib/utils';
 import { SPRING, SNAP_OUT } from '@/lib/motion';
 import haptics from '@/lib/haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -69,7 +69,15 @@ let lastChatRouteKey: string | null = null;
 const { width } = Dimensions.get('window');
 /** Stable empty array so memoized rows are not invalidated every parent render. */
 const NO_REACTIONS: string[] = [];
-const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+/**
+ * iMessage-style 6 reaction set. MUST stay in sync with the
+ * `message_reactions_emoji_check` CHECK constraint in Postgres — anything
+ * outside this list will be rejected by the server.
+ */
+const REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏'] as const;
+type ReactionEmoji = (typeof REACTIONS)[number];
+/** message_id → (user_id → emoji). One reaction per user per message (PK). */
+type ReactionsMap = Record<string, Record<string, ReactionEmoji>>;
 
 function normalizeRouteParam(v: string | string[] | undefined): string | undefined {
   if (typeof v === 'string' && v.length > 0) return v;
@@ -152,9 +160,6 @@ export default function ChatScreen() {
    */
   const [peerTyping, setPeerTyping]       = useState(false);
   const typingChannelRef                  = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  /** Set to true only once the channel hits SUBSCRIBED. Prevents send() racing
-   *  the join handshake (which silently swallowed the very first key-press). */
-  const typingChannelReadyRef             = useRef(false);
   const peerTypingTimerRef                = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef                 = useRef(0);
   const [text, setText]                   = useState('');
@@ -175,15 +180,22 @@ export default function ChatScreen() {
   const pendingScrollModeRef = useRef<'none' | 'instant' | 'smooth'>('instant');
   const prevMessageCountRef = useRef(0);
   const prevLatestMessageKeyRef = useRef<string | undefined>(undefined);
-  /** After switching threads, scroll to bottom before paint so we never flash the wrong end of the list. */
-  const pendingInitialScrollRef = useRef(false);
   const [inputFocused, setInputFocused] = useState(false);
   // Unified overlay — one at a time. Own messages get a Copy/Delete menu;
   // other users' messages get emoji reactions plus a trash icon.
   const [msgSheet, setMsgSheet] = useState<{ messageId: string; isOwn: boolean; content: string } | null>(null);
   const reactionAnim = useRef(new Animated.Value(0)).current;
-  // Local reactions map: messageId → emoji[]
-  const [reactions, setReactions] = useState<Record<string, string[]>>({});
+  // Reactions are persisted in `message_reactions` and synced via realtime.
+  // Shape: messageId → { userId → emoji }. PK in DB is (message_id, user_id),
+  // so each user can only have ONE active reaction per message (iMessage style).
+  const [reactions, setReactions] = useState<ReactionsMap>({});
+  /**
+   * Set of message ids currently rendered in this conversation. Used by the
+   * realtime `message_reactions` listener as a cheap O(1) discriminator —
+   * we receive reactions for every conversation we participate in (RLS),
+   * and discard any whose message we don't know about locally.
+   */
+  const messagesIdSetRef = useRef<Set<string>>(new Set());
   // Locally hidden messages (deleted for me only)
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
 
@@ -208,6 +220,38 @@ export default function ChatScreen() {
     () => convMessages.filter((m) => !hiddenIds.has(m.id)),
     [convMessages, hiddenIds],
   );
+
+  // Keep the id set in sync with the rendered message list so the realtime
+  // reactions handler can quickly tell whether an inbound row is for us.
+  // Only "real" (non-temp) ids matter — reactions never target an optimistic
+  // temp message.
+  useEffect(() => {
+    const next = new Set<string>();
+    for (const m of convMessages) {
+      if (!m.id.startsWith('temp-')) next.add(m.id);
+    }
+    messagesIdSetRef.current = next;
+  }, [convMessages]);
+
+  /**
+   * Derived `messageId → emoji[]` map fed to ChatMessageRow. We dedupe so
+   * "two people both reacted ❤️" shows a single ❤️ pill (matches iMessage),
+   * but distinct emojis stack so you can see "peer 😂, you ❤️".
+   */
+  const reactionEmojiArrays = useMemo<Record<string, string[]>>(() => {
+    const out: Record<string, string[]> = {};
+    for (const [msgId, byUser] of Object.entries(reactions)) {
+      const seen = new Set<string>();
+      const list: string[] = [];
+      for (const emoji of Object.values(byUser)) {
+        if (seen.has(emoji)) continue;
+        seen.add(emoji);
+        list.push(emoji);
+      }
+      if (list.length > 0) out[msgId] = list;
+    }
+    return out;
+  }, [reactions]);
   /**
    * If the conversation list says there's a `last_message`, we know messages
    * exist — don't flash "No messages yet" while the cache/network is still
@@ -255,6 +299,10 @@ export default function ChatScreen() {
     }
     return items;
   }, [listData]);
+
+  // Inverted FlatList expects newest-first data. Reversing here means index 0 =
+  // latest message, which the list renders at the bottom with no initial scroll needed.
+  const invertedListItems = useMemo(() => [...listItems].reverse(), [listItems]);
   const latestMessageKey = visibleMessages.length > 0
     ? (visibleMessages[visibleMessages.length - 1].listKey ?? visibleMessages[visibleMessages.length - 1].id)
     : undefined;
@@ -293,21 +341,15 @@ export default function ChatScreen() {
     prevLatestMessageKeyRef.current = undefined;
     isNearBottomRef.current = true;
     pendingScrollModeRef.current = 'instant';
-    pendingInitialScrollRef.current = true;
     setReportModalVisible(false);
     setPeerTyping(false);
     lastTypingSentRef.current = 0;
   }, [conversationId]);
 
-  useLayoutEffect(() => {
-    if (!pendingInitialScrollRef.current || listItems.length === 0) return;
-    pendingInitialScrollRef.current = false;
-    flatListRef.current?.scrollToEnd({ animated: false });
-  }, [conversationId, listItems.length]);
 
   const scrollToBottom = useCallback((animated: boolean) => {
     requestAnimationFrame(() => {
-      flatListRef.current?.scrollToEnd({ animated });
+      flatListRef.current?.scrollToOffset({ offset: 0, animated });
     });
   }, []);
 
@@ -339,16 +381,17 @@ export default function ChatScreen() {
 
   const handleListScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-    isNearBottomRef.current = distanceFromBottom < 80;
-    // Pull in the next page of older messages when the user scrolls within
-    // ~one screen of the top. The store guards against duplicate concurrent
-    // loads, so it's safe to trigger this on every onScroll tick.
+    // With inverted FlatList: offset 0 = newest messages (visual bottom).
+    // Scrolling toward older messages increases contentOffset.y.
+    isNearBottomRef.current = contentOffset.y < 80;
+    // Load older messages when the user scrolls near the visual top
+    // (= far end of the inverted list = high contentOffset.y).
+    const distanceFromTop = contentSize.height - contentOffset.y - layoutMeasurement.height;
     if (
       conversationId &&
       hasMoreOlder &&
       !isLoadingOlder &&
-      contentOffset.y < layoutMeasurement.height * 0.6
+      distanceFromTop < layoutMeasurement.height * 0.6
     ) {
       void loadOlderMessages(conversationId);
     }
@@ -551,6 +594,30 @@ export default function ChatScreen() {
         const updated = payload.new as Message;
         applyMessageUpdate(conversationId, updated);
       })
+      // Reactions live on a separate table. We can't filter by
+      // conversation_id (the FK is on message_id), so we listen to ALL
+      // reaction changes and discard any whose message_id we don't have
+      // in this conversation. RLS guarantees we only RECEIVE rows for
+      // conversations we participate in, so this is a tiny stream.
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'message_reactions',
+      }, (payload) => {
+        const row = (payload.new ?? payload.old) as
+          | { message_id: string; user_id: string; emoji: ReactionEmoji }
+          | undefined;
+        if (!row) return;
+        const knownIds = messagesIdSetRef.current;
+        if (!knownIds.has(row.message_id)) return;
+        setReactions((prev) => {
+          const forMsg = { ...(prev[row.message_id] ?? {}) };
+          if (payload.eventType === 'DELETE') {
+            delete forMsg[row.user_id];
+          } else {
+            forMsg[row.user_id] = row.emoji;
+          }
+          return { ...prev, [row.message_id]: forMsg };
+        });
+      })
       .subscribe();
 
     const typingChannel = supabase
@@ -572,26 +639,45 @@ export default function ChatScreen() {
         // we may never see 'SUBSCRIBED' here. We rely on a synchronous
         // state === 'joined' check at send time as the real gate. Logging here
         // is purely for debugging.
-        if (status === 'SUBSCRIBED') {
-          typingChannelReadyRef.current = true;
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          typingChannelReadyRef.current = false;
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           if (err) console.warn('[Chat] typing channel', status, err.message);
         }
       });
 
     typingChannelRef.current = typingChannel;
-    // If the channel was already joined when we attached (shared topic case),
-    // the subscribe callback won't fire — flip the gate ourselves.
-    if ((typingChannel as unknown as { state?: string }).state === 'joined') {
-      typingChannelReadyRef.current = true;
-    }
+
+    // Reset reactions when switching conversations so we don't briefly show
+    // stale state from the previous chat. The fetch below repopulates.
+    setReactions({});
+
+    // Initial backfill of reactions for this conversation. We hit the table
+    // joined to messages so we can scope by conversation in one query.
+    // RLS already restricts to participants, but the explicit join also gives
+    // the planner an index-friendly path via `messages.conversation_id`.
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('message_reactions')
+        .select('message_id, user_id, emoji, messages!inner(conversation_id)')
+        .eq('messages.conversation_id', conversationId);
+      if (cancelled || error || !data) return;
+      const next: ReactionsMap = {};
+      for (const row of data as unknown as Array<{
+        message_id: string;
+        user_id: string;
+        emoji: ReactionEmoji;
+      }>) {
+        if (!next[row.message_id]) next[row.message_id] = {};
+        next[row.message_id][row.user_id] = row.emoji;
+      }
+      setReactions(next);
+    })();
 
     return () => {
+      cancelled = true;
       if (peerTypingTimerRef.current) clearTimeout(peerTypingTimerRef.current);
       peerTypingTimerRef.current = null;
       typingChannelRef.current = null;
-      typingChannelReadyRef.current = false;
       setPeerTyping(false);
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(typingChannel);
@@ -636,6 +722,7 @@ export default function ChatScreen() {
     const content = text.trim();
     const cid = conversationId;
     setText('');
+    lastTypingSentRef.current = 0;
     haptics.tapLight();
     pendingScrollModeRef.current = 'smooth';
     const { error } = await sendMessage(cid, user.id, content, user.full_name);
@@ -669,14 +756,66 @@ export default function ChatScreen() {
       .start(() => setMsgSheet(null));
   };
 
-  const handleReact = (messageId: string, emoji: string) => {
-    setReactions((prev) => {
-      const current = prev[messageId] ?? [];
-      const exists = current.includes(emoji);
-      return { ...prev, [messageId]: exists ? current.filter((e) => e !== emoji) : [...current, emoji] };
-    });
+  /**
+   * Toggle a reaction. iMessage-style: each user can only have ONE reaction
+   * per message (DB PK is (message_id, user_id)). Tapping the same emoji
+   * removes it; tapping a different emoji replaces the existing one.
+   *
+   * Optimistic UI: we update local state immediately, then write to Postgres.
+   * The realtime listener will reconcile if the server state diverges.
+   */
+  const handleReact = useCallback(async (messageId: string, emoji: ReactionEmoji) => {
+    if (!user) return;
     closeMsgSheet();
-  };
+    haptics.tapLight();
+
+    const currentForMessage = reactions[messageId] ?? {};
+    const myCurrent = currentForMessage[user.id];
+    const isRemoval = myCurrent === emoji;
+
+    setReactions((prev) => {
+      const next = { ...(prev[messageId] ?? {}) };
+      if (isRemoval) {
+        delete next[user.id];
+      } else {
+        next[user.id] = emoji;
+      }
+      return { ...prev, [messageId]: next };
+    });
+
+    try {
+      if (isRemoval) {
+        const { error } = await supabase
+          .from('message_reactions')
+          .delete()
+          .eq('message_id', messageId)
+          .eq('user_id', user.id);
+        if (error) throw error;
+      } else {
+        // upsert handles both first-react and switch-emoji in one round-trip,
+        // and is idempotent across the realtime echo.
+        const { error } = await supabase
+          .from('message_reactions')
+          .upsert(
+            { message_id: messageId, user_id: user.id, emoji },
+            { onConflict: 'message_id,user_id' },
+          );
+        if (error) throw error;
+      }
+    } catch (err) {
+      console.warn('[Chat] reaction write failed', err);
+      // Roll back on failure.
+      setReactions((prev) => {
+        const next = { ...(prev[messageId] ?? {}) };
+        if (myCurrent) {
+          next[user.id] = myCurrent;
+        } else {
+          delete next[user.id];
+        }
+        return { ...prev, [messageId]: next };
+      });
+    }
+  }, [user, reactions, closeMsgSheet]);
 
   const handleCopyMessage = async (content: string) => {
     closeMsgSheet();
@@ -817,25 +956,22 @@ export default function ChatScreen() {
       <FlatList
         ref={flatListRef}
         style={{ flex: 1, minHeight: 0 }}
-        data={listItems}
+        data={invertedListItems}
+        inverted
         keyExtractor={(item) => item.type === 'message' ? (item.message.listKey ?? item.message.id) : item.id}
-        extraData={reactions}
+        extraData={reactionEmojiArrays}
         removeClippedSubviews={false}
         initialNumToRender={20}
         maxToRenderPerBatch={12}
         windowSize={12}
         updateCellsBatchingPeriod={50}
-        contentContainerStyle={{ padding: 12, paddingTop: 8, flexGrow: 1, justifyContent: 'flex-end' }}
+        contentContainerStyle={{ padding: 12, paddingTop: 8 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         onScroll={handleListScroll}
         scrollEventThrottle={16}
-        // When older messages page in at the top, keep whatever the user is
-        // currently looking at fixed in place instead of letting the list
-        // jump up by the height of the newly-prepended rows.
-        maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
-        ListHeaderComponent={
+        ListFooterComponent={
           isLoadingOlder ? (
             <View style={{ paddingVertical: 10, alignItems: 'center' }}>
               <ActivityIndicator size="small" color={COLORS.textMuted} />
@@ -851,7 +987,7 @@ export default function ChatScreen() {
           <ChatMessageRow
             item={item.message}
             userId={user?.id}
-            msgReactions={reactions[item.message.id] ?? NO_REACTIONS}
+            msgReactions={reactionEmojiArrays[item.message.id] ?? NO_REACTIONS}
             onLongPress={openMsgSheet}
             isSelected={msgSheet?.messageId === item.message.id}
             isGroupStart={item.isGroupStart}
@@ -890,9 +1026,10 @@ export default function ChatScreen() {
               // callback only fires on transitions and may never fire if
               // supabase-js dedupes against a topic the Messages tab joined
               // first. Reading state synchronously is the only reliable check.
+              // || fallback removed: send() must only fire when channel is joined
+              // to avoid the REST fallback warning.
               const chState = (ch as unknown as { state?: string }).state;
-              const isReady = chState === 'joined' || typingChannelReadyRef.current;
-              if (!isReady) return;
+              if (chState !== 'joined') return;
               lastTypingSentRef.current = now;
               ch
                 .send({
@@ -938,7 +1075,7 @@ export default function ChatScreen() {
       */}
       <KeyboardAvoidingView
         behavior="padding"
-        keyboardVerticalOffset={bodyTopInset}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? bodyTopInset : 0}
         style={{ flex: 1, marginTop: bodyTopInset }}
       >
         <View style={{ flex: 1 }}>{conversationPane}</View>
@@ -1002,7 +1139,9 @@ export default function ChatScreen() {
                       style={s.headerAvatar}
                       contentFit="cover"
                     />
-                    <View style={[s.onlineDot, { backgroundColor: peer.online_status === 'online' ? COLORS.online : COLORS.border }]} />
+                    {peer.online_status === 'online' && (
+                      <View style={[s.onlineDot, { backgroundColor: COLORS.online }]} />
+                    )}
                   </View>
                 ) : null}
                 <View style={{ flex: 1, minWidth: 0 }}>
@@ -1019,7 +1158,13 @@ export default function ChatScreen() {
                       },
                     ]}
                   >
-                    {peerTyping ? 'Typing…' : peer.online_status === 'online' ? 'Online' : 'Offline'}
+                    {peerTyping
+                      ? 'Typing…'
+                      : peer.online_status === 'online'
+                        ? 'Online'
+                        : peer.online_visible === false
+                          ? 'Offline'
+                          : (formatLastSeen(peer.last_seen) ?? 'Offline')}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -1075,7 +1220,12 @@ export default function ChatScreen() {
           }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 12, paddingVertical: 16 }}>
               {REACTIONS.map((emoji) => {
-                const active = (reactions[msgSheet.messageId] ?? []).includes(emoji);
+                // "Active" = MY current reaction. The DB PK is one-per-user,
+                // so showing the picker active state per-user matches reality
+                // (and lets the user tap the same emoji again to remove it).
+                const active = user
+                  ? reactions[msgSheet.messageId]?.[user.id] === emoji
+                  : false;
                 return (
                   <TouchableOpacity
                     key={emoji}
