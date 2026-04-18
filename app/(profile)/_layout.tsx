@@ -5,7 +5,11 @@ export default function ProfileLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: 'slide_from_right',
+        // Profile → Profile transitions (pull-up for next, gallery prev/next)
+        // slide up from the bottom so they feel like a fresh detail sheet
+        // rather than a sideways page turn. The Discover → Profile entrance
+        // is owned by the root stack and stays as its default.
+        animation: 'slide_from_bottom',
         contentStyle: { backgroundColor: 'transparent' },
       }}
     />

@@ -1,7 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-let Notifications: typeof import('expo-notifications') | null = null;
-try { Notifications = require('expo-notifications'); } catch {}
 import { registerForPushNotifications } from '@/lib/notifications';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -16,6 +14,17 @@ import { useAuthStore } from '@/store/auth.store';
 import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { DialogProvider } from '@/components/ui/DialogProvider';
+import { useFonts, DMSerifDisplay_400Regular } from '@expo-google-fonts/dm-serif-display';
+import { clearProfileSeedCache, hydrateProfileSeedCache } from '@/lib/profile-seed-cache';
+import { initAnalytics, identify, resetAnalytics, track, EVENTS } from '@/lib/analytics';
+
+/** Optional: Expo Go may not ship expo-notifications — load after all imports (valid ESM). */
+let Notifications: typeof import('expo-notifications') | null = null;
+try {
+  Notifications = require('expo-notifications');
+} catch {
+  // unavailable in some environments
+}
 
 WebBrowser.maybeCompleteAuthSession();
 SplashScreen.preventAutoHideAsync();
@@ -33,21 +42,47 @@ export default function RootLayout() {
   const router = useRouter();
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const notifResponseSub = useRef<any>(null);
+  const [fontsLoaded] = useFonts({ DMSerifDisplay_400Regular });
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      if (session?.user?.id) {
-        await fetchProfile(session.user.id);
-        await fetchSettings(session.user.id);
-        await setOnlineStatus(session.user.id, 'online');
-        useAuthStore.getState().patchUser({ online_status: 'online' });
-        registerForPushNotifications(session.user.id);
-      }
-      // Mark auth as resolved — index.tsx waits for this before routing
+    // Rehydrate the profile-seed cache from disk so opening a profile after a
+    // cold start is still instant (the in-memory Map is otherwise empty).
+    void hydrateProfileSeedCache().catch(() => {});
+
+    // Boot analytics ASAP — it queues events until init completes so the
+    // very first screen's events aren't dropped.
+    void initAnalytics();
+
+    const finishBootstrap = () => {
       setInitialized();
-      SplashScreen.hideAsync();
-    });
+      if (fontsLoaded) {
+        void SplashScreen.hideAsync().catch(() => {});
+      }
+    };
+
+    supabase.auth
+      .getSession()
+      .then(async ({ data: { session } }) => {
+        try {
+          setSession(session);
+          if (session?.user?.id) {
+            await fetchProfile(session.user.id);
+            await fetchSettings(session.user.id);
+            await setOnlineStatus(session.user.id, 'online');
+            useAuthStore.getState().patchUser({ online_status: 'online' });
+            registerForPushNotifications(session.user.id);
+            identify(session.user.id);
+          }
+        } catch (e) {
+          console.error('Auth bootstrap error', e);
+        } finally {
+          finishBootstrap();
+        }
+      })
+      .catch((e) => {
+        console.error('getSession failed', e);
+        finishBootstrap();
+      });
 
     // Handle notification taps — navigate to the right screen (not available in Expo Go)
     if (Notifications?.addNotificationResponseReceivedListener) {
@@ -65,25 +100,33 @@ export default function RootLayout() {
     const appStateSub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       const prev = appState.current;
       appState.current = nextState;
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (!session?.user?.id) return;
-        if (nextState === 'active' && prev !== 'active') {
-          void setOnlineStatus(session.user.id, 'online');
-          useAuthStore.getState().patchUser({ online_status: 'online' });
-        } else if (nextState === 'background' || nextState === 'inactive') {
-          void setOnlineStatus(session.user.id, 'offline');
-          useAuthStore.getState().patchUser({ online_status: 'offline' });
-        }
-      });
+      supabase.auth
+        .getSession()
+        .then(({ data: { session } }) => {
+          if (!session?.user?.id) return;
+          if (nextState === 'active' && prev !== 'active') {
+            void setOnlineStatus(session.user.id, 'online').catch((e) => console.error('setOnlineStatus', e));
+            useAuthStore.getState().patchUser({ online_status: 'online' });
+          } else if (nextState === 'background' || nextState === 'inactive') {
+            void setOnlineStatus(session.user.id, 'offline').catch((e) => console.error('setOnlineStatus', e));
+            useAuthStore.getState().patchUser({ online_status: 'offline' });
+          }
+        })
+        .catch((e) => console.error('getSession (appState)', e));
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       if (session?.user?.id) {
-        fetchProfile(session.user.id);
-        fetchSettings(session.user.id);
+        void fetchProfile(session.user.id).catch((e) => console.error('fetchProfile (auth change)', e));
+        void fetchSettings(session.user.id).catch((e) => console.error('fetchSettings (auth change)', e));
         registerForPushNotifications(session.user.id);
+        identify(session.user.id);
+        if (event === 'SIGNED_IN') track(EVENTS.AUTH_LOGIN);
       } else if (event === 'SIGNED_OUT') {
+        track(EVENTS.AUTH_SIGNOUT);
+        resetAnalytics();
+        void clearProfileSeedCache().catch(() => {});
         // Only redirect on explicit sign-out, not on initial load
         router.replace('/(auth)/welcome');
       }
@@ -117,8 +160,14 @@ export default function RootLayout() {
       }
     };
 
-    Linking.getInitialURL().then((url) => { if (url) handleUrl({ url }); });
-    const linkSub = Linking.addEventListener('url', handleUrl);
+    Linking.getInitialURL()
+      .then((url) => {
+        if (url) void handleUrl({ url }).catch((e) => console.error('Initial URL handler', e));
+      })
+      .catch((e) => console.error('getInitialURL', e));
+    const linkSub = Linking.addEventListener('url', ({ url }) => {
+      void handleUrl({ url }).catch((err) => console.error('Deep link handler', err));
+    });
 
     return () => {
       subscription.unsubscribe();
@@ -127,6 +176,12 @@ export default function RootLayout() {
       notifResponseSub.current?.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      void SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

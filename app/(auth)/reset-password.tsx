@@ -59,7 +59,7 @@ export default function ResetPasswordScreen() {
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
             <View style={{
               width: 80, height: 80, borderRadius: 40,
-              backgroundColor: `${COLORS.success}15`,
+              backgroundColor: COLORS.successSurface,
               alignItems: 'center', justifyContent: 'center',
             }}>
               <Ionicons name="checkmark-circle-outline" size={40} color={COLORS.success} />

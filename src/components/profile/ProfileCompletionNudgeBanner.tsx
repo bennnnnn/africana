@@ -52,9 +52,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
     padding: 14,
     borderRadius: RADIUS.lg,
-    backgroundColor: `${COLORS.primary}10`,
+    backgroundColor: COLORS.primarySurface,
     borderWidth: 1,
-    borderColor: `${COLORS.primary}35`,
+    borderColor: COLORS.primaryBorder,
   },
   iconWrap: {
     width: 36,

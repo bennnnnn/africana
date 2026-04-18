@@ -1,48 +1,72 @@
 export const COLORS = {
   // ── Brand ──────────────────────────────────────────────────────────────────
-  primary:      '#C84B31',
-  primaryLight: '#E07F66',
-  primaryDark:  '#A33B26',
-  earth:        '#8B5E3C',
-  earthLight:   '#D4A574',
-  savanna:      '#F5E6D0',
-  gold:         '#D4AF37',
-  green:        '#2D6A4F',
+  /** Vivid coral-terracotta — confident, modern, still rooted in the Africana warmth */
+  primary:        '#EF3E2A',
+  primaryLight:   '#FF7A5F',
+  primaryDark:    '#C02B1A',
+  /** Tinted surface for primary backgrounds (banners, soft chips) */
+  primarySurface: '#FFEDE8',
+  primaryBorder:  '#FCC9BD',
+
+  /** Muted accent (labels, secondary chips) — neutral graphite */
+  earth:        '#3A3A3C',
+  earthLight:   '#8E8E93',
+  /** Subtle neutral surface tint for pills / icon wells (iOS-like) */
+  savanna:      '#F2F2F4',
+  savannaDark:  '#E5E5E7',
+
+  /** Single accent: gold for highlights (premium, stars) */
+  gold:         '#F5A623',
+  goldSurface:  '#FFF4DE',
+  /** Forest green retained for nature accents */
+  green:        '#0E9F6E',
 
   // ── Surfaces ────────────────────────────────────────────────────────────────
-  surface:  '#FAFAF8',
+  /** App background — clean near-white (big-company neutral) */
+  surface:  '#FFFFFF',
+  /** Secondary surface — grouped sections, subtle wells */
+  surfaceAlt: '#F7F7F8',
   card:     '#FFFFFF',
   white:    '#FFFFFF',
   inputBg:  '#FFFFFF',
 
   // ── Text ───────────────────────────────────────────────────────────────────
-  text:          '#1A1A1A',
-  textSecondary: '#6B7280',
-  textMuted:     '#9CA3AF',
+  /** Apple-style neutral scale — crisp, high contrast */
+  text:          '#0B0B0C',
+  textSecondary: '#4A4A4F',
+  textMuted:     '#8E8E93',
   textInverse:   '#FFFFFF',
-  textStrong:    '#111111',
+  textStrong:    '#000000',
 
   // ── Borders ────────────────────────────────────────────────────────────────
-  border:       '#E5E7EB',
-  borderStrong: '#D1D5DB',
+  /** Neutral hairline divider — clean, non-tinted */
+  border:       '#EBEBED',
+  borderStrong: '#D6D6D9',
 
   // ── Semantic ───────────────────────────────────────────────────────────────
-  error:   '#EF4444',
-  success: '#10B981',
-  warning: '#F59E0B',
-  /** Unfilled profile fields — light red to invite action */
-  emptyField:        '#E57373',
-  emptyFieldSurface: '#FFF5F5',
-  emptyFieldBorder:  'rgba(229, 115, 115, 0.35)',
+  error:          '#E53935',
+  errorSurface:   '#FDECEC',
+  errorBorder:    '#F6BFBF',
+  success:        '#0E9F6E',
+  successSurface: '#E1F7EE',
+  successBorder:  '#9FE3C6',
+  warning:        '#F5A623',
+  warningSurface: '#FFF4DE',
+  warningBorder:  '#F6D48A',
+
+  /** Unfilled profile fields — soft coral to invite action */
+  emptyField:        '#EF6A56',
+  emptyFieldSurface: '#FFEDE8',
+  emptyFieldBorder:  'rgba(239, 106, 86, 0.32)',
 
   // ── Status ─────────────────────────────────────────────────────────────────
-  online:  '#10B981',
-  offline: '#9CA3AF',
+  online:  '#0E9F6E',
+  offline: '#C7C7CC',
 
   // ── Overlays ───────────────────────────────────────────────────────────────
-  overlay:      'rgba(0,0,0,0.78)',
-  overlayLight: 'rgba(0,0,0,0.35)',
-  toastBg:      'rgba(17,17,17,0.88)',
+  overlay:      'rgba(0,0,0,0.72)',
+  overlayLight: 'rgba(0,0,0,0.32)',
+  toastBg:      'rgba(17,17,20,0.94)',
 } as const;
 
 // ── Spacing & radius scale ──────────────────────────────────────────────────
@@ -57,6 +81,11 @@ export const RADIUS = {
 } as const;
 
 // ── Typography scale ────────────────────────────────────────────────────────
+/**
+ * Font families:
+ *  - `display`: DM Serif Display — only for screen titles / hero name
+ *  - default: System sans (use the `weights` for everything else)
+ */
 export const FONT = {
   // sizes
   xs:      11,
@@ -67,43 +96,45 @@ export const FONT = {
   xxl:     24,
   xxxl:    30,
   display: 36,
-  // weights
+  // weights — capped at 4 (regular / medium / semibold / extrabold)
   regular:   '400' as const,
   medium:    '500' as const,
   semibold:  '600' as const,
   bold:      '700' as const,
   extrabold: '800' as const,
   black:     '900' as const,
+  // families
+  displayFamily: 'DMSerifDisplay_400Regular',
 } as const;
 
-// ── Shadow presets ──────────────────────────────────────────────────────────
+// ── Shadow presets — neutral, crisp (big-company style) ────────────────────
 export const SHADOWS = {
   sm: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   md: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
   },
   lg: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.08,
     shadowRadius: 14,
-    elevation: 7,
+    elevation: 6,
   },
   xl: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.20,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
     elevation: 12,
   },
 } as const;
@@ -302,17 +333,11 @@ export const MARITAL_STATUS_OPTIONS = [
   { value: 'separated', label: 'Separated', emoji: '↔️' },
 ];
 
-// export const WANT_CHILDREN_OPTIONS = [
-//   { value: 'yes',  label: 'Yes, I want kids' },
-//   { value: 'no',   label: "No, I don't" },
-//   { value: 'open', label: 'Open to it' },
-// ];
-
 export const APP_NAME = 'Africana';
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
-export const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?background=C84B31&color=fff&size=200&name=';
+export const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?background=EF3E2A&color=fff&size=200&name=';
 export const MAX_PROFILE_PHOTOS = 6;
 export const MIN_AGE = 18;
 export const MAX_AGE = 100;

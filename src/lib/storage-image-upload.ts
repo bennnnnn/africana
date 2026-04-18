@@ -1,6 +1,32 @@
 import { File } from 'expo-file-system';
 import { readAsStringAsync } from 'expo-file-system/src/legacy/FileSystem';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '@/lib/supabase';
+
+/**
+ * Compress + downscale before upload. Uploading the raw 12MP HEIC straight
+ * from the camera roll is wasteful — for dating-app use-cases 1600px on the
+ * long edge at JPEG q=0.82 is indistinguishable to the human eye and cuts
+ * payload by ~8-20x.
+ */
+const MAX_DIMENSION = 1600;
+const JPEG_QUALITY = 0.82;
+
+async function compressForUpload(localUri: string): Promise<{ uri: string; mimeType: string }> {
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      localUri,
+      [{ resize: { width: MAX_DIMENSION } }],
+      { compress: JPEG_QUALITY, format: ImageManipulator.SaveFormat.JPEG },
+    );
+    return { uri: result.uri, mimeType: 'image/jpeg' };
+  } catch (e) {
+    // If manipulation fails (very large file, unsupported format) we fall back
+    // to the original URI — upload can still succeed, just bigger.
+    console.warn('[storage-image-upload] compress failed, uploading original:', e);
+    return { uri: localUri, mimeType: '' };
+  }
+}
 
 export function imageContentType(uri: string, mimeType?: string | null): string {
   if (mimeType?.startsWith('image/')) return mimeType;
@@ -61,13 +87,15 @@ async function uploadLocalImageToBucket(
   bucket: string,
   storagePath: string,
   localUri: string,
-  mimeType?: string | null,
   upsert: boolean,
+  mimeType?: string | null,
 ): Promise<{ publicUrl: string } | { error: string }> {
-  const contentType = imageContentType(localUri, mimeType);
+  const { uri: compressedUri, mimeType: compressedMime } = await compressForUpload(localUri);
+  const effectiveMime = compressedMime || mimeType || null;
+  const contentType = imageContentType(compressedUri, effectiveMime);
   let buffer: ArrayBuffer;
   try {
-    buffer = await localImageUriToArrayBuffer(localUri);
+    buffer = await localImageUriToArrayBuffer(compressedUri);
   } catch (e: unknown) {
     return { error: e instanceof Error ? e.message : 'Could not read image.' };
   }
@@ -88,10 +116,9 @@ export async function uploadToAvatarsBucket(
   localUri: string,
   mimeType?: string | null,
 ): Promise<{ publicUrl: string } | { error: string }> {
-  const contentType = imageContentType(localUri, mimeType);
-  const ext = imageExtensionForContentType(contentType);
-  const path = `${userId}/${Date.now()}.${ext}`;
-  return uploadLocalImageToBucket('avatars', path, localUri, mimeType, false);
+  // Always .jpg — compressForUpload() converts everything to JPEG before upload.
+  const path = `${userId}/${Date.now()}.jpg`;
+  return uploadLocalImageToBucket('avatars', path, localUri, false, mimeType);
 }
 
 /** Verification selfie → `profile-photos` bucket (same RLS pattern: first path segment = user id). */
@@ -100,8 +127,6 @@ export async function uploadVerificationSelfie(
   localUri: string,
   mimeType?: string | null,
 ): Promise<{ publicUrl: string } | { error: string }> {
-  const contentType = imageContentType(localUri, mimeType);
-  const ext = imageExtensionForContentType(contentType);
-  const path = `${userId}/verification-${Date.now()}.${ext}`;
-  return uploadLocalImageToBucket('profile-photos', path, localUri, mimeType, true);
+  const path = `${userId}/verification-${Date.now()}.jpg`;
+  return uploadLocalImageToBucket('profile-photos', path, localUri, true, mimeType);
 }

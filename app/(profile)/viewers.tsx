@@ -19,6 +19,7 @@ import { DEFAULT_AVATAR } from '@/constants';
 import { User } from '@/types';
 import { filterVisibleUserEntities } from '@/lib/social-visibility';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
+import { setProfileSeed } from '@/lib/profile-seed-cache';
 
 interface ViewerRow {
   id: string;
@@ -128,6 +129,7 @@ export default function ViewersScreen() {
             return (
               <TouchableOpacity
                 onPress={() => {
+                  setProfileSeed(v);
                   useProfileBrowseStore.getState().setOrderedUserIds(viewerBrowseIds);
                   router.push(`/(profile)/${v.id}`);
                 }}

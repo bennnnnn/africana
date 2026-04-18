@@ -16,6 +16,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
 import { COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
 import { appDialog } from '@/lib/app-dialog';
+import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 56) / 3;
@@ -37,18 +38,27 @@ export default function PhotosScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsMultipleSelection: true,
       quality: 0.8,
     });
 
     if (result.canceled || result.assets.length === 0) return;
 
-    const toUpload = result.assets.slice(0, remaining);
+    const picked = result.assets.slice(0, remaining);
     setUploading(true);
     const uploaded: string[] = [];
 
     try {
+      setUploadProgress('Checking photos…');
+      const { approved, rejected } = await validateFacesInPhotos(picked.map((a) => a.uri));
+      if (rejected.length > 0) {
+        const { title, message } = faceRejectionMessage(rejected.length, approved.length);
+        appDialog({ title, message, icon: 'happy-outline' });
+      }
+      const toUpload = picked.filter((a) => approved.includes(a.uri));
+      if (toUpload.length === 0) return;
+
       for (let i = 0; i < toUpload.length; i++) {
         setUploadProgress(`Uploading ${i + 1} of ${toUpload.length}…`);
         const asset = toUpload[i];

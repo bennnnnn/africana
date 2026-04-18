@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+  },
+  "lint": { "rules": { "tags": ["recommended"] } },
+  "fmt": { "semiColons": true, "singleQuote": true }
+}

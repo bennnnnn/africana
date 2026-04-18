@@ -16,12 +16,16 @@ export default function AuthCallback() {
 
     createSessionFromUrl(url)
       .then(async (session) => {
-        if (session?.user) {
-          setSession(session);
-          await fetchProfile(session.user.id);
-          await fetchSettings(session.user.id);
-          router.replace('/(tabs)/discover');
-        } else {
+        try {
+          if (session?.user) {
+            setSession(session);
+            await fetchProfile(session.user.id);
+            await fetchSettings(session.user.id);
+            router.replace('/(tabs)/discover');
+          } else {
+            router.replace('/(auth)/welcome');
+          }
+        } catch {
           router.replace('/(auth)/welcome');
         }
       })

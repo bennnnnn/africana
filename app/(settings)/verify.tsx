@@ -17,6 +17,8 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { Button } from '@/components/ui/Button';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
+import { checkImageHasFace } from '@/lib/face-detection';
+import { track, EVENTS } from '@/lib/analytics';
 
 export default function VerifyScreen() {
   const { colors } = useTheme();
@@ -28,11 +30,25 @@ export default function VerifyScreen() {
 
   const status = user?.verification_status;
 
+  const acceptAssetIfFace = async (a: ImagePicker.ImagePickerAsset) => {
+    const faceCheck = await checkImageHasFace(a.uri);
+    if (!faceCheck.ok && faceCheck.reason === 'no_face') {
+      showDialog({
+        title: "We couldn't find a face",
+        message:
+          'Your verification photo must clearly show your face. Please take a selfie in good lighting with your face centered.',
+        icon: 'happy-outline',
+      });
+      return;
+    }
+    setSelfieUri(a.uri);
+    setSelfieMime(a.mimeType ?? null);
+  };
+
   const pickSelfie = () => {
     showDialog({
       title: 'Add a photo',
       message: 'Choose how to add your verification photo.',
-      tone: 'default',
       icon: 'camera-outline',
       actions: [
         {
@@ -40,14 +56,12 @@ export default function VerifyScreen() {
           style: 'primary',
           onPress: async () => {
             const result = await ImagePicker.launchCameraAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              mediaTypes: ['images'],
               allowsEditing: false,
               quality: 0.7,
             });
             if (!result.canceled && result.assets[0]) {
-              const a = result.assets[0];
-              setSelfieUri(a.uri);
-              setSelfieMime(a.mimeType ?? null);
+              await acceptAssetIfFace(result.assets[0]);
             }
           },
         },
@@ -56,18 +70,16 @@ export default function VerifyScreen() {
           style: 'secondary',
           onPress: async () => {
             const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              mediaTypes: ['images'],
               allowsEditing: false,
               quality: 0.7,
             });
             if (!result.canceled && result.assets[0]) {
-              const a = result.assets[0];
-              setSelfieUri(a.uri);
-              setSelfieMime(a.mimeType ?? null);
+              await acceptAssetIfFace(result.assets[0]);
             }
           },
         },
-        { label: 'Cancel', style: 'secondary' },
+        { label: 'Cancel', style: 'cancel' },
       ],
     });
   };
@@ -85,16 +97,22 @@ export default function VerifyScreen() {
         verification_photo: publicUrl,
       } as any);
 
+      track(EVENTS.VERIFICATION_COMPLETE);
+
       showDialog({
         title: 'Submitted',
         message: 'Your verification selfie has been submitted. We will review it within 24 to 48 hours.',
-        tone: 'success',
+        icon: 'checkmark-circle-outline',
         actions: [
           { label: 'OK', style: 'primary', onPress: () => router.back() },
         ],
       });
     } catch (e: any) {
-      showDialog({ title: 'Upload failed', message: e.message ?? 'Please try again.', tone: 'danger' });
+      showDialog({
+        title: 'Upload failed',
+        message: e.message ?? 'Please try again.',
+        icon: 'alert-circle-outline',
+      });
     } finally {
       setUploading(false);
     }

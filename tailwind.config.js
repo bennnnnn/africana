@@ -22,13 +22,13 @@ module.exports = {
           900: '#32110A',
         },
         earth: {
-          DEFAULT: '#8B5E3C',
-          light: '#D4A574',
-          dark: '#5C3E28',
+          DEFAULT: '#52525B',
+          light: '#A1A1AA',
+          dark: '#3F3F46',
         },
         savanna: {
-          DEFAULT: '#F5E6D0',
-          dark: '#E8C99A',
+          DEFAULT: '#F4F4F5',
+          dark: '#E4E4E7',
         },
         accent: {
           gold: '#D4AF37',

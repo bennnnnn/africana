@@ -32,7 +32,7 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 );
 
-type NotifyType = 'message' | 'like' | 'match' | 'view';
+type NotifyType = 'message' | 'like' | 'match' | 'view' | 'favourite';
 
 interface NotifyPayload {
   type: NotifyType;
@@ -43,17 +43,19 @@ interface NotifyPayload {
 }
 
 const PUSH_TEMPLATES: Record<NotifyType, (name: string) => { title: string; body: string }> = {
-  message: (name) => ({ title: '💬 New message',       body: `${name} sent you a message` }),
-  like:    (name) => ({ title: '❤️ Someone liked you!', body: `${name} liked your profile` }),
-  match:   (name) => ({ title: '🔥 It\'s a Match!',    body: `You and ${name} liked each other` }),
-  view:    (name) => ({ title: '👀 Profile view',       body: `${name} viewed your profile` }),
+  message:   (name) => ({ title: '💬 New message',        body: `${name} sent you a message` }),
+  like:      (name) => ({ title: '❤️ Someone liked you!', body: `${name} liked your profile` }),
+  match:     (name) => ({ title: '🔥 It\'s a Match!',     body: `You and ${name} liked each other` }),
+  view:      (name) => ({ title: '👀 Profile view',       body: `${name} viewed your profile` }),
+  favourite: (name) => ({ title: '⭐ You were starred',   body: `${name} added you to their favourites` }),
 };
 
 const EMAIL_SUBJECTS: Record<NotifyType, (name: string) => string> = {
-  message: (name) => `💬 ${name} sent you a message on Africana`,
-  like:    (name) => `❤️ ${name} liked your Africana profile`,
-  match:   (name) => `🔥 It's a Match! You and ${name} liked each other`,
-  view:    (name) => `👀 ${name} viewed your Africana profile`,
+  message:   (name) => `💬 ${name} sent you a message on Africana`,
+  like:      (name) => `❤️ ${name} liked your Africana profile`,
+  match:     (name) => `🔥 It's a Match! You and ${name} liked each other`,
+  view:      (name) => `👀 ${name} viewed your Africana profile`,
+  favourite: (name) => `⭐ ${name} starred your Africana profile`,
 };
 
 async function sendEmail(to: string, subject: string, html: string): Promise<void> {
@@ -101,12 +103,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check per-type push preference (explicit conditionals avoid TS index issues)
+    // Check per-type push preference (explicit conditionals avoid TS index issues).
+    // Favourites honour `notify_likes` until/unless we ship a dedicated column;
+    // this keeps the toggle UX simple (one "Stars & Likes" switch on the client).
     const pushPrefEnabled =
-      type === 'message' ? settings?.notify_messages !== false :
-      type === 'like'    ? settings?.notify_likes    !== false :
-      type === 'match'   ? settings?.notify_matches  !== false :
-      type === 'view'    ? settings?.notify_views    !== false :
+      type === 'message'   ? settings?.notify_messages !== false :
+      type === 'like'      ? settings?.notify_likes    !== false :
+      type === 'match'     ? settings?.notify_matches  !== false :
+      type === 'view'      ? settings?.notify_views    !== false :
+      type === 'favourite' ? settings?.notify_likes    !== false :
       true;
     const pushEnabled = pushPrefEnabled && !!settings?.push_token;
     const emailEnabled = settings?.email_notifications === true && !!profile?.email;
@@ -133,8 +138,8 @@ Deno.serve(async (req) => {
     }
 
     // ── Email notification (re-engagement only for non-message types) ──────────
-    // Only send email for likes and matches (not every message — too spammy).
-    if (emailEnabled && (type === 'like' || type === 'match') && profile?.email) {
+    // Only send email for likes, matches, and stars (not every message — too spammy).
+    if (emailEnabled && (type === 'like' || type === 'match' || type === 'favourite') && profile?.email) {
       const subject = EMAIL_SUBJECTS[type](senderName);
       const recipientName = profile.full_name ?? 'there';
       const html = `

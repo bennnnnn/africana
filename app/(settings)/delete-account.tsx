@@ -14,10 +14,15 @@ import { Button } from '@/components/ui/Button';
 import { COLORS, FONT } from '@/constants';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { appDialog } from '@/lib/app-dialog';
+import { signInWithGoogle } from '@/lib/google-auth';
 
-/** Email/password sign-in adds an `email` identity; pure OAuth (e.g. Google, Apple) does not. */
+/** Email/password sign-in adds an `email` identity; pure OAuth (e.g. Google) does not. */
 function hasEmailPasswordIdentity(identities: { provider?: string }[] | undefined): boolean {
   return !!identities?.some((i) => i.provider === 'email');
+}
+
+function hasGoogleIdentity(identities: { provider?: string }[] | undefined): boolean {
+  return !!identities?.some((i) => i.provider === 'google');
 }
 
 export default function DeleteAccountScreen() {
@@ -30,13 +35,30 @@ export default function DeleteAccountScreen() {
     [session?.user?.identities],
   );
 
+  /** Google-only (or other OAuth without email identity): confirm by signing in with Google again. */
+  const needsGoogleReauth = useMemo(
+    () => !needsPasswordConfirmation && hasGoogleIdentity(session?.user?.identities),
+    [needsPasswordConfirmation, session?.user?.identities],
+  );
+
   const doDelete = async () => {
     if (!user) return;
+    const profileUserId = user.id;
     setLoading(true);
 
-    if (needsPasswordConfirmation && user.email) {
+    if (needsPasswordConfirmation) {
+      const email = user.email ?? session?.user?.email ?? '';
+      if (!email) {
+        setLoading(false);
+        appDialog({
+          title: 'Can’t verify sign-in',
+          message: 'We couldn’t find an email on this account. Please contact support to delete your account.',
+          icon: 'help-circle-outline',
+        });
+        return;
+      }
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
+        email,
         password,
       });
       if (signInError) {
@@ -48,6 +70,39 @@ export default function DeleteAccountScreen() {
         });
         return;
       }
+    } else if (needsGoogleReauth) {
+      const newSession = await signInWithGoogle();
+      if (!newSession?.user?.id) {
+        setLoading(false);
+        appDialog({
+          title: 'Sign-in cancelled',
+          message:
+            'We could not delete your account without confirming your Google sign-in. Try again when you’re ready.',
+          icon: 'close-circle-outline',
+        });
+        return;
+      }
+      if (newSession.user.id !== profileUserId) {
+        setLoading(false);
+        await supabase.auth.signOut();
+        appDialog({
+          title: 'Different Google account',
+          message:
+            'The Google account you picked does not match this Africana profile. You have been signed out for your security.',
+          icon: 'alert-circle-outline',
+          actions: [{ label: 'OK', style: 'primary', onPress: () => router.replace('/(auth)/welcome') }],
+        });
+        return;
+      }
+    } else if (!needsPasswordConfirmation) {
+      setLoading(false);
+      appDialog({
+        title: 'Contact support',
+        message:
+          'We could not verify this sign-in method for automatic deletion. Please reach out through the app’s help or website so we can close your account safely.',
+        icon: 'help-circle-outline',
+      });
+      return;
     }
 
     const { error } = await supabase.rpc('delete_user');
@@ -143,7 +198,9 @@ export default function DeleteAccountScreen() {
           <Text style={{ fontSize: FONT.sm, color: '#B91C1C', lineHeight: 18 }}>
             {needsPasswordConfirmation
               ? '⚠️ Enter your password below to confirm account deletion.'
-              : '⚠️ Tap “Delete My Account Forever” below to permanently delete your account.'}
+              : needsGoogleReauth
+                ? '⚠️ You signed up with Google (no password on file). After you tap delete, you’ll sign in with Google once more to prove it’s you—then we remove your account.'
+                : '⚠️ Tap “Delete My Account Forever” below. If we can’t verify your sign-in automatically, we’ll ask you to contact support.'}
           </Text>
         </View>
 

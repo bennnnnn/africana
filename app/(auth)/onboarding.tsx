@@ -25,13 +25,16 @@ import { Input } from '@/components/ui/Input';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
 import { SelectOption, SelectPicker } from '@/components/ui/SelectPicker';
-import { COLORS, GENDER_OPTIONS, MAX_PROFILE_PHOTOS } from '@/constants';
-import { Gender, LookingFor } from '@/types';
+import { COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
+import { Gender, InterestedIn, LookingFor } from '@/types';
 import { validateFirstName, getValidationState } from '@/lib/validation';
 import { saveOnboardingSkippedHints } from '@/lib/post-onboarding-nudges';
 import { appDialog } from '@/lib/app-dialog';
+import { track, EVENTS } from '@/lib/analytics';
 import { ALL_COUNTRIES, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
 import { CultureOptionSet, getEthnicityOptions, getLanguageOptions } from '@/lib/cultural-data';
+import { detectCountryFromIp } from '@/lib/geo-country';
+import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
 
 const { width } = Dimensions.get('window');
 
@@ -47,10 +50,14 @@ const STEPS = [
   { emoji: '🌍', title: 'Your roots',                 subtitle: 'Ethnicity and languages help us find your people.', bg: '#E8F5E9' },
 ];
 
-const INTEREST_OPTIONS = [
-  { value: 'women',    label: 'Women',    emoji: '👩' },
-  { value: 'men',      label: 'Men',      emoji: '👨' },
-  { value: 'everyone', label: 'Everyone', emoji: '💫' },
+const INTEREST_OPTIONS: { value: InterestedIn; label: string; emoji: string }[] = [
+  { value: 'women', label: 'Women', emoji: '👩' },
+  { value: 'men', label: 'Men', emoji: '👨' },
+];
+
+const GENDER_ONBOARD = [
+  { value: 'male' as const, label: 'Male', emoji: '👨' },
+  { value: 'female' as const, label: 'Female', emoji: '👩' },
 ];
 
 const LOOKING_FOR_OPTS = [
@@ -104,6 +111,9 @@ export default function OnboardingScreen() {
   // Step 1
   const [fullName, setFullName] = useState('');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  // Legal consent — captured on step 1 so both email and OAuth paths record it.
+  // Gated by `canProceed` and persisted as `profiles.terms_accepted_at` on save.
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   // Step 2
   const [photoUris, setPhotoUris] = useState<string[]>([]);
@@ -111,7 +121,7 @@ export default function OnboardingScreen() {
   // Step 3
   const [birthdate, setBirthdate]       = useState<Date | null>(null);
   const [gender, setGender]             = useState<Gender | null>(null);
-  const [interestedIn, setInterestedIn] = useState<string | null>(null);
+  const [interestedIn, setInterestedIn] = useState<InterestedIn | null>(null);
 
   // Step 4
   const [lookingFor, setLookingFor] = useState<LookingFor[]>([]);
@@ -130,6 +140,7 @@ export default function OnboardingScreen() {
   const [cultureOptionsLoading, setCultureOptionsLoading]     = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const saveInFlightRef = useRef(false);
 
   const firstNameValidation = validateFirstName(fullName);
 
@@ -161,16 +172,25 @@ export default function OnboardingScreen() {
         return;
       }
       setCultureOptionsLoading(true);
-      const [ethOpts, langOpts] = await Promise.all([
-        getEthnicityOptions(culturalLocation.countryCode, culturalLocation.subdivision, culturalLocation.city),
-        getLanguageOptions(culturalLocation.countryCode, ethnicity || null, culturalLocation.subdivision, culturalLocation.city),
-      ]);
-      if (cancelled) return;
-      setCultureEthnicityOptions(ethOpts);
-      setCultureLanguageOptions(langOpts);
-      setCultureOptionsLoading(false);
+      try {
+        const [ethOpts, langOpts] = await Promise.all([
+          getEthnicityOptions(culturalLocation.countryCode, culturalLocation.subdivision, culturalLocation.city),
+          getLanguageOptions(culturalLocation.countryCode, ethnicity || null, culturalLocation.subdivision, culturalLocation.city),
+        ]);
+        if (cancelled) return;
+        setCultureEthnicityOptions(ethOpts);
+        setCultureLanguageOptions(langOpts);
+      } catch (e) {
+        console.error('Culture options load failed', e);
+        if (!cancelled) {
+          setCultureEthnicityOptions(null);
+          setCultureLanguageOptions(null);
+        }
+      } finally {
+        if (!cancelled) setCultureOptionsLoading(false);
+      }
     }
-    load();
+    void load();
     return () => { cancelled = true; };
   }, [culturalLocation?.countryCode, culturalLocation?.subdivision, culturalLocation?.city, ethnicity, locationPathComplete]);
 
@@ -204,34 +224,118 @@ export default function OnboardingScreen() {
   const toggleLanguage = (lang: string) =>
     setLanguages((cur) => cur.includes(lang) ? cur.filter((l) => l !== lang) : [...cur, lang]);
 
+  // Pre-fill living country from IP when user reaches location step (once per empty state).
+  useEffect(() => {
+    if (step !== 5) return;
+    if (location.country || location.countryCode) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const detected = await detectCountryFromIp();
+        if (cancelled || !detected) return;
+        setLocation((cur) => {
+          if (cur.country || cur.countryCode) return cur;
+          return {
+            ...cur,
+            country: detected.country,
+            countryCode: detected.countryCode,
+            subdivision: '',
+            city: '',
+          };
+        });
+      } catch (e) {
+        console.error('IP country prefill failed', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step, location.country, location.countryCode]);
+
   const pickPhotos = async () => {
-    const remaining = MAX_PROFILE_PHOTOS - photoUris.length;
-    if (remaining <= 0) return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: true,
-      quality: 0.8,
-    });
-    if (result.canceled) return;
-    const newUris = result.assets.map((a) => a.uri);
-    setPhotoUris((prev) => [...prev, ...newUris].slice(0, MAX_PROFILE_PHOTOS));
+    try {
+      const remaining = MAX_PROFILE_PHOTOS - photoUris.length;
+      if (remaining <= 0) return;
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+      if (result.canceled) return;
+      const newUris = result.assets.map((a) => a.uri);
+
+      const { approved, rejected } = await validateFacesInPhotos(newUris);
+      if (rejected.length > 0) {
+        const { title, message } = faceRejectionMessage(rejected.length, approved.length);
+        appDialog({ title, message, icon: 'happy-outline' });
+      }
+      if (approved.length === 0) return;
+
+      setPhotoUris((prev) => [...prev, ...approved].slice(0, MAX_PROFILE_PHOTOS));
+    } catch (e) {
+      console.error('Image picker failed', e);
+      appDialog({
+        title: 'Photos',
+        message: 'We could not open your photo library. Check permissions and try again.',
+        icon: 'images-outline',
+      });
+    }
   };
 
-  const handleSaveProfile = async () => {
+  const handleSaveProfile = async (skipCultureFields: boolean) => {
+    if (saveInFlightRef.current) return;
     if (!params.userId || !params.email) {
       appDialog({ title: 'Session error', message: 'Please go back and try again.', icon: 'alert-circle-outline' });
       return;
     }
     if (!firstNameValidation.valid) { setStep(1); return; }
-    if (!birthdate || !gender) {
+    if (!termsAccepted) {
+      setStep(1);
+      appDialog({
+        title: 'Please accept the Terms',
+        message: 'You need to agree to the Terms of Service and Privacy Policy to use Africana.',
+        icon: 'document-text-outline',
+      });
+      return;
+    }
+    if (!birthdate || !gender || !interestedIn) {
       appDialog({ title: 'Incomplete', message: 'Please complete step 3.' });
+      return;
+    }
+    const ageMs = Date.now() - birthdate.getTime();
+    const ageYears = ageMs / (365.25 * 24 * 60 * 60 * 1000);
+    if (!Number.isFinite(ageYears) || ageYears < 18) {
+      setStep(3);
+      appDialog({
+        title: 'You must be 18 or older',
+        message: 'Africana is only for adults. Please update your date of birth to continue.',
+        icon: 'alert-circle-outline',
+      });
+      return;
+    }
+    if (ageYears > 120) {
+      setStep(3);
+      appDialog({
+        title: 'Check your date of birth',
+        message: 'That date looks off — please double-check it.',
+        icon: 'calendar-outline',
+      });
       return;
     }
     if (!location.country) {
       appDialog({ title: 'Missing location', message: 'Please select your country.', icon: 'location-outline' });
       return;
     }
+    if (lookingFor.length === 0) {
+      appDialog({
+        title: 'Almost there',
+        message: 'Please choose at least one option for what you’re looking for.',
+        icon: 'heart-outline',
+      });
+      return;
+    }
 
+    saveInFlightRef.current = true;
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -253,6 +357,9 @@ export default function OnboardingScreen() {
       }
       const avatarUrl = uploadedUrls[0] ?? null;
 
+      const savedEthnicity = skipCultureFields ? null : ethnicity.trim() || null;
+      const savedLanguages = skipCultureFields ? [] : languages;
+
       const { error } = await supabase.from('profiles').upsert({
         id:             params.userId,
         email:          params.email,
@@ -260,7 +367,7 @@ export default function OnboardingScreen() {
         username:       params.email,
         birthdate:      birthdate.toISOString().split('T')[0],
         gender,
-        interested_in:  interestedIn ?? (gender === 'male' ? 'women' : 'men'),
+        interested_in:  interestedIn,
         looking_for:    lookingFor,
         country:        location.country || '',
         state:          location.subdivision || null,
@@ -268,10 +375,11 @@ export default function OnboardingScreen() {
         origin_country: originLocation.country?.trim() || null,
         origin_state:   originLocation.subdivision?.trim() || null,
         origin_city:    originLocation.city?.trim() || null,
-        ethnicity:      ethnicity.trim() || null,
-        languages,
+        ethnicity:      savedEthnicity,
+        languages:      savedLanguages,
         avatar_url:     avatarUrl,
         profile_photos: uploadedUrls,
+        terms_accepted_at: new Date().toISOString(),
       }, { onConflict: 'id' });
 
       if (error) {
@@ -290,29 +398,45 @@ export default function OnboardingScreen() {
       await saveOnboardingSkippedHints({
         bio:         true,
         photo:       uploadedUrls.length === 0,
-        goals:       lookingFor.length === 0,
+        goals:       false,
         work:        true,
-        moreDetails: !(ethnicity || languages.length > 0),
+        moreDetails: skipCultureFields || !(savedEthnicity || savedLanguages.length > 0),
       });
 
       await Promise.all([fetchProfile(params.userId), fetchSettings(params.userId)]);
+      track(EVENTS.AUTH_SIGNUP_COMPLETE);
       setStep(7); // celebration
+    } catch (e) {
+      console.error('Onboarding save failed', e);
+      appDialog({
+        title: 'Something went wrong',
+        message: e instanceof Error ? e.message : 'Please try again in a moment.',
+        icon: 'alert-circle-outline',
+      });
     } finally {
+      saveInFlightRef.current = false;
       setLoading(false);
     }
   };
 
   const canProceed = () => {
-    if (step === 1) return firstNameValidation.valid;
+    if (step === 1) return firstNameValidation.valid && termsAccepted;
     if (step === 2) return true;
-    if (step === 3) return birthdate !== null && gender !== null && interestedIn !== null;
-    if (step === 4) return true;
+    if (step === 3) {
+      if (!birthdate || !gender || !interestedIn) return false;
+      const ageYears = (Date.now() - birthdate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+      return ageYears >= 18 && ageYears <= 120;
+    }
+    if (step === 4) return lookingFor.length > 0;
     if (step === 5) return !!location.country;
     return true; // steps 6 & 7 always ok
   };
 
   const goNext = async () => {
-    if (step === 6) { await handleSaveProfile(); return; }
+    if (step === 6) {
+      await handleSaveProfile(false);
+      return;
+    }
     if (step === 7) { router.replace('/(tabs)/discover'); return; }
     setStep(step + 1);
   };
@@ -376,17 +500,57 @@ export default function OnboardingScreen() {
 
           {/* ════ STEP 1 — Name ════ */}
           {step === 1 && (
-            <Input
-              value={fullName}
-              onChangeText={(v) => { setFullName(v); if (!touched.fullName) setTouched((t) => ({ ...t, fullName: true })); }}
-              onBlur={() => setTouched((t) => ({ ...t, fullName: true }))}
-              placeholder="e.g. Amara"
-              autoCapitalize="words"
-              leftIcon="person-outline"
-              validationState={getValidationState(Boolean(touched.fullName), firstNameValidation, Boolean(fullName.trim()))}
-              error={touched.fullName ? firstNameValidation.message : undefined}
-              autoFocus
-            />
+            <>
+              <Input
+                value={fullName}
+                onChangeText={(v) => { setFullName(v); if (!touched.fullName) setTouched((t) => ({ ...t, fullName: true })); }}
+                onBlur={() => setTouched((t) => ({ ...t, fullName: true }))}
+                placeholder="e.g. Amara"
+                autoCapitalize="words"
+                leftIcon="person-outline"
+                validationState={getValidationState(Boolean(touched.fullName), firstNameValidation, Boolean(fullName.trim()))}
+                error={touched.fullName ? firstNameValidation.message : undefined}
+                autoFocus
+              />
+
+              {/* Legal consent — tappable row + inline links. We persist
+                  `terms_accepted_at` on save as an audit trail. */}
+              <Pressable
+                onPress={() => setTermsAccepted((v) => !v)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: termsAccepted }}
+                style={s.consentRow}
+              >
+                <Ionicons
+                  name={termsAccepted ? 'checkbox' : 'square-outline'}
+                  size={24}
+                  color={termsAccepted ? COLORS.primary : COLORS.textMuted}
+                />
+                <Text style={s.consentText}>
+                  I am 18 or older and agree to Africana&apos;s{' '}
+                  <Text
+                    style={s.consentLink}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      router.push({ pathname: '/(auth)/legal', params: { tab: 'terms' } });
+                    }}
+                  >
+                    Terms of Service
+                  </Text>
+                  {' '}and{' '}
+                  <Text
+                    style={s.consentLink}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      router.push({ pathname: '/(auth)/legal', params: { tab: 'privacy' } });
+                    }}
+                  >
+                    Privacy Policy
+                  </Text>
+                  .
+                </Text>
+              </Pressable>
+            </>
           )}
 
           {/* ════ STEP 2 — Photos ════ */}
@@ -430,20 +594,21 @@ export default function OnboardingScreen() {
               <DatePicker label="Date of Birth" value={birthdate} onChange={setBirthdate} placeholder="Tap to select" />
 
               <Text style={s.label}>I am a</Text>
-              <View style={s.row}>
-                {GENDER_OPTIONS.map((opt) => (
+              <View style={s.rowEqual}>
+                {GENDER_ONBOARD.map((opt) => (
                   <Pressable
                     key={opt.value}
-                    onPress={() => setGender(opt.value as Gender)}
-                    style={[s.chip, gender === opt.value && s.chipOn]}
+                    onPress={() => setGender(opt.value)}
+                    style={[s.bigChip, gender === opt.value && s.chipOn]}
                   >
+                    <Text style={{ fontSize: 26, marginBottom: 6 }}>{opt.emoji}</Text>
                     <Text style={[s.chipTxt, gender === opt.value && s.chipTxtOn]}>{opt.label}</Text>
                   </Pressable>
                 ))}
               </View>
 
               <Text style={[s.label, { marginTop: 20 }]}>Interested in</Text>
-              <View style={s.row}>
+              <View style={s.rowEqual}>
                 {INTEREST_OPTIONS.map((opt) => (
                   <Pressable
                     key={opt.value}
@@ -471,7 +636,7 @@ export default function OnboardingScreen() {
                   >
                     <Text style={{ fontSize: 28 }}>{opt.emoji}</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.cardLabel, on && { color: COLORS.primary }]}>{opt.label}</Text>
+                      <Text style={[s.cardLabel, on && { color: COLORS.success }]}>{opt.label}</Text>
                       <Text style={s.cardDesc}>{opt.desc}</Text>
                     </View>
                     <View style={[s.checkCircle, on && s.checkCircleOn]}>
@@ -480,7 +645,7 @@ export default function OnboardingScreen() {
                   </Pressable>
                 );
               })}
-              <Text style={s.hint}>You can pick more than one</Text>
+              <Text style={s.hint}>You can pick more than one — choose at least one to continue.</Text>
             </View>
           )}
 
@@ -491,7 +656,7 @@ export default function OnboardingScreen() {
 
               {needsOriginCountry && (
                 <SelectPicker
-                  label="Your African country of origin (optional)"
+                  label="Origin (optional)"
                   placeholder="Select origin country..."
                   options={originCountryOptions}
                   value={originLocation.countryCode ?? null}
@@ -522,14 +687,14 @@ export default function OnboardingScreen() {
           {step === 6 && (
             <View>
               {cultureOptionsLoading && (
-                <ActivityIndicator color={COLORS.primary} style={{ marginBottom: 20 }} />
+                <ActivityIndicator color={COLORS.success} style={{ marginBottom: 20 }} />
               )}
 
               {/* Ethnicity */}
               {locationPathComplete && culturalLocation?.country && cultureEthnicityOptions ? (
                 <SelectPicker
                   label="Ethnicity"
-                  placeholder={`Select ethnicity in ${culturalLocation.country}`}
+                  placeholder="Select your ethnicity"
                   options={cultureEthnicityOptions.all.map((o) => ({ value: o, label: o }))}
                   value={ethnicity || null}
                   onChange={(v) => setEthnicity(v ?? '')}
@@ -583,20 +748,25 @@ export default function OnboardingScreen() {
           <View style={{ marginTop: 32, gap: 10 }}>
             <Button
               title={step === 6 ? 'Finish Setup 🎉' : 'Continue →'}
-              onPress={goNext}
+              onPress={() => void goNext().catch((e) => console.error('goNext', e))}
               fullWidth
               size="lg"
+              variant="primary"
               loading={loading}
               disabled={!canProceed()}
+              style={s.ctaPrimary}
             />
             {step === 2 && photoUris.length === 0 && (
               <Button title="Skip — add photos later" variant="ghost" onPress={() => setStep(step + 1)} fullWidth />
             )}
-            {step === 4 && (
-              <Button title="Skip for now" variant="ghost" onPress={() => setStep(step + 1)} fullWidth />
-            )}
             {step === 6 && (
-              <Button title="Skip for now" variant="ghost" onPress={handleSaveProfile} fullWidth loading={loading} />
+              <Button
+                title="Skip for now"
+                variant="ghost"
+                onPress={() => void handleSaveProfile(true).catch((e) => console.error('handleSaveProfile skip', e))}
+                fullWidth
+                disabled={loading}
+              />
             )}
           </View>
         </ScrollView>
@@ -616,20 +786,54 @@ const s = StyleSheet.create({
   stepTitle: { fontSize: 24, fontWeight: '800', color: COLORS.text, textAlign: 'center', marginBottom: 6 },
   stepSub:   { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 28 },
 
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 20,
+    paddingHorizontal: 4,
+  },
+  consentText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 20,
+    color: COLORS.textSecondary,
+  },
+  consentLink: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
   label:    { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 10 },
   row:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  rowEqual: { flexDirection: 'row', flexWrap: 'nowrap', gap: 10 },
   chip:     { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF' },
-  bigChip:  { flex: 1, paddingVertical: 16, borderRadius: 14, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF', alignItems: 'center' },
-  chipOn:   { borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}12` },
+  bigChip:  {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+  },
+  ctaPrimary: {
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  chipOn:   { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
   chipTxt:  { fontSize: 14, color: COLORS.textSecondary, fontWeight: '500' },
-  chipTxtOn:{ color: COLORS.primary, fontWeight: '700' },
+  chipTxtOn:{ color: COLORS.success, fontWeight: '700' },
 
   card:         { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF', gap: 14 },
-  cardOn:       { borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08` },
+  cardOn:       { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
   cardLabel:    { fontSize: 16, fontWeight: '700', color: COLORS.text },
   cardDesc:     { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   checkCircle:  { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
-  checkCircleOn:{ borderColor: COLORS.primary, backgroundColor: COLORS.primary },
+  checkCircleOn:{ borderColor: COLORS.success, backgroundColor: COLORS.success },
 
   // ── Photo grid (step 2) ───────────────────────────────────────────────────
   photoGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', width: '100%' },

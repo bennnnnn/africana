@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import { User, FilterOptions, InterestedIn } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { notifyUser } from '@/lib/notifications';
-import { MOCK_USERS } from '@/lib/mock-data';
+import { appDialog } from '@/lib/app-dialog';
+import { maybeWarnLikeQuota } from '@/lib/rate-limit-warn';
+import { track, EVENTS } from '@/lib/analytics';
 const interestedInToGender = (v: InterestedIn | undefined): string | null => {
   if (v === 'men') return 'male';
   if (v === 'women') return 'female';
@@ -51,8 +53,11 @@ interface DiscoverState {
   page: number;
   filters: FilterOptions;
   likedUserIds: Set<string>;
+  /** Last failed `fetchUsers` message; cleared on successful fetch or manual clear. */
+  fetchError: string | null;
   setFilters: (filters: Partial<FilterOptions>) => void;
   resetFilters: () => void;
+  clearFetchError: () => void;
   fetchUsers: (userId: string, interestedIn?: InterestedIn, reset?: boolean, agePref?: AgePref) => Promise<void>;
   toggleLike: (fromUserId: string, toUserId: string) => Promise<boolean>;
   fetchLikedUserIds: (userId: string) => Promise<void>;
@@ -72,6 +77,8 @@ const DEFAULT_FILTERS: FilterOptions = {
 
 const PAGE_SIZE = 20;
 
+const fetchLikedUserIdsPending = new Map<string, Promise<void>>();
+
 let _realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 let _subscribed = false;
 
@@ -82,21 +89,30 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
   page: 0,
   filters: DEFAULT_FILTERS,
   likedUserIds: new Set(),
+  fetchError: null,
 
   setFilters: (filters) => {
-    set((state) => ({ filters: { ...state.filters, ...filters }, page: 0, users: [], hasMore: true }));
+    set((state) => ({
+      filters: { ...state.filters, ...filters },
+      page: 0,
+      users: [],
+      hasMore: true,
+      fetchError: null,
+    }));
   },
 
   resetFilters: () => {
-    set({ filters: DEFAULT_FILTERS, page: 0, users: [], hasMore: true });
+    set({ filters: DEFAULT_FILTERS, page: 0, users: [], hasMore: true, fetchError: null });
   },
+
+  clearFetchError: () => set({ fetchError: null }),
 
   fetchUsers: async (userId, interestedIn, reset = false, agePref) => {
     const { filters, page, isLoading } = get();
     if (isLoading) return;
 
     const currentPage = reset ? 0 : page;
-    set({ isLoading: true });
+    set({ isLoading: true, fetchError: null });
 
     try {
       const today = new Date();
@@ -122,11 +138,15 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       set({ likedUserIds: likedIds });
 
       // ── Build main query ───────────────────────────────────────────────────
+      // Photo gate: require avatar_url so every card in Discover has at least
+      // one visible photo. Empty-photo profiles stay signed in but are hidden
+      // until they upload a photo from Me → Edit profile.
       let query = supabase
         .from('profiles')
         .select('*')
         .neq('id', userId)
         .eq('show_in_discover', true)
+        .not('avatar_url', 'is', null)
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       // Exclude blocked
@@ -155,6 +175,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           users: reset || currentPage === 0 ? [] : state.users,
           page: currentPage === 0 ? 0 : currentPage,
           hasMore: false,
+          fetchError: null,
         }));
         return;
       }
@@ -164,6 +185,15 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       query = query.order('last_seen', { ascending: false });
 
       const { data, error } = await query;
+
+      if (error) {
+        const msg = error.message || 'Could not load members';
+        set((state) => ({
+          fetchError: msg,
+          hasMore: currentPage === 0 ? false : state.hasMore,
+        }));
+        return;
+      }
 
       const processRaw = (rows: any[]): User[] =>
         rows.map((u) => {
@@ -184,17 +214,18 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           };
         });
 
-      if (!error && data) {
-        const processed = processRaw(data);
+      const rows = data ?? [];
 
-        // Online users first, then shuffle the offline pool for variety
-        const online  = processed.filter((u) => (u as any).online_status === 'online');
-        const offline = processed.filter((u) => (u as any).online_status !== 'online');
-        shuffleArray(offline);
-        let result: User[] = [...online, ...offline];
+      const processed = processRaw(rows);
 
-        // ── Fallback: pad with liked users if results are sparse ─────────────
-        if (currentPage === 0 && result.length < Math.ceil(PAGE_SIZE / 2) && likedIds.size > 0) {
+      // Online users first, then shuffle the offline pool for variety
+      const online  = processed.filter((u) => (u as any).online_status === 'online');
+      const offline = processed.filter((u) => (u as any).online_status !== 'online');
+      shuffleArray(offline);
+      let result: User[] = [...online, ...offline];
+
+      // ── Fallback: pad with liked users if results are sparse ─────────────
+      if (currentPage === 0 && result.length < Math.ceil(PAGE_SIZE / 2) && likedIds.size > 0) {
           const likedIdsArr = [...likedIds].filter((id) => !blockedIds.includes(id));
           if (likedIdsArr.length > 0) {
             const needed = PAGE_SIZE - result.length;
@@ -202,7 +233,8 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
               .from('profiles')
               .select('*')
               .in('id', likedIdsArr)
-              .eq('show_in_discover', true);
+              .eq('show_in_discover', true)
+              .not('avatar_url', 'is', null);
             if (genderFilter) likedQuery = likedQuery.eq('gender', genderFilter);
             likedQuery = applyDiscoverSheetFilters(likedQuery, { filters, today, effMin, effMax });
             likedQuery = likedQuery.order('last_seen', { ascending: false }).limit(needed);
@@ -235,47 +267,44 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           }
         }
 
-        // Dev mock fallback — keep UI non-empty during development
-        if (__DEV__ && currentPage === 0 && result.length === 0) {
-          const realIds = new Set(result.map((u) => u.id));
-          result = MOCK_USERS.filter((u) => {
-            if (u.id === userId || realIds.has(u.id)) return false;
-            if (genderFilter && u.gender !== genderFilter) return false;
-            const a = u.age ?? 0;
-            if (a < effMin || a > effMax) return false;
-            if (filters.country && u.country !== filters.country) return false;
-            if (filters.state && u.state !== filters.state) return false;
-            if (filters.city && u.city !== filters.city) return false;
-            if (filters.religion && u.religion !== filters.religion) return false;
-            if (filters.online_only && u.online_status !== 'online') return false;
-            return true;
-          }).slice(0, PAGE_SIZE);
-        }
-
-        set((state) => ({
-          users: reset || currentPage === 0 ? result : [...state.users, ...result],
-          page: currentPage + 1,
-          hasMore: data.length === PAGE_SIZE,
-        }));
-      }
+      set((state) => ({
+        users: reset || currentPage === 0 ? result : [...state.users, ...result],
+        page: currentPage + 1,
+        hasMore: rows.length === PAGE_SIZE,
+        fetchError: null,
+      }));
     } finally {
       set({ isLoading: false });
     }
   },
 
   fetchLikedUserIds: async (userId) => {
-    const { data } = await supabase
-      .from('likes')
-      .select('to_user_id')
-      .eq('from_user_id', userId);
-    if (data) set({ likedUserIds: new Set(data.map((l) => l.to_user_id)) });
+    const existing = fetchLikedUserIdsPending.get(userId);
+    if (existing) {
+      await existing;
+      return;
+    }
+    const run = async () => {
+      const { data } = await supabase
+        .from('likes')
+        .select('to_user_id')
+        .eq('from_user_id', userId);
+      if (data) set({ likedUserIds: new Set(data.map((l) => l.to_user_id)) });
+    };
+    const p = run();
+    fetchLikedUserIdsPending.set(userId, p);
+    try {
+      await p;
+    } finally {
+      if (fetchLikedUserIdsPending.get(userId) === p) fetchLikedUserIdsPending.delete(userId);
+    }
   },
 
   subscribeToOnlineStatus: () => {
     if (_subscribed) return;
     _subscribed = true;
     _realtimeChannel = supabase
-      .channel(`discover-online-status:${Date.now()}`)
+      .channel('discover-profiles-online')
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles' },
@@ -313,10 +342,38 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         s.delete(toUserId);
         return { likedUserIds: s };
       });
+      track(EVENTS.LIKE_REMOVED);
       return false;
     }
 
-    await supabase.from('likes').insert({ from_user_id: fromUserId, to_user_id: toUserId });
+    const { error: insertError } = await supabase
+      .from('likes')
+      .insert({ from_user_id: fromUserId, to_user_id: toUserId });
+    if (insertError) {
+      const blob = `${insertError.message ?? ''} ${insertError.details ?? ''} ${insertError.hint ?? ''}`.toLowerCase();
+      if (blob.includes('rate_limit:likes:hour')) {
+        track(EVENTS.RATE_LIMIT_HIT, { topic: 'likes', window: 'hour' });
+        appDialog({
+          title: 'Slow down',
+          message: 'You\u2019re liking too fast. Take a breather and try again in a bit.',
+          icon: 'time-outline',
+        });
+      } else if (blob.includes('rate_limit:likes:day')) {
+        track(EVENTS.RATE_LIMIT_HIT, { topic: 'likes', window: 'day' });
+        appDialog({
+          title: 'Daily like limit reached',
+          message: 'You\u2019ve reached today\u2019s like limit. Come back tomorrow or upgrade for more.',
+          icon: 'heart-dislike-outline',
+        });
+      } else {
+        appDialog({
+          title: 'Could not like',
+          message: insertError.message ?? 'Please try again.',
+          icon: 'alert-circle-outline',
+        });
+      }
+      return false;
+    }
     set((state) => {
       const s = new Set(state.likedUserIds);
       s.add(toUserId);
@@ -335,9 +392,15 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     if (isMatch) {
       // Only notify the OTHER user — the current user is in the app and will see the MatchModal
       notifyUser({ type: 'match', recipientId: toUserId, senderId: fromUserId, senderName, extra: { userId: fromUserId } });
+      track(EVENTS.MATCH_CREATED);
     } else {
       notifyUser({ type: 'like', recipientId: toUserId, senderId: fromUserId, senderName, extra: { userId: fromUserId } });
     }
+    track(EVENTS.LIKE_SENT, { matched: isMatch });
+
+    // Fire-and-forget soft warning when approaching the per-hour/day cap.
+    void maybeWarnLikeQuota();
+
     return isMatch;
   },
 }));

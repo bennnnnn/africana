@@ -13,38 +13,49 @@ import {
   useWindowDimensions,
   StatusBar,
   InteractionManager,
-  LayoutChangeEvent,
+  Share,
+  RefreshControl,
 } from 'react-native';
-import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
+import {
+  GestureHandlerRootView,
+  ScrollView,
+  PanGestureHandler,
+  State as GestureState,
+  type PanGestureHandlerGestureEvent,
+  type PanGestureHandlerStateChangeEvent,
+} from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { notifyUser } from '@/lib/notifications';
 import { useAuthStore } from '@/store/auth.store';
-import { MOCK_USERS } from '@/lib/mock-data';
 import { useChatStore } from '@/store/chat.store';
 import { useDiscoverStore } from '@/store/discover.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
+import haptics from '@/lib/haptics';
 import { User } from '@/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, DEFAULT_AVATAR, FONT, GENDER_OPTIONS, INTERESTED_IN_OPTIONS, RELIGION_OPTIONS, EDUCATION_OPTIONS, MARITAL_STATUS_OPTIONS, LOOKING_FOR_OPTIONS, WANT_CHILDREN_YES_NO, OCCUPATION_OPTIONS, PHYSICAL_CONDITION_OPTIONS, RADIUS, SHADOWS } from '@/constants';
+import { COLORS, DEFAULT_AVATAR, FONT, INTERESTED_IN_OPTIONS, RELIGION_OPTIONS, EDUCATION_OPTIONS, MARITAL_STATUS_OPTIONS, LOOKING_FOR_OPTIONS, WANT_CHILDREN_YES_NO, OCCUPATION_OPTIONS, PHYSICAL_CONDITION_OPTIONS, RADIUS, SHADOWS } from '@/constants';
 import { Button } from '@/components/ui/Button';
 import { MatchModal } from '@/components/ui/MatchModal';
-import { calculateAge, getEffectiveAgePreferenceRange } from '@/lib/utils';
 import {
   getProfileStrength,
   isProfileCompleteForDiscover,
   onboardingHrefFromSession,
 } from '@/lib/profile-completion';
-import { oppositeInterestedIn } from '@/lib/gender-match';
-import { ProfileSectionChips } from '@/components/profile/ProfileSectionChips';
 import { ProfileCompletionNudgeBanner } from '@/components/profile/ProfileCompletionNudgeBanner';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { ReportUserModal } from '@/components/ui/ReportUserModal';
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
+import { track, EVENTS } from '@/lib/analytics';
 import { hasExistingReport } from '@/lib/social-actions';
+import { recordProfileShareEvent, SHARE_REWARD_TOAST } from '@/lib/share-reward';
+import { getProfileSeed } from '@/lib/profile-seed-cache';
 
 const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female' };
 const profileGalleryCache = new Map<string, string[]>();
@@ -86,23 +97,14 @@ async function loadProfilePhotoList(userId: string): Promise<string[]> {
   const cached = profileGalleryCache.get(userId);
   if (cached) return cached;
 
-  let list: string[];
-  if (userId.startsWith('mock-')) {
-    const mock = MOCK_USERS.find((u) => u.id === userId);
-    list =
-      mock?.profile_photos && mock.profile_photos.length > 0
-        ? mock.profile_photos
-        : buildFallbackPhotoList(mock?.full_name, mock?.avatar_url);
-  } else {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('profile_photos, avatar_url, full_name')
-      .eq('id', userId)
-      .maybeSingle();
-    if (error || !data) return [];
-    const photos = data.profile_photos ?? [];
-    list = photos.length > 0 ? photos : buildFallbackPhotoList(data.full_name, data.avatar_url);
-  }
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('profile_photos, avatar_url, full_name')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error || !data) return [];
+  const photos = data.profile_photos ?? [];
+  const list = photos.length > 0 ? photos : buildFallbackPhotoList(data.full_name, data.avatar_url);
 
   profileGalleryCache.set(userId, list);
   void warmPhotoUris(list.slice(0, 4));
@@ -120,18 +122,6 @@ function useProfileGalleryPhotos(userId: string | null) {
       return;
     }
     let cancelled = false;
-    if (String(userId).startsWith('mock-')) {
-      const m = MOCK_USERS.find((u) => u.id === userId);
-      const list =
-        m?.profile_photos && m.profile_photos.length > 0
-          ? m.profile_photos
-          : m?.avatar_url
-            ? [m.avatar_url]
-            : [`${DEFAULT_AVATAR}${encodeURIComponent((m?.full_name ?? '?').charAt(0))}`];
-      setPhotos(list);
-      setLoading(false);
-      return;
-    }
     const cached = profileGalleryCache.get(userId);
     if (cached && cached.length > 0) {
       setPhotos(cached);
@@ -258,7 +248,7 @@ function ProfilePhotoGalleryPage({
             <Image
               source={{ uri }}
               style={{ width: winWidth, height: winHeight }}
-              contentFit="cover"
+              contentFit="contain"
               transition={180}
             />
           </View>
@@ -301,7 +291,7 @@ function ReadOnlyRow({ icon, label, value, isLast }: {
   return (
     <View style={[pr.fieldRow, isLast && pr.fieldRowLast]}>
       <View style={pr.fieldIcon}>
-        <Ionicons name={icon} size={16} color={COLORS.primary} />
+        <Ionicons name={icon} size={16} color={COLORS.textStrong} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={pr.fieldLabel}>{label}</Text>
@@ -311,11 +301,25 @@ function ReadOnlyRow({ icon, label, value, isLast }: {
   );
 }
 
-type ProfileWithAgePrefs = User & { min_age_pref?: number | null; max_age_pref?: number | null };
+function formatLastSeen(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const diff = Math.max(0, Date.now() - t);
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
 
-function isMeaningfulText(value: string | null | undefined): boolean {
-  const n = value?.trim();
-  return !!n && n !== '-' && n !== '—';
+  if (mins < 1) return 'just now';
+  if (mins < 60) return 'this hour';
+  if (hours < 2) return 'an hour ago';
+  if (hours < 24) return `${hours} hours ago`;
+  if (days < 2) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return 'a week ago';
+  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+  if (days < 60) return 'a month ago';
+  if (days < 365) return `${Math.floor(days / 30)} months ago`;
+  return 'long time ago';
 }
 
 export default function ProfileViewScreen() {
@@ -331,89 +335,152 @@ export default function ProfileViewScreen() {
   const routePhotoIndex = Math.max(0, Number.parseInt(photoParam ?? '0', 10) || 0);
   const { user: currentUser, session } = useAuthStore();
   const profileScrollRef = useRef<ScrollView>(null);
-  const sectionY = useRef<Record<string, number>>({});
+  const pullPanRef = useRef(null);
   const [strengthBannerDismissed, setStrengthBannerDismissed] = useState(false);
 
   // Scroll-driven action button animation
   const btnScaleAnim   = useRef(new Animated.Value(1)).current;
   const btnOpacityAnim = useRef(new Animated.Value(1)).current;
   const lastScrollY    = useRef(0);
+  // Drives the Telegram-style collapsed header: big hero photo shrinks to a
+  // circular avatar + name row pinned to the top as you scroll up.
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const collapseStartRef = useRef(0);
+  const [collapsedHeaderActive, setCollapsedHeaderActive] = useState(false);
+  const pullUpTriggeredRef = useRef(false);
+  // True while the scroll view is at (or very near) its bottom edge. A swipe
+  // up released while this is true advances to the next profile.
+  const scrollAtBottomRef = useRef(false);
+  // True while the scroll view is at (or very near) its top edge. A swipe
+  // down released while this is true dismisses the profile.
+  const scrollAtTopRef = useRef(true);
+  // Fling thresholds — either distance OR velocity needs to cross these for
+  // the swipe to commit. Keep them generous so a deliberate flick works
+  // reliably but a slow nudge doesn't fire by accident.
+  const SWIPE_DIST_PX = 60;
+  const SWIPE_VELOCITY = 700;
 
   const handleProfileScroll = useCallback((e: any) => {
-    const y    = e.nativeEvent.contentOffset.y;
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const y    = contentOffset.y;
     const prev = lastScrollY.current;
     lastScrollY.current = y;
+    scrollY.setValue(y);
+
+    // Flip the collapsed-header state once we've scrolled past the hero.
+    // Small hysteresis window (10px) keeps the fade from flickering.
+    const threshold = collapseStartRef.current;
+    setCollapsedHeaderActive((prevActive) => {
+      if (!prevActive && y > threshold + 10) return true;
+      if (prevActive && y < threshold - 10) return false;
+      return prevActive;
+    });
 
     const springCfg = { useNativeDriver: true, tension: 90, friction: 10 };
 
     if (y < 30) {
-      // Back near the top — restore full size
       Animated.spring(btnScaleAnim,   { toValue: 1,    ...springCfg }).start();
       Animated.spring(btnOpacityAnim, { toValue: 1,    ...springCfg }).start();
     } else if (y > prev + 5) {
-      // Scrolling down — shrink
       Animated.spring(btnScaleAnim,   { toValue: 0.72, ...springCfg }).start();
       Animated.spring(btnOpacityAnim, { toValue: 0.75, ...springCfg }).start();
     } else if (y < prev - 5) {
-      // Scrolling up — restore
       Animated.spring(btnScaleAnim,   { toValue: 1,    ...springCfg }).start();
       Animated.spring(btnOpacityAnim, { toValue: 1,    ...springCfg }).start();
     }
-  }, [btnScaleAnim, btnOpacityAnim]);
 
-  const captureSectionLayout = (key: string) => (e: LayoutChangeEvent) => {
-    sectionY.current[key] = e.nativeEvent.layout.y;
-  };
+    // Track whether the scroll view is at its top or bottom edge. The pan
+    // gesture below only commits a swipe when we're pinned against the
+    // matching edge, so mid-profile vertical pans never trigger navigation.
+    const distanceFromBottom =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    scrollAtBottomRef.current = distanceFromBottom < 1;
+    scrollAtTopRef.current = contentOffset.y <= 1;
+  }, [btnScaleAnim, btnOpacityAnim, scrollY]);
 
-  const scrollToProfileSection = useCallback((key: string) => {
-    const y = sectionY.current[key];
-    if (y == null) return;
-    profileScrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
-  }, []);
   const { getOrCreateConversation } = useChatStore();
   const { likedUserIds, toggleLike, fetchLikedUserIds } = useDiscoverStore();
-  const { showDialog } = useDialog();
+  const { showDialog, showToast } = useDialog();
   const insets = useSafeAreaInsets();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
-  const heroPhotoScrollRef = useRef<ScrollView>(null);
+  const heroHeight = winWidth * 1.1;
+  const collapseStart = Math.max(heroHeight - 140, 80);
+  const collapseEnd = Math.max(heroHeight - 70, 120);
+  useEffect(() => {
+    collapseStartRef.current = collapseStart;
+  }, [collapseStart]);
+  const collapsedOpacity = useMemo(
+    () => scrollY.interpolate({
+      inputRange: [collapseStart, collapseEnd],
+      outputRange: [0, 1],
+      extrapolate: 'clamp',
+    }),
+    [collapseStart, collapseEnd, scrollY],
+  );
+  const collapsedTranslateY = useMemo(
+    () => scrollY.interpolate({
+      inputRange: [collapseStart, collapseEnd],
+      outputRange: [-10, 0],
+      extrapolate: 'clamp',
+    }),
+    [collapseStart, collapseEnd, scrollY],
+  );
+  const heroTopChromeOpacity = useMemo(
+    () => scrollY.interpolate({
+      inputRange: [Math.max(collapseStart - 60, 40), collapseStart],
+      outputRange: [1, 0],
+      extrapolate: 'clamp',
+    }),
+    [collapseStart, scrollY],
+  );
+
+  const heroPhotoListRef = useRef<FlatList<string>>(null);
   const prevProfileIdInPhotoViewerRef = useRef<string | null>(null);
   const photoViewerSwipeX = useRef(new Animated.Value(0)).current;
   const photoViewerSwipeY = useRef(new Animated.Value(0)).current;
+  // Double-tap to like — track last tap timestamp and the delayed single-tap
+  // so we don't fire both "open viewer" and "like" on the same gesture.
+  const lastHeroTapRef = useRef<{ t: number; i: number } | null>(null);
+  const singleHeroTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartBurstScale = useRef(new Animated.Value(0)).current;
+  const heartBurstOpacity = useRef(new Animated.Value(0)).current;
 
   const orderedUserIds = useProfileBrowseStore((s) => s.orderedUserIds);
   const [photoViewerVisible, setPhotoViewerVisible] = useState(routeWantsPhotoViewer);
   const [viewerPhotoIndex, setViewerPhotoIndex] = useState(routePhotoIndex);
 
-  const [profile, setProfile] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Seed from the in-memory cache the caller just wrote (discover / likes / etc.)
+  // so the profile paints instantly. A background fetch replaces this with fresh
+  // DB data a moment later.
+  const [profile, setProfile] = useState<User | null>(() => getProfileSeed(id));
+  const [isLoading, setIsLoading] = useState(() => !getProfileSeed(id));
   const [photoIndex, setPhotoIndex] = useState(0);
   const [matchUser, setMatchUser] = useState<User | null>(null);
   const [isFavourite, setIsFavourite] = useState(false);
-  const [compatibilityExpanded, setCompatibilityExpanded] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [reportPromptVisible, setReportPromptVisible] = useState(false);
-
-  // Toast
-  const toastAnim = useRef(new Animated.Value(0)).current;
-  const [toast, setToast] = useState<{ icon: string; msg: string } | null>(null);
-  const showToast = (icon: string, msg: string) => {
-    setToast({ icon, msg });
-    toastAnim.setValue(0);
-    Animated.sequence([
-      Animated.timing(toastAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.delay(1500),
-      Animated.timing(toastAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
-    ]).start(() => setToast(null));
-  };
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [profileHeroMenuVisible, setProfileHeroMenuVisible] = useState(false);
 
   useEffect(() => {
-    setCompatibilityExpanded(false);
+    setDetailsExpanded(false);
     setIsFavourite(false);
     setReportPromptVisible(false);
     setStrengthBannerDismissed(false);
     setPhotoIndex(0);
+    setLoadError(null);
+    setProfileHeroMenuVisible(false);
+    // Re-seed from the cache when navigating between profiles so the screen
+    // paints instantly instead of flashing a spinner between rows.
+    const seed = getProfileSeed(id);
+    if (seed) {
+      setProfile(seed);
+      setIsLoading(false);
+    }
     requestAnimationFrame(() => {
-      heroPhotoScrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+      heroPhotoListRef.current?.scrollToOffset({ offset: 0, animated: false });
     });
   }, [id]);
 
@@ -424,81 +491,78 @@ export default function ProfileViewScreen() {
     }
   }, [routePhotoIndex, routeWantsPhotoViewer, id]);
 
-  useEffect(() => {
-    if (!id) return;
-    setIsLoading(true);
-    setProfile(null);
+  const fetchProfile = useCallback(
+    async (opts?: { background?: boolean }) => {
+      if (!id) return;
+      const bg = opts?.background === true;
+      // If we already have any profile data for this id (from the seed cache or
+      // a previous fetch), treat the fetch as a silent refresh — don't blank the
+      // screen back to a spinner just to replace `data` with a slightly newer
+      // copy of the same row.
+      const hasExistingData = !!getProfileSeed(id);
+      const silent = bg || hasExistingData;
 
-    // Serve mock data instantly for mock user IDs (no DB round-trip needed)
-    if (String(id).startsWith('mock-')) {
-      const today = new Date();
-      const mock = MOCK_USERS.find((u) => u.id === id);
-      if (mock) {
-        const bday = mock.birthdate ? new Date(mock.birthdate) : null;
+      if (!silent) {
+        setLoadError(null);
+        setIsLoading(true);
+        setProfile(null);
+      } else {
+        if (bg) setRefreshing(true);
+        setLoadError(null);
+      }
+
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
+
+      if (!silent) setIsLoading(false);
+      setRefreshing(false);
+
+      if (error) {
+        console.error('[ProfileView] load profile:', error.message);
+        setLoadError(error.message);
+        if (!silent) setProfile(null);
+        return;
+      }
+
+      setLoadError(null);
+      if (data) {
+        const today = new Date();
+        const bday = data.birthdate ? new Date(data.birthdate) : null;
         const age = bday
           ? today.getFullYear() - bday.getFullYear()
             - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
           : undefined;
-        setProfile({ ...mock, age, profile_photos: mock.profile_photos ?? [], languages: mock.languages ?? [] });
-        if (mock) {
-          const plist =
-            mock.profile_photos && mock.profile_photos.length > 0
-              ? mock.profile_photos
-              : buildFallbackPhotoList(mock.full_name, mock.avatar_url);
-          profileGalleryCache.set(id, plist);
-        }
+        const pphotos = data.profile_photos ?? [];
+        const galleryList =
+          pphotos.length > 0 ? pphotos : buildFallbackPhotoList(data.full_name, data.avatar_url);
+        profileGalleryCache.set(id, galleryList);
+        setProfile({
+          ...data,
+          age,
+          profile_photos: pphotos,
+          languages: data.languages ?? [],
+          looking_for: data.looking_for ?? [],
+          hobbies: data.hobbies ?? [],
+        });
+      } else {
+        setProfile(null);
       }
-      setIsLoading(false);
-      return;
-    }
+    },
+    [id],
+  );
 
-    supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          console.error('[ProfileView] load profile:', error.message);
-          setProfile(null);
-          setIsLoading(false);
-          return;
-        }
-        if (data) {
-          const today = new Date();
-          const bday = data.birthdate ? new Date(data.birthdate) : null;
-          const age = bday
-            ? today.getFullYear() - bday.getFullYear()
-              - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
-            : undefined;
-          const pphotos = data.profile_photos ?? [];
-          const galleryList =
-            pphotos.length > 0 ? pphotos : buildFallbackPhotoList(data.full_name, data.avatar_url);
-          profileGalleryCache.set(id, galleryList);
-          setProfile({
-            ...data,
-            age,
-            profile_photos: pphotos,
-            languages: data.languages ?? [],
-            looking_for: data.looking_for ?? [],
-            hobbies: data.hobbies ?? [],
-          });
-        } else {
-          setProfile(null);
-        }
-        setIsLoading(false);
-      });
-  }, [id]);
+  useEffect(() => {
+    void fetchProfile();
+  }, [fetchProfile]);
 
   // Record view + notify once we know both profile and viewer (session can resolve after first paint)
   useEffect(() => {
     if (!profile || !currentUser?.id || currentUser.id === profile.id) return;
-    if (String(profile.id).startsWith('mock-')) return;
 
     void supabase.from('profile_views').upsert(
       { viewer_id: currentUser.id, viewed_id: profile.id, viewed_at: new Date().toISOString() },
       { onConflict: 'viewer_id,viewed_id' },
     );
+    track(EVENTS.PROFILE_VIEWED);
     // Only notify once per app session — the DB upsert deduplicates the row but not the push
     if (!notifiedProfileViews.has(profile.id)) {
       notifiedProfileViews.add(profile.id);
@@ -540,6 +604,27 @@ export default function ProfileViewScreen() {
       StatusBar.setHidden(false);
     };
   }, [photoViewerVisible]);
+
+  // Force light status bar icons while this screen is mounted — dark photos
+  // sit under the translucent status bar and light-content stays legible on
+  // both dark and the savanna placeholder.
+  useEffect(() => {
+    const prev = StatusBar.pushStackEntry({ barStyle: 'light-content', animated: true });
+    return () => {
+      StatusBar.popStackEntry(prev);
+    };
+  }, []);
+
+  // Clear any pending single-tap timer on unmount so a delayed openPhotoViewer
+  // doesn't fire after the user has navigated away.
+  useEffect(() => {
+    return () => {
+      if (singleHeroTapTimerRef.current) {
+        clearTimeout(singleHeroTapTimerRef.current);
+        singleHeroTapTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const adjacentBrowse = useMemo(() => {
     if (!profile?.id) return { pages: [] as string[], initialIndex: 0 };
@@ -621,6 +706,64 @@ export default function ProfileViewScreen() {
     replaceProfileRoute(ids[i + 1]!, { openPhotoViewer: true, photoIndex: viewerPhotoIndex });
   }, [profile?.id, replaceProfileRoute, viewerPhotoIndex]);
 
+  // Pull-up gesture: jump to next profile in the browse queue without
+  // opening the fullscreen gallery. Used by the "Up next" footer on the
+  // main profile scroll view.
+  const goNextProfile = useCallback(() => {
+    const pid = profile?.id;
+    if (!pid) return;
+    const ids = useProfileBrowseStore.getState().orderedUserIds;
+    const i = ids.indexOf(pid);
+    if (i < 0 || i >= ids.length - 1) return;
+    replaceProfileRoute(ids[i + 1]!);
+  }, [profile?.id, replaceProfileRoute]);
+
+  // Pan handler that lives _alongside_ the ScrollView. It's a pure swipe
+  // detector — no rubber-band, no armed state, no content translation. On
+  // release we decide whether the gesture was a committed flick:
+  //   • Swipe up while pinned at the bottom → jump to next profile
+  //   • Swipe down while pinned at the top  → close this profile
+  // Anywhere in the middle of the scroll the ScrollView owns the gesture,
+  // so these fire only when the scroll has nowhere to go anyway.
+  const onPullPanEvent = useCallback((_e: PanGestureHandlerGestureEvent) => {
+    // Intentionally empty — we only commit on gesture END. Keeps the content
+    // rock-steady under the finger (no rubber-band "throttle" feel).
+  }, []);
+
+  const onPullPanStateChange = useCallback((e: PanGestureHandlerStateChangeEvent) => {
+    const s = e.nativeEvent.state;
+    if (s !== GestureState.END) return;
+
+    const { translationY, velocityY } = e.nativeEvent;
+
+    const swipedUp =
+      translationY < -SWIPE_DIST_PX || velocityY < -SWIPE_VELOCITY;
+    const swipedDown =
+      translationY > SWIPE_DIST_PX || velocityY > SWIPE_VELOCITY;
+
+    // Swipe up at the bottom → next profile.
+    if (swipedUp && scrollAtBottomRef.current && !pullUpTriggeredRef.current) {
+      const pid = profile?.id;
+      const ids = pid ? useProfileBrowseStore.getState().orderedUserIds : [];
+      const i = pid ? ids.indexOf(pid) : -1;
+      const hasNext = i >= 0 && i < ids.length - 1;
+      if (hasNext) {
+        pullUpTriggeredRef.current = true;
+        goNextProfile();
+        setTimeout(() => {
+          pullUpTriggeredRef.current = false;
+        }, 400);
+      }
+      return;
+    }
+
+    // Swipe down at the top → close the profile (matches the bottom-sheet
+    // feel set by the slide_from_bottom stack animation).
+    if (swipedDown && scrollAtTopRef.current) {
+      router.back();
+    }
+  }, [profile?.id, goNextProfile]);
+
   const resetPhotoViewerSwipe = useCallback(() => {
     Animated.parallel([
       Animated.spring(photoViewerSwipeX, {
@@ -688,19 +831,125 @@ export default function ProfileViewScreen() {
     resetPhotoViewerSwipe,
   ]);
 
+  const handleShareProfile = useCallback(async () => {
+    if (!profile?.id) return;
+    try {
+      const url = Linking.createURL(`/(profile)/${profile.id}`);
+      const result = await Share.share({
+        message: `${profile.full_name} on Africana — open in the app:\n${url}`,
+      });
+      if (result?.action === Share.sharedAction && currentUser?.id) {
+        const { ok } = await recordProfileShareEvent(currentUser.id, profile.id);
+        if (ok) showToast({ icon: 'leaf-outline', message: SHARE_REWARD_TOAST });
+      }
+    } catch {
+      /* dismissed */
+    }
+  }, [profile, currentUser?.id]);
+
+  const triggerHeartBurst = useCallback(() => {
+    heartBurstScale.setValue(0.3);
+    heartBurstOpacity.setValue(0);
+    Animated.sequence([
+      Animated.parallel([
+        Animated.spring(heartBurstScale, {
+          toValue: 1.1,
+          friction: 5,
+          tension: 140,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartBurstOpacity, {
+          toValue: 1,
+          duration: 120,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.delay(320),
+      Animated.parallel([
+        Animated.timing(heartBurstScale, {
+          toValue: 1.3,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartBurstOpacity, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, [heartBurstOpacity, heartBurstScale]);
+
+  // Double-tap likes, single-tap opens full-screen viewer (after a short
+  // grace window so we don't fire both on a real double-tap). Hook must live
+  // ABOVE the `isLoading` / `!profile` early returns below, or React will see
+  // a different hook count between the loading render and the ready render.
+  // `handleLike` / `openPhotoViewer` are resolved from lexical closure at tap
+  // time; we leave them out of deps (their own closures are covered by our
+  // `profile` / `currentUser` / `likedUserIds` deps).
+  const handleHeroPhotoTap = useCallback(
+    (index: number) => {
+      if (!profile || !currentUser) return;
+      const isOwn = currentUser.id === profile.id;
+      const alreadyLiked = likedUserIds.has(profile.id);
+      const now = Date.now();
+      const last = lastHeroTapRef.current;
+      if (last && last.i === index && now - last.t < 280) {
+        if (singleHeroTapTimerRef.current) {
+          clearTimeout(singleHeroTapTimerRef.current);
+          singleHeroTapTimerRef.current = null;
+        }
+        lastHeroTapRef.current = null;
+        if (!isOwn && !alreadyLiked) {
+          haptics.tapLight();
+          triggerHeartBurst();
+          void handleLike();
+        } else if (alreadyLiked) {
+          triggerHeartBurst();
+        }
+        return;
+      }
+      lastHeroTapRef.current = { t: now, i: index };
+      if (singleHeroTapTimerRef.current) clearTimeout(singleHeroTapTimerRef.current);
+      singleHeroTapTimerRef.current = setTimeout(() => {
+        openPhotoViewer(index);
+        lastHeroTapRef.current = null;
+        singleHeroTapTimerRef.current = null;
+      }, 240);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [profile, currentUser, likedUserIds, triggerHeartBurst],
+  );
+
   if (isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={COLORS.textStrong} />
       </View>
     );
   }
 
   if (!profile) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' }}>
-        <Text>Profile not found</Text>
-        <Button title="Go Back" onPress={() => router.back()} style={{ marginTop: 16 }} />
+      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        {loadError ? (
+          <>
+            <Ionicons name="cloud-offline-outline" size={48} color={COLORS.textMuted} />
+            <Text style={{ marginTop: 16, fontSize: 18, fontWeight: '800', color: COLORS.textStrong, textAlign: 'center' }}>
+              Could not load profile
+            </Text>
+            <Text style={{ marginTop: 8, fontSize: 14, color: COLORS.textSecondary, textAlign: 'center' }}>{loadError}</Text>
+            <Button title="Try again" onPress={() => void fetchProfile()} style={{ marginTop: 20 }} />
+          </>
+        ) : (
+          <>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.textStrong }}>Profile not found</Text>
+            <Text style={{ marginTop: 8, fontSize: 14, color: COLORS.textSecondary, textAlign: 'center' }}>
+              This profile may have been removed or the link is invalid.
+            </Text>
+          </>
+        )}
+        <Button title="Go back" onPress={() => router.back()} variant="ghost" style={{ marginTop: 16 }} />
       </SafeAreaView>
     );
   }
@@ -712,11 +961,14 @@ export default function ProfileViewScreen() {
   const bodyTypeLabel    = profile.body_type      ? PHYSICAL_CONDITION_OPTIONS.find(o => o.value === profile.body_type)?.label ?? profile.body_type : null;
   const occupationLabel   = profile.occupation     ? OCCUPATION_OPTIONS.find(o => o.value === profile.occupation)?.label ?? profile.occupation    : null;
   const interestedInLabel =
-    profile.gender === 'male' || profile.gender === 'female'
-      ? INTERESTED_IN_OPTIONS.find((o) => o.value === oppositeInterestedIn(profile.gender))?.label ?? null
-      : INTERESTED_IN_OPTIONS.find((o) => o.value === profile.interested_in)?.label ?? profile.interested_in ?? null;
+    INTERESTED_IN_OPTIONS.find((o) => o.value === profile.interested_in)?.label ?? profile.interested_in ?? null;
 
   const location = [profile.city, profile.state, profile.country].filter(Boolean).join(', ');
+  const heritageLine = [profile.origin_city, profile.origin_state, profile.origin_country].filter(Boolean).join(', ');
+  const showHeritage =
+    heritageLine.length > 0 &&
+    heritageLine.trim().toLowerCase() !== (location || '').trim().toLowerCase();
+  const isVerified = profile.verified === true || profile.verification_status === 'approved';
   const isLiked = likedUserIds.has(profile.id);
   const isOwnProfile = currentUser?.id === profile.id;
   const displayOnlineStatus: 'online' | 'offline' =
@@ -728,129 +980,34 @@ export default function ProfileViewScreen() {
 
   const recipientMessagesPaused = !isOwnProfile && profile.accepts_messages === false;
 
+  /** Single activity treatment: online badge, or last-active time when available, else offline. */
+  const isActiveOnline = displayOnlineStatus === 'online';
+  const useLastActiveLabel =
+    !isActiveOnline &&
+    !isOwnProfile &&
+    profile.online_visible !== false &&
+    !!profile.last_seen;
+  const activityLabel = isActiveOnline
+    ? 'Online'
+    : useLastActiveLabel
+      ? formatLastSeen(profile.last_seen)
+      : 'Offline';
+
   const photoModalDotBottom =
     !isOwnProfile && currentUser
       ? Math.max(insets.bottom + FLOAT_ACTION_SIZE + 28, 94)
       : Math.max(insets.bottom + 16, 24);
 
-  const p = profile as ProfileWithAgePrefs;
   const normalizeText = (value: string | null | undefined) => value?.trim().toLowerCase() ?? '';
   const viewerLanguages = new Set((currentUser?.languages ?? []).map((lang) => normalizeText(lang)).filter(Boolean));
-  const effectiveTheirAgePref = getEffectiveAgePreferenceRange(p.min_age_pref, p.max_age_pref);
-  const viewerAge = calculateAge(currentUser?.birthdate) ?? null;
+  const viewerHobbies = new Set((currentUser?.hobbies ?? []).map((h) => normalizeText(h)).filter(Boolean));
+  const commonHobbies = !isOwnProfile
+    ? (profile.hobbies ?? []).filter((h) => viewerHobbies.has(normalizeText(h)))
+    : [];
+  const commonLanguages = !isOwnProfile
+    ? (profile.languages ?? []).filter((l) => viewerLanguages.has(normalizeText(l)))
+    : [];
   const profileFirstName = profile.full_name?.trim().split(/\s+/)[0] ?? 'Their';
-
-  type CompatibilityCriterion = {
-    key: string;
-    label: string;
-    viewerValue: string;
-    matched: boolean;
-  };
-  const compatibilityCriteria: CompatibilityCriterion[] = [];
-  const pushCompatibility = (
-    key: string,
-    label: string,
-    theirValue: string | null | undefined,
-    viewerValue: string | null | undefined,
-    matched: boolean,
-  ) => {
-    if (!theirValue || !viewerValue) return;
-    compatibilityCriteria.push({ key, label, viewerValue, matched });
-  };
-
-  const LOOKING_SINGLE: Record<string, string> = { men: 'Male', women: 'Female' };
-  const theirLookingFor =
-    p.interested_in === 'men' || p.interested_in === 'women' ? LOOKING_SINGLE[p.interested_in] : null;
-  const genderPrefMatch =
-    !!p.interested_in &&
-    (p.interested_in === 'men' || p.interested_in === 'women') &&
-    !!currentUser?.gender &&
-    ((p.interested_in === 'men' && currentUser.gender === 'male') ||
-      (p.interested_in === 'women' && currentUser.gender === 'female'));
-  pushCompatibility(
-    'gender',
-    'Looking for',
-    theirLookingFor,
-    currentUser?.gender ? GENDER_LABEL[currentUser.gender] ?? currentUser.gender : null,
-    genderPrefMatch,
-  );
-
-  if (!effectiveTheirAgePref.isImplicit) {
-    pushCompatibility(
-      'age',
-      'Age they prefer',
-      `${effectiveTheirAgePref.min}–${effectiveTheirAgePref.max} yrs`,
-      typeof viewerAge === 'number' ? `${viewerAge} yrs` : null,
-      typeof viewerAge === 'number' &&
-        viewerAge >= effectiveTheirAgePref.min &&
-        viewerAge <= effectiveTheirAgePref.max,
-    );
-  }
-
-  const viewerGoalLabels = (currentUser?.looking_for ?? [])
-    .map((goal) => LOOKING_FOR_OPTIONS.find((option) => option.value === goal)?.label ?? goal.replace('_', ' '))
-    .filter(Boolean);
-  const profileGoalLabels = (p.looking_for ?? [])
-    .map((goal) => LOOKING_FOR_OPTIONS.find((option) => option.value === goal)?.label ?? goal.replace('_', ' '))
-    .filter(Boolean);
-  const hasGoalOverlap = (currentUser?.looking_for ?? []).some((goal) => (p.looking_for ?? []).includes(goal));
-  pushCompatibility(
-    'relation_type',
-    'Goals',
-    profileGoalLabels.join(', '),
-    viewerGoalLabels.join(', '),
-    hasGoalOverlap,
-  );
-
-  pushCompatibility(
-    'religion',
-    'Religion',
-    religionLabel,
-    currentUser?.religion
-      ? RELIGION_OPTIONS.find((option) => option.value === currentUser.religion)?.label ?? currentUser.religion
-      : null,
-    !!currentUser?.religion && !!p.religion && currentUser.religion === p.religion,
-  );
-
-  const viewerWantChildrenLabel = currentUser?.want_children
-    ? WANT_CHILDREN_YES_NO.find((option) => option.value === currentUser.want_children)?.label ?? currentUser.want_children
-    : null;
-  const wantLabelRow = p.want_children
-    ? WANT_CHILDREN_YES_NO.find((o) => o.value === p.want_children)?.label ?? p.want_children
-    : '';
-  pushCompatibility(
-    'want_children',
-    'Want children',
-    wantLabelRow || null,
-    viewerWantChildrenLabel,
-    !!currentUser?.want_children && !!p.want_children && currentUser.want_children === p.want_children,
-  );
-
-  const sharedLanguages = (p.languages ?? []).filter((lang) => viewerLanguages.has(normalizeText(lang)));
-  pushCompatibility(
-    'languages',
-    'Languages',
-    (p.languages ?? []).join(', '),
-    (currentUser?.languages ?? []).join(', '),
-    sharedLanguages.length > 0,
-  );
-
-  pushCompatibility(
-    'ethnicity',
-    'Ethnicity',
-    isMeaningfulText(p.ethnicity) ? (p.ethnicity ?? '').trim() : null,
-    isMeaningfulText(currentUser?.ethnicity) ? (currentUser?.ethnicity ?? '').trim() : null,
-    isMeaningfulText(currentUser?.ethnicity) &&
-      isMeaningfulText(p.ethnicity) &&
-      normalizeText(currentUser?.ethnicity) === normalizeText(p.ethnicity),
-  );
-
-  const matchedCriteriaCount = compatibilityCriteria.filter((c) => c.matched).length;
-  const compatibilityPercent =
-    compatibilityCriteria.length > 0
-      ? Math.round((matchedCriteriaCount / compatibilityCriteria.length) * 100)
-      : null;
-  const canShowCompatibility = !isOwnProfile && currentUser && compatibilityCriteria.length > 0;
 
   const viewerStrength = getProfileStrength(currentUser);
   const showStrengthNudge =
@@ -863,28 +1020,20 @@ export default function ProfileViewScreen() {
   const needsDiscoverGate =
     !isOwnProfile && !!currentUser && !!session && !isProfileCompleteForDiscover(currentUser);
 
-  const profileNavSections: { id: string; label: string }[] = (() => {
-    const rows: { id: string; label: string }[] = [{ id: 'about', label: 'About' }];
-    if (canShowCompatibility && compatibilityPercent !== null) {
-      rows.push({ id: 'match', label: 'Match' });
-    }
-    rows.push({ id: 'personal', label: 'Personal' });
-    if (!!profile.height_cm || !!profile.body_type) rows.push({ id: 'physical', label: 'Physical' });
-    if (!!occupationLabel || !!educationLabel)       rows.push({ id: 'work',     label: 'Work' });
-    if (profile.has_children != null || !!profile.want_children) rows.push({ id: 'family', label: 'Family' });
-    if ((profile.hobbies ?? []).length > 0)          rows.push({ id: 'hobbies',  label: 'Hobbies' });
-    return rows;
-  })();
-
   const handleLike = async () => {
     if (!currentUser) return;
     const wasLiked = likedUserIds.has(profile.id);
+    if (!wasLiked) haptics.tapLight();
     const isMatch = await toggleLike(currentUser.id, profile.id);
     if (isMatch && !wasLiked) {
+      haptics.success();
       setMatchUser(profile);
-      showToast('🔥', "It's a match!");
+      showToast({ icon: 'flame', message: "It's a match!" });
     } else {
-      showToast(wasLiked ? '💔' : '❤️', wasLiked ? 'Unliked' : 'Liked!');
+      showToast({
+        icon: wasLiked ? 'heart-outline' : 'heart',
+        message: wasLiked ? 'Unliked' : 'Liked!',
+      });
     }
   };
 
@@ -910,13 +1059,21 @@ export default function ProfileViewScreen() {
         .eq('user_id', currentUser.id)
         .eq('favourited_id', profile.id);
       setIsFavourite(false);
-      showToast('⭐', 'Removed from favourites');
+      showToast({ icon: 'star-outline', message: 'Removed from favourites' });
     } else {
       await supabase
         .from('favourites')
         .insert({ user_id: currentUser.id, favourited_id: profile.id });
       setIsFavourite(true);
-      showToast('⭐', 'Added to favourites');
+      showToast({ icon: 'star', message: 'Added to favourites' });
+      track(EVENTS.FAVOURITE_ADDED);
+      void notifyUser({
+        type: 'favourite',
+        recipientId: profile.id,
+        senderId: currentUser.id,
+        senderName: currentUser.full_name ?? 'Someone',
+        extra: { userId: currentUser.id },
+      });
     }
   };
 
@@ -930,11 +1087,12 @@ export default function ProfileViewScreen() {
     prevProfileIdInPhotoViewerRef.current = null;
     setPhotoIndex(viewerPhotoIndex);
     requestAnimationFrame(() => {
-      heroPhotoScrollRef.current?.scrollTo({
-        x: viewerPhotoIndex * winWidth,
-        y: 0,
-        animated: false,
-      });
+      if (winWidth > 0) {
+        heroPhotoListRef.current?.scrollToOffset({
+          offset: viewerPhotoIndex * winWidth,
+          animated: false,
+        });
+      }
     });
     setPhotoViewerVisible(false);
     router.setParams({ viewer: undefined, photo: undefined });
@@ -960,6 +1118,7 @@ export default function ProfileViewScreen() {
         showDialog({
           title: 'Already reported',
           message: 'You have already submitted a report for this user.',
+          icon: 'information-circle-outline',
           actions: [{ label: 'OK', style: 'primary' }],
         });
         return;
@@ -968,6 +1127,7 @@ export default function ProfileViewScreen() {
       showDialog({
         title: 'Something went wrong',
         message: 'Could not check report status. Please try again.',
+        icon: 'alert-circle-outline',
         actions: [{ label: 'OK', style: 'primary' }],
       });
       return;
@@ -981,37 +1141,99 @@ export default function ProfileViewScreen() {
       blocker_id: currentUser.id,
       blocked_id: profile.id,
     });
-    showToast('🚫', `${profile.full_name} blocked`);
+    showToast({ icon: 'ban-outline', message: `${profile.full_name} blocked` });
     setTimeout(() => router.back(), 1300);
   };
 
-  const toastOverlay = toast ? (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: 'absolute',
-        zIndex: 999,
-        top: 80,
-        alignSelf: 'center',
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        backgroundColor: 'rgba(17,17,17,0.88)',
-        paddingHorizontal: 18,
-        paddingVertical: 11,
-        borderRadius: 30,
-        opacity: toastAnim,
-        transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }],
-      }}
-    >
-      <Text style={{ fontSize: 18 }}>{toast.icon}</Text>
-      <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600' }}>{toast.msg}</Text>
-    </Animated.View>
-  ) : null;
-
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      {!photoViewerVisible ? toastOverlay : null}
+      {/* Telegram-style collapsed header: appears pinned to the top once the
+          user has scrolled past the hero. Fades in as the big photo scrolls
+          off-screen and shows a circular mini-avatar + name + activity. */}
+      <Animated.View
+        pointerEvents={collapsedHeaderActive ? 'box-none' : 'none'}
+        style={[
+          pr.collapsedHeader,
+          {
+            paddingTop: insets.top,
+            opacity: collapsedOpacity,
+            transform: [{ translateY: collapsedTranslateY }],
+          },
+        ]}
+      >
+        <View style={pr.collapsedHeaderInner}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            accessibilityLabel="Go back"
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, left: 10, right: 10, bottom: 10 }}
+            style={pr.collapsedBackBtn}
+          >
+            <Ionicons name="chevron-back" size={28} color={COLORS.textStrong} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => openPhotoViewer(0)}
+            accessibilityLabel="View photo"
+            activeOpacity={0.85}
+            style={pr.collapsedAvatarWrap}
+          >
+            {photos[0] ? (
+              <Image
+                source={{ uri: photos[0] }}
+                style={pr.collapsedAvatar}
+                contentFit="cover"
+                contentPosition="top"
+                cachePolicy="memory-disk"
+                recyclingKey={photos[0]}
+              />
+            ) : (
+              <View style={[pr.collapsedAvatar, { backgroundColor: COLORS.savanna }]} />
+            )}
+            {isActiveOnline ? <View style={pr.collapsedOnlineDot} /> : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => profileScrollRef.current?.scrollTo({ y: 0, animated: true })}
+            style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <Text numberOfLines={1} style={[pr.collapsedName, { flexShrink: 1 }]}>
+                {profile.full_name}
+                {profile.age ? <Text style={pr.collapsedAge}>, {profile.age}</Text> : null}
+              </Text>
+              {isVerified ? <VerifiedBadge size={14} /> : null}
+            </View>
+            <Text numberOfLines={1} style={[
+              pr.collapsedStatus,
+              { color: isActiveOnline ? COLORS.online : COLORS.textMuted },
+            ]}>
+              {activityLabel}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setProfileHeroMenuVisible(true)}
+            accessibilityLabel="More actions"
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, left: 10, right: 10, bottom: 10 }}
+            style={pr.collapsedMenuBtn}
+          >
+            <Ionicons name="ellipsis-horizontal" size={22} color={COLORS.textStrong} />
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+
+      <PanGestureHandler
+        ref={pullPanRef}
+        simultaneousHandlers={profileScrollRef}
+        activeOffsetY={[-15, 15]}
+        failOffsetX={[-25, 25]}
+        onGestureEvent={onPullPanEvent}
+        onHandlerStateChange={onPullPanStateChange}
+      >
+      <Animated.View style={{ flex: 1 }}>
       <ScrollView
         ref={profileScrollRef}
         style={{ flex: 1, backgroundColor: 'transparent' }}
@@ -1019,8 +1241,16 @@ export default function ProfileViewScreen() {
         bounces
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
+        simultaneousHandlers={pullPanRef}
         scrollEventThrottle={16}
         onScroll={handleProfileScroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void fetchProfile({ background: true })}
+            tintColor={COLORS.textStrong}
+          />
+        }
         contentContainerStyle={{
           flexGrow: 1,
           backgroundColor: COLORS.surface,
@@ -1030,41 +1260,82 @@ export default function ProfileViewScreen() {
               : Math.max(insets.bottom + 24, 32),
         }}
       >
-        {/* Photo Carousel — rounded bottom for handoff into identity card */}
-        <View style={{ position: 'relative', backgroundColor: '#000', overflow: 'hidden', borderBottomLeftRadius: RADIUS.xxl, borderBottomRightRadius: RADIUS.xxl }}>
-          <ScrollView
-            ref={heroPhotoScrollRef}
+        {/* Photo Carousel — rounded bottom for handoff into identity card.
+            Uses a windowed FlatList so we only decode the visible photo plus
+            its neighbor, not all N at once. Warm placeholder color kills the
+            "dark flash" before the image decodes. */}
+        <View style={{ position: 'relative', backgroundColor: COLORS.savanna, overflow: 'hidden', borderBottomLeftRadius: RADIUS.xxl, borderBottomRightRadius: RADIUS.xxl }}>
+          <FlatList
+            ref={heroPhotoListRef}
+            data={photos}
             horizontal
             pagingEnabled
-            nestedScrollEnabled
             showsHorizontalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            initialNumToRender={1}
+            maxToRenderPerBatch={2}
+            windowSize={3}
+            removeClippedSubviews
+            keyExtractor={(photo, i) => `${photo}-${i}`}
+            getItemLayout={(_, index) => ({
+              length: winWidth,
+              offset: winWidth * index,
+              index,
+            })}
             style={{ width: winWidth, height: winWidth * 1.1 }}
             onMomentumScrollEnd={(e) => {
               if (winWidth <= 0) return;
               setPhotoIndex(Math.round(e.nativeEvent.contentOffset.x / winWidth));
             }}
-          >
-            {photos.map((photo, i) => (
+            renderItem={({ item: photo, index: i }) => (
               <Pressable
-                key={`${photo}-${i}`}
-                onPress={() => openPhotoViewer(i)}
-                style={{ width: winWidth, height: winWidth * 1.1 }}
+                onPress={() => handleHeroPhotoTap(i)}
+                android_disableSound
+                style={{ width: winWidth, height: winWidth * 1.1, backgroundColor: COLORS.savanna }}
               >
                 <Image
                   source={{ uri: photo }}
-                  style={{ width: winWidth, height: winWidth * 1.1 }}
+                  style={{ width: winWidth, height: winWidth * 1.1, backgroundColor: COLORS.savanna }}
                   contentFit="cover"
-                  transition={180}
+                  contentPosition="top"
+                  transition={220}
+                  cachePolicy="memory-disk"
+                  recyclingKey={photo}
                 />
               </Pressable>
-            ))}
-          </ScrollView>
+            )}
+          />
+          {/* Subtle bottom shade — only enough to keep photo dots & status icons readable */}
           <LinearGradient
             pointerEvents="none"
-            colors={['transparent', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.60)']}
-            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%' }}
+            colors={['transparent', 'rgba(0,0,0,0.28)']}
+            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '22%' }}
           />
+          {/* Soft top shade so the back/menu buttons stay legible on light photos */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(0,0,0,0.32)', 'transparent']}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 96 }}
+          />
+
+          {/* Heart-burst overlay for the double-tap-to-like gesture */}
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: heartBurstOpacity,
+              transform: [{ scale: heartBurstScale }],
+            }}
+          >
+            <Ionicons name="heart" size={110} color="#FFFFFF" style={{
+              textShadowColor: 'rgba(0,0,0,0.35)',
+              textShadowOffset: { width: 0, height: 2 },
+              textShadowRadius: 12,
+            }} />
+          </Animated.View>
 
           {/* Photo dots */}
           {photos.length > 1 && (
@@ -1094,109 +1365,178 @@ export default function ProfileViewScreen() {
             </View>
           )}
 
-          {/* Back button + report/block */}
-          <SafeAreaView pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 16 }}>
+          {/* Back + overflow menu (share / report / block) — keeps hero uncluttered.
+              Fades out as the collapsed header takes over so we never double-stack
+              back buttons on top of each other. */}
+          <SafeAreaView
+            pointerEvents={collapsedHeaderActive ? 'none' : 'box-none'}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0 }}
+          >
+            <Animated.View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: 16,
+                opacity: heroTopChromeOpacity,
+              }}
+            >
               <TouchableOpacity
                 onPress={() => router.back()}
-                style={{
-                  width: 40, height: 40, borderRadius: 20,
-                  backgroundColor: 'rgba(0,0,0,0.4)',
-                  alignItems: 'center', justifyContent: 'center',
-                }}
+                accessibilityLabel="Go back"
+                activeOpacity={0.85}
+                style={pr.frostedCircle}
               >
+                <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
                 <Ionicons name="arrow-back" size={22} color="#FFF" />
               </TouchableOpacity>
 
-              {!isOwnProfile && (
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TouchableOpacity
-                    onPress={handleReport}
-                    style={{
-                      width: 40, height: 40, borderRadius: 20,
-                      backgroundColor: 'rgba(0,0,0,0.4)',
-                      alignItems: 'center', justifyContent: 'center',
-                    }}
-                  >
-                    <Ionicons name="flag-outline" size={20} color="#FFF" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleBlock}
-                    style={{
-                      width: 40, height: 40, borderRadius: 20,
-                      backgroundColor: 'rgba(0,0,0,0.4)',
-                      alignItems: 'center', justifyContent: 'center',
-                    }}
-                  >
-                    <Ionicons name="ban-outline" size={20} color="#FFF" />
-                  </TouchableOpacity>
+              {photos.length > 2 ? (
+                <View style={pr.photoCounterPill}>
+                  <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+                  <Text style={pr.photoCounterText}>
+                    {Math.min(photoIndex + 1, photos.length)} / {photos.length}
+                  </Text>
                 </View>
-              )}
-            </View>
+              ) : null}
+
+              <TouchableOpacity
+                onPress={() => setProfileHeroMenuVisible(true)}
+                accessibilityLabel="More actions"
+                accessibilityHint={isOwnProfile ? 'Share profile' : 'Share, report, or block'}
+                activeOpacity={0.85}
+                style={pr.frostedCircle}
+              >
+                <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+                <Ionicons name="ellipsis-horizontal" size={22} color="#FFF" />
+              </TouchableOpacity>
+            </Animated.View>
           </SafeAreaView>
+
         </View>
 
         {/* Identity — overlaps hero */}
-        <View onLayout={captureSectionLayout('about')}>
+        <View>
         <View style={pr.identityCard}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-            <Text style={pr.displayName}>
-              {profile.full_name}
-              {profile.age ? <Text style={pr.displayAge}>, {profile.age}</Text> : null}
-            </Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text
+                  style={pr.displayName}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.9}
+                  allowFontScaling={false}
+                >
+                  {profile.full_name}
+                  {profile.age ? <Text style={pr.displayAge}>, {profile.age}</Text> : null}
+                </Text>
+                {isVerified ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.successSurface }}>
+                    <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: COLORS.success }}>Verified</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
             <View
               style={[
                 pr.onlineBadge,
-                { backgroundColor: displayOnlineStatus === 'online' ? `${COLORS.online}16` : COLORS.savanna },
+                {
+                  backgroundColor: isActiveOnline ? `${COLORS.online}16` : COLORS.savanna,
+                  maxWidth: '55%',
+                  flexShrink: 1,
+                },
               ]}
             >
-              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: displayOnlineStatus === 'online' ? COLORS.online : COLORS.textMuted }} />
-              <Text style={{ fontSize: 11, fontWeight: '700', color: displayOnlineStatus === 'online' ? COLORS.online : COLORS.textSecondary }}>
-                {displayOnlineStatus === 'online' ? 'Online' : 'Offline'}
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: isActiveOnline ? COLORS.online : COLORS.textMuted }} />
+              <Text
+                style={{ fontSize: 11, fontWeight: '700', color: isActiveOnline ? COLORS.online : COLORS.textSecondary, flexShrink: 1 }}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+                allowFontScaling={false}
+              >
+                {activityLabel}
               </Text>
             </View>
           </View>
 
-          {location ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
-              <View style={pr.locationIconWrap}>
-                <Ionicons name="location" size={14} color={COLORS.primary} />
-              </View>
-              <Text style={pr.locationText}>{location}</Text>
-            </View>
-          ) : null}
+          {/* Quick Facts — dense at-a-glance summary, lives inside the identity card */}
+          {(() => {
+            type QuickFact = { icon: keyof typeof Ionicons.glyphMap; label: string; value: string | null };
+            const rows: QuickFact[] = [
+              { icon: 'location-outline',    label: 'Location',    value: location || null },
+              {
+                icon: 'sparkles-outline',
+                label: 'Looking for',
+                value: (profile.looking_for ?? []).length > 0
+                  ? (profile.looking_for ?? [])
+                      .map((lf) => LOOKING_FOR_OPTIONS.find((o) => o.value === lf)?.label ?? lf.replace('_', ' '))
+                      .join(' · ')
+                  : null,
+              },
+              {
+                icon: 'chatbubbles-outline',
+                label: 'Speaks',
+                value: (profile.languages ?? []).length > 0 ? (profile.languages ?? []).join(', ') : null,
+              },
+              { icon: 'briefcase-outline',   label: 'Works as',    value: occupationLabel || null },
+              { icon: 'globe-outline',       label: 'Ethnicity',   value: profile.ethnicity || null },
+            ];
+            const quickFacts = rows.filter((row): row is QuickFact & { value: string } => !!row.value);
 
-          {(profile.languages ?? []).length > 0 ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
-              <View style={pr.locationIconWrap}>
-                <Ionicons name="chatbubbles-outline" size={14} color={COLORS.primary} />
+            if (quickFacts.length === 0) return null;
+            return (
+              <View style={pr.quickFactsBlock}>
+                {quickFacts.map((row, i) => (
+                  <View
+                    key={row.label}
+                    style={[
+                      pr.quickFactRow,
+                      i < quickFacts.length - 1 && pr.quickFactRowDivider,
+                    ]}
+                  >
+                    <View style={pr.quickFactIcon}>
+                      <Ionicons name={row.icon} size={16} color={COLORS.textStrong} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={pr.quickFactLabel}>{row.label}</Text>
+                      <Text style={pr.quickFactValue} numberOfLines={2}>
+                        {row.value}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
               </View>
-              <Text style={pr.locationText} numberOfLines={1}>
-                Speaks: {(profile.languages ?? []).join(', ')}
-              </Text>
-            </View>
-          ) : null}
+            );
+          })()}
 
-          {profile.religion ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
-              <View style={pr.locationIconWrap}>
-                <Ionicons name="sunny-outline" size={14} color={COLORS.primary} />
+          {/* Shared interests — chips surfacing overlaps between viewer and profile */}
+          {(commonHobbies.length > 0 || commonLanguages.length > 0) ? (
+            <View style={pr.sharedBlock}>
+              <View style={pr.sharedHeader}>
+                <Ionicons name="sparkles" size={14} color={COLORS.primary} />
+                <Text style={pr.sharedHeaderText}>You have in common</Text>
               </View>
-              <Text style={pr.locationText}>
-                {RELIGION_OPTIONS.find((r) => r.value === profile.religion)?.label ?? profile.religion}
-              </Text>
-            </View>
-          ) : null}
-
-          {(profile.looking_for ?? []).length > 0 ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
-              {(profile.looking_for ?? []).map((lf) => (
-                <View key={lf} style={pr.chipLooking}>
-                  <Text style={pr.chipLookingText}>
-                    {LOOKING_FOR_OPTIONS.find((o) => o.value === lf)?.label ?? lf.replace('_', ' ')}
-                  </Text>
-                </View>
-              ))}
+              <View style={pr.sharedChipRow}>
+                {commonHobbies.slice(0, 4).map((h) => (
+                  <View key={`h-${h}`} style={pr.sharedChip}>
+                    <Text style={pr.sharedChipText}>{h}</Text>
+                  </View>
+                ))}
+                {commonLanguages.slice(0, 3).map((l) => (
+                  <View key={`l-${l}`} style={[pr.sharedChip, pr.sharedChipLang]}>
+                    <Ionicons name="chatbubbles-outline" size={12} color={COLORS.earth} />
+                    <Text style={pr.sharedChipText}>{l}</Text>
+                  </View>
+                ))}
+                {commonHobbies.length + commonLanguages.length > 7 ? (
+                  <View style={pr.sharedChip}>
+                    <Text style={pr.sharedChipText}>+{commonHobbies.length + commonLanguages.length - 7}</Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
           ) : null}
 
@@ -1218,8 +1558,6 @@ export default function ProfileViewScreen() {
         </View>
         </View>
 
-        <ProfileSectionChips sections={profileNavSections} onSelect={scrollToProfileSection} />
-
         {/* Strength nudge — shown to the viewer after they've seen the profile, not over the photo */}
         {showStrengthNudge ? (
           <ProfileCompletionNudgeBanner
@@ -1230,141 +1568,114 @@ export default function ProfileViewScreen() {
           />
         ) : null}
 
-        {canShowCompatibility && compatibilityPercent !== null && (
-          <View onLayout={captureSectionLayout('match')}>
-          <View style={pr.compatibilityCard}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setCompatibilityExpanded((prev) => !prev)}
-              style={{ paddingVertical: 2 }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                <View style={pr.compatibilityRing}>
-                  <Text style={pr.compatibilityPercent}>{compatibilityPercent}%</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={pr.compatibilityKicker}>Compatibility</Text>
-                  <Text style={pr.compatibilityTitle}>
-                    {matchedCriteriaCount} of {compatibilityCriteria.length} in common
-                  </Text>
-                  <Text style={pr.compatibilitySub}>
-                    How their preferences line up with yours.
-                  </Text>
-                </View>
-                <Ionicons
-                  name={compatibilityExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={22}
-                  color={COLORS.primary}
-                />
-              </View>
-            </TouchableOpacity>
+        {/* Collapse-toggle: deep-dive sections stay hidden by default so the
+            quick view drives the decision; tap to reveal the full profile. */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => setDetailsExpanded((p) => !p)}
+          style={pr.detailsToggle}
+        >
+          <Text style={pr.detailsToggleLabel}>
+            {detailsExpanded ? 'Close' : `Discover more about ${profileFirstName}`}
+          </Text>
+          <Ionicons
+            name={detailsExpanded ? 'chevron-up' : 'chevron-down'}
+            size={20}
+            color={COLORS.textStrong}
+          />
+        </TouchableOpacity>
 
-            {compatibilityExpanded && (
-              <View style={{ marginTop: 16 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingBottom: 10 }}>
-                  <Text style={{ width: 88, fontSize: 11, fontWeight: '700', color: COLORS.textMuted }}>
-                    {profileFirstName}
-                  </Text>
-                  <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: COLORS.textMuted, textAlign: 'right' }}>
-                    You
-                  </Text>
-                </View>
-                {compatibilityCriteria.map((criterion, index) => (
-                  <View key={criterion.key}>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingBottom: 14 }}>
-                      <View style={{ width: 88, paddingRight: 4 }}>
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.text }}>
-                          {criterion.label}:
-                        </Text>
-                      </View>
-                      <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 6 }}>
-                          <Text
-                            style={{
-                              flex: 1,
-                              fontSize: 14,
-                              fontWeight: '500',
-                              color: criterion.matched ? COLORS.text : COLORS.textMuted,
-                              fontStyle: 'normal',
-                              textDecorationLine: 'none',
-                            }}
-                            numberOfLines={5}
-                          >
-                            {criterion.viewerValue}
-                          </Text>
-                          {criterion.matched ? (
-                            <Ionicons
-                              name="checkmark-circle"
-                              size={18}
-                              color={COLORS.success}
-                              style={{ marginTop: 1 }}
-                            />
-                          ) : null}
-                        </View>
-                      </View>
-                    </View>
-                    {index < compatibilityCriteria.length - 1 ? (
-                      <View style={{ height: 1, backgroundColor: `${COLORS.border}88`, marginBottom: 14, marginLeft: 98 }} />
-                    ) : null}
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-          </View>
-        )}
-
-        {/* Personal — ReadOnlyRow auto-hides null fields */}
-        <View onLayout={captureSectionLayout('personal')}>
+        {detailsExpanded ? (
+        <>
+        {/* Personal — identity basics. ReadOnlyRow auto-hides null fields.
+            Location / Languages / Ethnicity / Occupation / Looking-for live in
+            Quick Facts above, so they're not duplicated here. */}
+        <View>
         <View style={pr.sectionCard}>
           <Text style={pr.sectionTitle}>Personal</Text>
-          <ReadOnlyRow icon="person-outline"      label="Gender"         value={GENDER_LABEL[profile.gender] ?? profile.gender} />
-          <ReadOnlyRow icon="calendar-outline"    label="Age"            value={profile.age ? `${profile.age} years old` : null} />
-          <ReadOnlyRow icon="search-outline"      label="Interested in"  value={interestedInLabel} />
-          <ReadOnlyRow icon="location-outline"    label="Lives in"       value={location || null} />
-          <ReadOnlyRow icon="heart-outline"       label="Marital status" value={maritalLabel} />
-          <ReadOnlyRow icon="sunny-outline"       label="Religion"       value={religionLabel} />
-          <ReadOnlyRow icon="globe-outline"       label="Ethnicity"      value={profile.ethnicity ?? null} />
-          <ReadOnlyRow icon="chatbubbles-outline" label="Languages"      value={(profile.languages ?? []).join(', ') || null} isLast />
+          <ReadOnlyRow icon="person-outline"   label="Gender"        value={GENDER_LABEL[profile.gender] ?? profile.gender} />
+          <ReadOnlyRow icon="calendar-outline" label="Age"           value={profile.age ? `${profile.age} years old` : null} />
+          <ReadOnlyRow icon="search-outline"   label="Interested in" value={interestedInLabel} />
+          {showHeritage ? (
+            <ReadOnlyRow icon="flag-outline"   label="Origin"        value={heritageLine} />
+          ) : null}
+          <ReadOnlyRow icon="sunny-outline"    label="Religion"      value={religionLabel} isLast />
         </View>
         </View>
 
         {/* Physical — hidden when nothing is filled */}
-        {(!!profile.height_cm || !!profile.body_type) && (
-          <View onLayout={captureSectionLayout('physical')}>
+        {(!!profile.height_cm || !!profile.body_type || profile.weight_kg != null) && (() => {
+          const hasH = !!profile.height_cm;
+          const hasB = !!bodyTypeLabel;
+          const hasW = profile.weight_kg != null;
+          return (
+          <View>
           <View style={pr.sectionCard}>
             <Text style={pr.sectionTitle}>Physical</Text>
-            <ReadOnlyRow icon="resize-outline" label="Height"    value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null} />
-            <ReadOnlyRow icon="body-outline"   label="Body type" value={bodyTypeLabel} isLast />
+            <ReadOnlyRow
+              icon="resize-outline"
+              label="Height"
+              value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null}
+              isLast={hasH && !hasB && !hasW}
+            />
+            <ReadOnlyRow icon="body-outline" label="Body type" value={bodyTypeLabel} isLast={hasB && !hasW} />
+            <ReadOnlyRow
+              icon="barbell-outline"
+              label="Weight"
+              value={profile.weight_kg != null ? `${profile.weight_kg} kg` : null}
+              isLast={hasW}
+            />
           </View>
           </View>
-        )}
+          );
+        })()}
 
-        {/* Work & Education — hidden when nothing is filled */}
-        {(!!occupationLabel || !!educationLabel) && (
-          <View onLayout={captureSectionLayout('work')}>
-          <View style={pr.sectionCard}>
-            <Text style={pr.sectionTitle}>Work & Education</Text>
-            <ReadOnlyRow icon="briefcase-outline" label="Occupation" value={occupationLabel} />
-            <ReadOnlyRow icon="school-outline"    label="Education"  value={educationLabel} isLast />
-          </View>
-          </View>
-        )}
-
-        {/* Family — hidden when nothing is filled */}
-        {(profile.has_children != null || !!profile.want_children) && (
-          <View onLayout={captureSectionLayout('family')}>
+        {/* Family — life stage & future. Marital status now lives with the rest
+            of the family signals instead of being split off into Personal. */}
+        {(!!maritalLabel || profile.has_children != null || !!profile.want_children) && (() => {
+          const hasM = !!maritalLabel;
+          const hasHasK = profile.has_children != null;
+          const hasWantK = !!wantChildLabel;
+          return (
+          <View>
           <View style={pr.sectionCard}>
             <Text style={pr.sectionTitle}>Family</Text>
-            <ReadOnlyRow icon="people-outline" label="Children"      value={profile.has_children == null ? null : profile.has_children ? 'Has children' : 'No children'} />
-            <ReadOnlyRow icon="happy-outline"  label="Wants children" value={wantChildLabel} isLast />
+            <ReadOnlyRow
+              icon="heart-outline"
+              label="Marital status"
+              value={maritalLabel}
+              isLast={hasM && !hasHasK && !hasWantK}
+            />
+            <ReadOnlyRow
+              icon="people-outline"
+              label="Has children"
+              value={profile.has_children == null ? null : profile.has_children ? 'Yes' : 'No'}
+              isLast={hasHasK && !hasWantK}
+            />
+            <ReadOnlyRow
+              icon="happy-outline"
+              label="Wants children"
+              value={wantChildLabel}
+              isLast={hasWantK}
+            />
+          </View>
+          </View>
+          );
+        })()}
+
+        {/* Education — occupation already lives in Quick Facts as "Works as" */}
+        {!!educationLabel && (
+          <View>
+          <View style={pr.sectionCard}>
+            <Text style={pr.sectionTitle}>Education</Text>
+            <ReadOnlyRow icon="school-outline" label="Education" value={educationLabel} isLast />
           </View>
           </View>
         )}
 
         {/* Hobbies */}
         {(profile.hobbies ?? []).length > 0 && (
-          <View onLayout={captureSectionLayout('hobbies')}>
+          <View>
           <View style={pr.sectionCard}>
             <Text style={pr.sectionTitle}>Hobbies & Interests</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4 }}>
@@ -1377,7 +1688,26 @@ export default function ProfileViewScreen() {
           </View>
           </View>
         )}
+        </>
+        ) : null}
+
+        {/* Swipe-up hint — a flick upward at the bottom jumps to the next
+            profile (handled by the wrapping PanGestureHandler). Static, no
+            armed state — we commit purely on swipe velocity on release. */}
+        {!isOwnProfile && galleryHasNextProfile ? (
+          <View style={pr.upNextFooter}>
+            <View style={pr.upNextHandle} />
+            <Ionicons
+              name="chevron-up"
+              size={22}
+              color={COLORS.textMuted}
+              accessibilityLabel="Swipe up for next profile"
+            />
+          </View>
+        ) : null}
       </ScrollView>
+      </Animated.View>
+      </PanGestureHandler>
 
       {!isOwnProfile && currentUser ? (
         <View
@@ -1416,7 +1746,7 @@ export default function ProfileViewScreen() {
                 color={isFavourite ? COLORS.gold : COLORS.text}
               />
             </TouchableOpacity>
-            {/* Like — primary CTA, larger and filled */}
+            {/* Like — larger control */}
             <TouchableOpacity
               onPress={handleLike}
               activeOpacity={0.85}
@@ -1436,7 +1766,7 @@ export default function ProfileViewScreen() {
               <Ionicons
                 name={isLiked ? 'heart' : 'heart-outline'}
                 size={32}
-                color={isLiked ? COLORS.primary : COLORS.text}
+                color={isLiked ? COLORS.textStrong : COLORS.text}
               />
             </TouchableOpacity>
             <TouchableOpacity
@@ -1454,7 +1784,7 @@ export default function ProfileViewScreen() {
               <Ionicons
                 name={recipientMessagesPaused ? 'lock-closed-outline' : 'chatbubble-ellipses-outline'}
                 size={26}
-                color={recipientMessagesPaused ? COLORS.textMuted : COLORS.primary}
+                color={recipientMessagesPaused ? COLORS.textMuted : COLORS.textStrong}
               />
             </TouchableOpacity>
           </Animated.View>
@@ -1469,7 +1799,6 @@ export default function ProfileViewScreen() {
         onRequestClose={closePhotoViewer}
       >
         <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000' }}>
-          {toastOverlay}
           <Animated.View
             style={{
               flex: 1,
@@ -1520,12 +1849,13 @@ export default function ProfileViewScreen() {
                   width: 44,
                   height: 44,
                   borderRadius: 22,
-                  backgroundColor: 'rgba(0,0,0,0.45)',
+                  backgroundColor: COLORS.white,
                   alignItems: 'center',
                   justifyContent: 'center',
+                  ...SHADOWS.md,
                 }}
               >
-                <Ionicons name="close" size={26} color="#FFF" />
+                <Ionicons name="close" size={26} color={COLORS.text} />
               </TouchableOpacity>
             </View>
           </SafeAreaView>
@@ -1556,19 +1886,12 @@ export default function ProfileViewScreen() {
                   activeOpacity={0.85}
                   accessibilityRole="button"
                   accessibilityLabel={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
-                  style={[
-                    floatingActionCircle,
-                    {
-                      backgroundColor: 'rgba(10,10,10,0.62)',
-                      borderWidth: 1,
-                      borderColor: 'rgba(255,255,255,0.14)',
-                    },
-                  ]}
+                  style={floatingActionCircle}
                 >
                   <Ionicons
                     name={isFavourite ? 'star' : 'star-outline'}
-                    size={26}
-                    color={isFavourite ? '#F6B94C' : '#FFF'}
+                    size={24}
+                    color={isFavourite ? COLORS.gold : COLORS.text}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1579,16 +1902,18 @@ export default function ProfileViewScreen() {
                   style={[
                     floatingActionCircle,
                     {
-                      backgroundColor: 'rgba(10,10,10,0.74)',
-                      borderWidth: 1,
-                      borderColor: 'rgba(255,255,255,0.16)',
+                      width: 68,
+                      height: 68,
+                      borderRadius: 34,
+                      backgroundColor: COLORS.white,
+                      ...SHADOWS.lg,
                     },
                   ]}
                 >
                   <Ionicons
                     name={isLiked ? 'heart' : 'heart-outline'}
-                    size={26}
-                    color={isLiked ? '#FF7B7B' : '#FFF'}
+                    size={32}
+                    color={isLiked ? COLORS.textStrong : COLORS.text}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1600,24 +1925,103 @@ export default function ProfileViewScreen() {
                   accessibilityState={{ disabled: recipientMessagesPaused }}
                   style={[
                     floatingActionCircle,
-                    {
-                      backgroundColor: 'rgba(10,10,10,0.62)',
-                      borderWidth: 1,
-                      borderColor: 'rgba(255,255,255,0.14)',
-                    },
                     recipientMessagesPaused && { opacity: 0.55 },
                   ]}
                 >
                   <Ionicons
                     name={recipientMessagesPaused ? 'lock-closed-outline' : 'chatbubble-ellipses-outline'}
                     size={26}
-                    color={recipientMessagesPaused ? 'rgba(255,255,255,0.48)' : '#FFF'}
+                    color={recipientMessagesPaused ? COLORS.textMuted : COLORS.textStrong}
                   />
                 </TouchableOpacity>
               </View>
             </View>
           ) : null}
         </GestureHandlerRootView>
+      </Modal>
+
+      <Modal
+        visible={profileHeroMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProfileHeroMenuVisible(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
+          onPress={() => setProfileHeroMenuVisible(false)}
+        >
+          <View
+            style={{
+              backgroundColor: COLORS.white,
+              borderTopLeftRadius: RADIUS.xl,
+              borderTopRightRadius: RADIUS.xl,
+              paddingBottom: Math.max(insets.bottom + 12, 20),
+              paddingTop: 8,
+            }}
+          >
+            <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, marginBottom: 8 }} />
+            <TouchableOpacity
+              onPress={() => {
+                setProfileHeroMenuVisible(false);
+                void handleShareProfile();
+              }}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 14,
+                paddingVertical: 16,
+                paddingHorizontal: 20,
+              }}
+            >
+              <Ionicons name="share-outline" size={22} color={COLORS.text} />
+              <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.textStrong }}>Share profile</Text>
+            </TouchableOpacity>
+            {!isOwnProfile ? (
+              <>
+                <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: COLORS.border, marginLeft: 20 }} />
+                <TouchableOpacity
+                  onPress={() => {
+                    setProfileHeroMenuVisible(false);
+                    void handleReport();
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 14,
+                    paddingVertical: 16,
+                    paddingHorizontal: 20,
+                  }}
+                >
+                  <Ionicons name="flag-outline" size={22} color={COLORS.text} />
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.textStrong }}>Report</Text>
+                </TouchableOpacity>
+                <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: COLORS.border, marginLeft: 20 }} />
+                <TouchableOpacity
+                  onPress={() => {
+                    setProfileHeroMenuVisible(false);
+                    handleBlock();
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 14,
+                    paddingVertical: 16,
+                    paddingHorizontal: 20,
+                  }}
+                >
+                  <Ionicons name="ban-outline" size={22} color={COLORS.error} />
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: COLORS.error }}>Block</Text>
+                </TouchableOpacity>
+              </>
+            ) : null}
+            <TouchableOpacity
+              onPress={() => setProfileHeroMenuVisible(false)}
+              style={{ marginTop: 8, paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.textSecondary }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
       </Modal>
 
       <MatchModal
@@ -1687,22 +2091,11 @@ export default function ProfileViewScreen() {
   );
 }
 
-// ── Helpers ─────────────────────────────────────────────────
-
-function formatLastSeen(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins  = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days  = Math.floor(diff / 86400000);
-  if (mins  < 60)  return `${mins}m ago`;
-  if (hours < 24)  return `${hours}h ago`;
-  if (days  < 7)   return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
+// ── Styles ─────────────────────────────────────────────────
 
 const pr = StyleSheet.create({
   identityCard: {
-    marginTop: -28,
+    marginTop: -12,
     marginHorizontal: 16,
     marginBottom: 4,
     backgroundColor: COLORS.white,
@@ -1712,26 +2105,17 @@ const pr = StyleSheet.create({
     paddingBottom: 20,
     ...SHADOWS.md,
   },
-  displayName: { fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.textStrong, flex: 1, flexWrap: 'wrap' },
+  displayName: { fontSize: FONT.xxl + 4, fontFamily: FONT.displayFamily, color: COLORS.textStrong, flex: 1, letterSpacing: 0.2 },
   displayAge: { fontWeight: FONT.bold, color: COLORS.textSecondary },
   locationIconWrap: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: `${COLORS.primary}12`,
+    backgroundColor: COLORS.savanna,
     alignItems: 'center',
     justifyContent: 'center',
   },
   locationText: { fontSize: FONT.md, color: COLORS.text, fontWeight: FONT.semibold },
-  chipLooking: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: RADIUS.full,
-    backgroundColor: `${COLORS.primary}10`,
-    borderWidth: 1,
-    borderColor: `${COLORS.primary}28`,
-  },
-  chipLookingText: { fontSize: FONT.sm, color: COLORS.primaryDark, fontWeight: FONT.bold },
   chipHobby: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -1741,13 +2125,155 @@ const pr = StyleSheet.create({
     borderColor: `${COLORS.earth}35`,
   },
   chipHobbyText: { fontSize: FONT.sm, color: COLORS.earth, fontWeight: FONT.semibold },
+  frostedCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  photoCounterPill: {
+    paddingHorizontal: 12,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  photoCounterText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  collapsedHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+    ...SHADOWS.sm,
+  },
+  collapsedHeaderInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    minHeight: 56,
+  },
+  collapsedBackBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collapsedAvatarWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'visible',
+    marginLeft: 2,
+  },
+  collapsedAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.savanna,
+  },
+  collapsedOnlineDot: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: COLORS.online,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  collapsedName: {
+    fontSize: 15,
+    fontWeight: FONT.extrabold,
+    color: COLORS.textStrong,
+    letterSpacing: 0.1,
+  },
+  collapsedAge: {
+    fontWeight: FONT.bold,
+    color: COLORS.textSecondary,
+  },
+  collapsedStatus: {
+    fontSize: 12,
+    fontWeight: FONT.semibold,
+    marginTop: 1,
+  },
+  collapsedMenuBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sharedBlock: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.border,
+  },
+  sharedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  sharedHeaderText: {
+    fontSize: 11,
+    fontWeight: FONT.extrabold,
+    color: COLORS.primary,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  sharedChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  sharedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: `${COLORS.primary}12`,
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}30`,
+  },
+  sharedChipLang: {
+    backgroundColor: COLORS.savanna,
+    borderColor: `${COLORS.earth}30`,
+  },
+  sharedChipText: {
+    fontSize: 12,
+    color: COLORS.earth,
+    fontWeight: FONT.semibold,
+  },
   aboutBlock: { flexDirection: 'row', marginTop: 18, alignItems: 'flex-start' },
   aboutAccent: {
     width: 4,
     marginTop: 4,
     minHeight: 52,
     borderRadius: 2,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.textStrong,
     marginRight: 14,
   },
   aboutLabel: {
@@ -1762,37 +2288,6 @@ const pr = StyleSheet.create({
     lineHeight: 24,
     fontWeight: FONT.medium,
   },
-  compatibilityCard: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: 18,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.success,
-    ...SHADOWS.sm,
-  },
-  compatibilityRing: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: `${COLORS.success}14`,
-    borderWidth: 2,
-    borderColor: `${COLORS.success}40`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  compatibilityPercent: { fontSize: FONT.lg, fontWeight: FONT.extrabold, color: COLORS.success },
-  compatibilityKicker: {
-    fontSize: FONT.xs,
-    fontWeight: FONT.extrabold,
-    color: COLORS.success,
-    marginBottom: 4,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  compatibilityTitle: { fontSize: FONT.xl, fontWeight: FONT.extrabold, color: COLORS.textStrong },
-  compatibilitySub: { marginTop: 4, fontSize: FONT.sm, color: COLORS.textSecondary, lineHeight: 20 },
   sectionCard: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -1802,6 +2297,77 @@ const pr = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
     ...SHADOWS.sm,
+  },
+  quickFactsBlock: {
+    marginTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.border,
+    paddingTop: 4,
+  },
+  detailsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 12,
+    paddingVertical: 14,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.border,
+    ...SHADOWS.sm,
+  },
+  detailsToggleLabel: {
+    fontSize: FONT.md,
+    fontWeight: FONT.extrabold,
+    color: COLORS.textStrong,
+    letterSpacing: 0.2,
+  },
+  upNextFooter: {
+    paddingTop: 28,
+    paddingBottom: 56,
+    alignItems: 'center',
+    gap: 10,
+  },
+  upNextHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: COLORS.borderStrong,
+  },
+  quickFactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+  },
+  quickFactRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  quickFactIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.savanna,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickFactLabel: {
+    fontSize: 11,
+    fontWeight: FONT.extrabold,
+    color: COLORS.textMuted,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  quickFactValue: {
+    fontSize: FONT.md,
+    fontWeight: FONT.semibold,
+    color: COLORS.textStrong,
+    lineHeight: 20,
   },
   sectionTitle: {
     fontSize: FONT.xs,
@@ -1825,7 +2391,7 @@ const pr = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: RADIUS.sm,
-    backgroundColor: `${COLORS.primary}0D`,
+    backgroundColor: COLORS.savanna,
     alignItems: 'center',
     justifyContent: 'center',
   },

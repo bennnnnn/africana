@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { Session } from '@supabase/supabase-js';
-import { User, UserSettings, InterestedIn } from '@/types';
+import { User, UserSettings } from '@/types';
 import { supabase } from '@/lib/supabase';
-import { oppositeInterestedIn } from '@/lib/gender-match';
+import { normalizeInterestedInFromDb } from '@/lib/gender-match';
+import { resetRateLimitWarnings } from '@/lib/rate-limit-warn';
 
 interface AuthState {
   session: Session | null;
@@ -62,13 +63,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
       : undefined;
 
-    let interested_in = data.interested_in as InterestedIn;
-    if (data.gender === 'male' || data.gender === 'female') {
-      const aligned = oppositeInterestedIn(data.gender);
-      if (data.interested_in !== aligned) {
-        void supabase.from('profiles').update({ interested_in: aligned }).eq('id', userId);
-      }
-      interested_in = aligned;
+    const interested_in = normalizeInterestedInFromDb(data.gender, data.interested_in as string | null | undefined);
+    if (interested_in !== data.interested_in) {
+      void supabase.from('profiles').update({ interested_in }).eq('id', userId);
     }
 
     set({
@@ -179,6 +176,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .eq('id', user.id);
     }
     await supabase.auth.signOut();
+    resetRateLimitWarnings();
     set({ session: null, user: null, settings: null });
   },
 }));

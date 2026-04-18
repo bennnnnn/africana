@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useChatStore } from '@/store/chat.store';
+import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { User } from '@/types';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -145,6 +146,7 @@ export default function OnlineScreen() {
           return (
             <TouchableOpacity
               onPress={() => {
+                setProfileSeed(item);
                 useProfileBrowseStore.getState().setOrderedUserIds(onlineUsers.map((u) => u.id));
                 router.push(`/(profile)/${item.id}`);
               }}
@@ -202,7 +204,7 @@ export default function OnlineScreen() {
                   width: 40,
                   height: 40,
                   borderRadius: 20,
-                  backgroundColor: `${COLORS.primary}15`,
+                  backgroundColor: COLORS.primarySurface,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}

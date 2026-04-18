@@ -41,7 +41,7 @@ export function SliderPicker({
     <View style={{ marginBottom: 20 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.text }}>{label}</Text>
-        <View style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: `${COLORS.primary}15` }}>
+        <View style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: COLORS.primarySurface }}>
           <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.primary }}>{display}</Text>
         </View>
       </View>
@@ -149,7 +149,7 @@ export function RangeSlider({
     >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.text }}>{label}</Text>
-        <View style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: `${COLORS.primary}15` }}>
+        <View style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: COLORS.primarySurface }}>
           <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.primary }}>
             {minValue} – {maxValue} {unit}
           </Text>

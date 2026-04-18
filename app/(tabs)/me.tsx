@@ -29,10 +29,17 @@ import { getCountryByName, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
 import { getProfileStrength } from '@/lib/profile-completion';
 import { oppositeInterestedIn } from '@/lib/gender-match';
 import type { Gender } from '@/types';
-import { ProfileSectionChips } from '@/components/profile/ProfileSectionChips';
+import { ScreenTitle } from '@/components/ui/ScreenTitle';
+import { HeroPlaceholder } from '@/components/ui/HeroPlaceholder';
 import { appDialog } from '@/lib/app-dialog';
+import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
 
 const { width } = Dimensions.get('window');
+// Self-profile hero height. Shorter than a typical portrait dating photo so
+// the user can scan more of their profile (quick facts, completion chips)
+// without scrolling, while staying tall enough that portrait uploads don't
+// lose the face to a center crop.
+const HERO_HEIGHT = width * 0.9;
 
 const HOBBY_OPTIONS = [
   'Music', 'Reading', 'Travel', 'Cooking', 'Football', 'Dancing',
@@ -167,11 +174,8 @@ export default function MyProfileScreen() {
     return 0;
   }, [user]);
 
-  const [heroPhotoIndex, setHeroPhotoIndex] = useState(0);
-
   useEffect(() => {
     if (!user || heroPhotos.length === 0 || width <= 0) return;
-    setHeroPhotoIndex(mainPhotoIndex);
     const idx = Math.min(mainPhotoIndex, heroPhotos.length - 1);
     requestAnimationFrame(() => {
       heroPhotoScrollRef.current?.scrollTo({ x: idx * width, y: 0, animated: false });
@@ -199,7 +203,7 @@ export default function MyProfileScreen() {
       subdivision  = user.state  ?? '';
       city         = user.city   ?? '';
     } else {
-      // Diaspora — try African origin country first
+      // Diaspora — try origin country first
       const originData = getCountryByName((user as any).origin_country ?? '');
       if (originData && AFRICAN_COUNTRY_CODES.has(originData.code)) {
         countryCode = originData.code;
@@ -311,14 +315,22 @@ export default function MyProfileScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsMultipleSelection: true,
       quality: 0.8,
     });
     if (result.canceled || result.assets.length === 0) return;
     setPhotoUploading(true);
     try {
-      const toUpload = result.assets.slice(0, remaining);
+      const picked = result.assets.slice(0, remaining);
+      const { approved, rejected } = await validateFacesInPhotos(picked.map((a) => a.uri));
+      if (rejected.length > 0) {
+        const { title, message } = faceRejectionMessage(rejected.length, approved.length);
+        appDialog({ title, message, icon: 'happy-outline' });
+      }
+      const toUpload = picked.filter((a) => approved.includes(a.uri));
+      if (toUpload.length === 0) return;
+
       const uploaded: string[] = [];
       for (const asset of toUpload) {
         const out = await uploadToAvatarsBucket(user.id, asset.uri, asset.mimeType);
@@ -365,12 +377,12 @@ export default function MyProfileScreen() {
   const occupationLabel   = user.occupation     ? OCCUPATION_OPTIONS.find(o => o.value === user.occupation)?.label ?? user.occupation  : null;
   const interestedInLabel =
     user.gender === 'male' || user.gender === 'female'
-      ? INTERESTED_IN_OPTIONS.find((o) => o.value === oppositeInterestedIn(user.gender))?.label ?? null
+      ? INTERESTED_IN_OPTIONS.find((o) => o.value === user.interested_in)?.label ?? null
       : null;
   const locationDisplay    = [user.city, user.state, user.country].filter(Boolean).join(', ');
   const originDisplay      = [user.origin_city, user.origin_state, user.origin_country].filter(Boolean).join(', ');
 
-  // Detect if diaspora user has no African origin set (needed for ethnicity/language data)
+  // Detect if diaspora user has no origin set (needed for ethnicity/language data)
   const livesInAfrica      = user.country ? AFRICAN_COUNTRY_CODES.has(getCountryByName(user.country)?.code ?? '') : false;
   const hasAfricanOrigin   = !!user.origin_country && AFRICAN_COUNTRY_CODES.has(getCountryByName(user.origin_country)?.code ?? '');
   const needsOriginForData = !livesInAfrica && !hasAfricanOrigin;
@@ -383,6 +395,22 @@ export default function MyProfileScreen() {
     const y = sectionY.current[id];
     if (y == null) return;
     scrollRef.current?.scrollTo({ y: Math.max(0, y - 10), animated: true });
+  };
+
+  /** Map a `getProfileStrength` item key onto the on-screen section anchor. */
+  const sectionForMissingKey = (key: string | undefined): string => {
+    switch (key) {
+      case 'photo': return 'photos';
+      case 'bio': return 'about';
+      case 'religion':
+      case 'ethnicity':
+      case 'languages': return 'personal';
+      case 'education':
+      case 'occupation': return 'work';
+      case 'height': return 'physical';
+      case 'hobbies': return 'hobbies';
+      default: return 'about';
+    }
   };
 
   // ── Reusable select list renderer ─────────────────────────────────────────
@@ -435,28 +463,27 @@ export default function MyProfileScreen() {
 
         {/* Header */}
         <View style={s.header}>
-          <Text style={s.headerTitle}>My Profile</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <ScreenTitle>My Profile</ScreenTitle>
+            {completionPct < 100 && (
+              <TouchableOpacity
+                onPress={() => scrollToSection(sectionForMissingKey(nextMissing?.key))}
+                style={s.completionPill}
+                activeOpacity={0.75}
+              >
+                <Text style={s.completionPillTxt}>{completionPct}%</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <TouchableOpacity onPress={() => router.push('/(settings)/main')} style={s.iconBtn}>
-            <Ionicons name="settings-outline" size={20} color="#111" />
+            <Ionicons name="settings-outline" size={20} color={COLORS.textStrong} />
           </TouchableOpacity>
         </View>
 
-        <ProfileSectionChips
-          sections={[
-            { id: 'about', label: 'About' },
-            { id: 'personal', label: 'Personal' },
-            { id: 'physical', label: 'Physical' },
-            { id: 'work', label: 'Work' },
-            { id: 'family', label: 'Family' },
-            { id: 'looking', label: 'Looking for' },
-            { id: 'hobbies', label: 'Hobbies' },
-            { id: 'photos', label: 'Photos' },
-          ]}
-          onSelect={scrollToSection}
-        />
-
         {/* Hero — swipe horizontally (ScrollView avoids FlatList-inside-ScrollView crash) */}
-        <View style={{ position: 'relative', backgroundColor: '#000' }}>
+        {/* Neutral warm bg (not pure black) prevents the "dark flash" while the first
+            image is still decoding on navigation. */}
+        <View style={{ position: 'relative', backgroundColor: COLORS.savanna }}>
           {heroPhotos.length > 0 ? (
             <ScrollView
               ref={heroPhotoScrollRef}
@@ -465,56 +492,33 @@ export default function MyProfileScreen() {
               nestedScrollEnabled
               keyboardShouldPersistTaps="handled"
               showsHorizontalScrollIndicator={false}
-              style={{ width, height: width * 1.1 }}
-              onMomentumScrollEnd={(e) => {
-                if (width <= 0) return;
-                const i = Math.round(e.nativeEvent.contentOffset.x / width);
-                setHeroPhotoIndex(Math.max(0, Math.min(i, heroPhotos.length - 1)));
-              }}
+              style={{ width, height: HERO_HEIGHT }}
             >
               {heroPhotos.map((uri, i) => (
                 <Image
                   key={`${uri}-${i}`}
                   source={{ uri }}
-                  style={{ width, height: width * 1.1 }}
+                  style={{ width, height: HERO_HEIGHT }}
                   contentFit="cover"
+                  contentPosition="center"
+                  transition={220}
+                  cachePolicy="memory-disk"
+                  recyclingKey={uri}
                 />
               ))}
             </ScrollView>
           ) : (
-            <View style={{ width, height: width * 1.1, backgroundColor: '#222', alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="image-outline" size={40} color="#666" />
-            </View>
+            <HeroPlaceholder
+              name={user.full_name}
+              width={width}
+              height={HERO_HEIGHT}
+              hint="Tap the camera to add a photo"
+              showCamera
+            />
           )}
-          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.65)']}
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.28)']}
             pointerEvents="none"
-            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '65%' }} />
-          {heroPhotos.length > 1 ? (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                bottom: 88,
-                left: 0,
-                right: 0,
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 5,
-              }}
-            >
-              {heroPhotos.map((_, i) => (
-                <View
-                  key={i}
-                  style={{
-                    width: i === heroPhotoIndex ? 20 : 7,
-                    height: 7,
-                    borderRadius: 3.5,
-                    backgroundColor: i === heroPhotoIndex ? '#FFF' : 'rgba(255,255,255,0.5)',
-                  }}
-                />
-              ))}
-            </View>
-          ) : null}
+            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '22%' }} />
           <View style={[s.onlineBadge, { backgroundColor: isOnline ? COLORS.online : 'rgba(0,0,0,0.45)' }]}>
             <View style={s.onlineDot} /><Text style={s.onlineText}>{isOnline ? 'Online' : 'Offline'}</Text>
           </View>
@@ -534,18 +538,35 @@ export default function MyProfileScreen() {
           </View>
         </View>
 
-        {/* Photo strip — tap a thumbnail to set it as main profile picture */}
+        {/* Photo strip — tap a thumbnail to set it as main; horizontal scroll when many photos */}
         {photos.length > 1 && (
           <View>
             <Text style={{ fontSize: 11, color: COLORS.textMuted, textAlign: 'center', paddingTop: 10, paddingBottom: 4 }}>
               Tap a photo to set it as your main picture
             </Text>
-            <View style={s.photoStrip}>
+            <ScrollView
+              horizontal
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              showsHorizontalScrollIndicator
+              style={{
+                backgroundColor: COLORS.white,
+                borderBottomWidth: 1,
+                borderBottomColor: COLORS.border,
+              }}
+              contentContainerStyle={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+              }}
+            >
               {photos.map((photo, i) => {
                 const isMain = photo === user.avatar_url || (i === 0 && !user.avatar_url);
                 return (
                   <TouchableOpacity
-                    key={i}
+                    key={`${photo}-${i}`}
                     onPress={() => save({ avatar_url: photo })}
                     style={[s.stripThumb, isMain && s.stripThumbActive]}
                     activeOpacity={0.8}
@@ -559,40 +580,22 @@ export default function MyProfileScreen() {
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </ScrollView>
           </View>
         )}
 
-        {/* Completion — between photo strip and About Me so it's easy to see */}
-        {completionPct < 100 && (
-          <View style={s.completion}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.primary }}>Profile {completionPct}% complete</Text>
-            </View>
-            <View style={{ height: 6, backgroundColor: `${COLORS.primary}20`, borderRadius: 3 }}>
-              <View style={{ height: 6, backgroundColor: COLORS.primary, borderRadius: 3, width: `${completionPct}%` }} />
-            </View>
-            {nextMissing && (
-              <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 8 }}>
-                Add your <Text style={{ fontWeight: '700', color: COLORS.primary }}>{nextMissing.label}</Text> to get more matches
-              </Text>
-            )}
-          </View>
-        )}
-
-        {/* About Me */}
+        {/* About Me — directly under the hero, like a profile-eye-view */}
         <View
           onLayout={(e) => {
             sectionY.current.about = e.nativeEvent.layout.y;
           }}
         >
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>About Me</Text>
+        <View style={[s.section, { paddingTop: 18 }]}>
           {user.bio ? (
             <TouchableOpacity onPress={() => openText('bio', user.bio)} activeOpacity={0.7}
               style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
               <Text style={s.bioText}>{user.bio}</Text>
-              <Ionicons name="pencil" size={15} color="#111" style={{ marginTop: 3 }} />
+              <Ionicons name="pencil" size={15} color={COLORS.textStrong} style={{ marginTop: 3 }} />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity onPress={() => openText('bio', '')} style={s.emptyPrompt}>
@@ -603,7 +606,22 @@ export default function MyProfileScreen() {
         </View>
         </View>
 
-        {/* Personal */}
+        {/* Inline completion nudge — only when there's a missing field */}
+        {completionPct < 100 && nextMissing && (
+          <TouchableOpacity
+            onPress={() => scrollToSection(sectionForMissingKey(nextMissing.key))}
+            style={s.completionInline}
+            activeOpacity={0.85}
+          >
+            <View style={s.completionDot} />
+            <Text style={s.completionInlineTxt}>
+              Add your <Text style={{ fontWeight: FONT.extrabold }}>{nextMissing.label}</Text> to get more matches
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
+          </TouchableOpacity>
+        )}
+
+        {/* Personal — identity basics: who you are, where you're from */}
         <View
           onLayout={(e) => {
             sectionY.current.personal = e.nativeEvent.layout.y;
@@ -613,60 +631,18 @@ export default function MyProfileScreen() {
           <Text style={s.sectionTitle}>Personal</Text>
           <FieldRow icon="person-outline"      label="Gender"         value={user.gender ? (GENDER_OPTIONS.find(o => o.value === user.gender)?.label ?? user.gender) : null} onEdit={() => openSelect('gender', user.gender)} />
           <FieldRow icon="calendar-outline"    label="Date of birth"  value={user.birthdate ?? null} onEdit={openDate} />
-          <FieldRow icon="search-outline" label="Interested in" value={interestedInLabel} onEdit={() => openSelect('interested_in', user.interested_in)} />
-          <FieldRow icon="location-outline" label="Location" value={locationDisplay || null} onEdit={openLocation} />
+          <FieldRow icon="search-outline"      label="Interested in"  value={interestedInLabel} onEdit={() => openSelect('interested_in', user.interested_in)} />
+          <FieldRow icon="location-outline"    label="Location"       value={locationDisplay || null} onEdit={openLocation} />
           {!livesInAfrica && (
-            <FieldRow icon="flag-outline" label="African origin" value={originDisplay || null} onEdit={openOriginLocation} />
+            <FieldRow icon="flag-outline"      label="Origin"         value={originDisplay || null} onEdit={openOriginLocation} />
           )}
-          <FieldRow icon="sunny-outline"       label="Religion"       value={religionLabel} onEdit={() => openSelect('religion', user.religion)} />
           <FieldRow icon="globe-outline"       label="Ethnicity"      value={user.ethnicity ?? null} onEdit={openEthnicity} />
           <FieldRow icon="chatbubbles-outline" label="Languages"      value={(user.languages ?? []).join(', ') || null} onEdit={openLanguages} />
+          <FieldRow icon="sunny-outline"       label="Religion"       value={religionLabel} onEdit={() => openSelect('religion', user.religion)} />
         </View>
         </View>
 
-        {/* Physical */}
-        <View
-          onLayout={(e) => {
-            sectionY.current.physical = e.nativeEvent.layout.y;
-          }}
-        >
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Physical</Text>
-          <FieldRow icon="resize-outline" label="Height" value={user.height_cm ? `${(user.height_cm / 100).toFixed(2)} m` : null}
-            onEdit={() => { setEditing('height'); setEditHeight(user.height_cm ?? 170); }} />
-          <FieldRow icon="body-outline"   label="Body type" value={bodyTypeLabel} onEdit={() => openSelect('body_type', user.body_type)} />
-          <FieldRow icon="barbell-outline" label="Weight"    value={user.weight_kg ? `${user.weight_kg} kg` : null} onEdit={() => { setEditing('weight_kg'); setEditWeight(user.weight_kg ?? 70); }} />
-        </View>
-        </View>
-
-        {/* Work & Education */}
-        <View
-          onLayout={(e) => {
-            sectionY.current.work = e.nativeEvent.layout.y;
-          }}
-        >
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Work & Education</Text>
-          <FieldRow icon="briefcase-outline" label="Occupation" value={occupationLabel} onEdit={() => { openSelect('occupation', user.occupation); setListSearch(''); }} />
-          <FieldRow icon="school-outline"    label="Education"  value={educationLabel}  onEdit={() => openSelect('education', user.education)} />
-        </View>
-        </View>
-
-        {/* Family */}
-        <View
-          onLayout={(e) => {
-            sectionY.current.family = e.nativeEvent.layout.y;
-          }}
-        >
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Family</Text>
-          <FieldRow icon="heart-outline"  label="Marital status" value={maritalLabel} onEdit={() => openSelect('marital_status', user.marital_status)} />
-          <FieldRow icon="people-outline" label="Children"      value={user.has_children == null ? null : user.has_children ? 'Has children' : 'No children'} onEdit={() => openBool('has_children', user.has_children)} />
-          <FieldRow icon="happy-outline"  label="Wants children" value={wantChildrenLabel} onEdit={() => openSelect('want_children', user.want_children)} />
-        </View>
-        </View>
-
-        {/* Looking for */}
+        {/* Looking for — intent first, matches the way people read profiles */}
         <View
           onLayout={(e) => {
             sectionY.current.looking = e.nativeEvent.layout.y;
@@ -691,6 +667,48 @@ export default function MyProfileScreen() {
               <Text style={{ color: COLORS.primary, fontSize: 14, fontWeight: '600' }}>Add what you're looking for</Text>
             </TouchableOpacity>
           )}
+        </View>
+        </View>
+
+        {/* Physical — appearance specs */}
+        <View
+          onLayout={(e) => {
+            sectionY.current.physical = e.nativeEvent.layout.y;
+          }}
+        >
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Physical</Text>
+          <FieldRow icon="resize-outline"  label="Height"    value={user.height_cm ? `${(user.height_cm / 100).toFixed(2)} m` : null}
+            onEdit={() => { setEditing('height'); setEditHeight(user.height_cm ?? 170); }} />
+          <FieldRow icon="body-outline"    label="Body type" value={bodyTypeLabel} onEdit={() => openSelect('body_type', user.body_type)} />
+          <FieldRow icon="barbell-outline" label="Weight"    value={user.weight_kg ? `${user.weight_kg} kg` : null} onEdit={() => { setEditing('weight_kg'); setEditWeight(user.weight_kg ?? 70); }} />
+        </View>
+        </View>
+
+        {/* Family — life stage & future */}
+        <View
+          onLayout={(e) => {
+            sectionY.current.family = e.nativeEvent.layout.y;
+          }}
+        >
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Family</Text>
+          <FieldRow icon="heart-outline"  label="Marital status" value={maritalLabel} onEdit={() => openSelect('marital_status', user.marital_status)} />
+          <FieldRow icon="people-outline" label="Has children"   value={user.has_children == null ? null : user.has_children ? 'Yes' : 'No'} onEdit={() => openBool('has_children', user.has_children)} />
+          <FieldRow icon="happy-outline"  label="Wants children" value={wantChildrenLabel} onEdit={() => openSelect('want_children', user.want_children)} />
+        </View>
+        </View>
+
+        {/* Work & Education */}
+        <View
+          onLayout={(e) => {
+            sectionY.current.work = e.nativeEvent.layout.y;
+          }}
+        >
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Work & Education</Text>
+          <FieldRow icon="briefcase-outline" label="Occupation" value={occupationLabel} onEdit={() => { openSelect('occupation', user.occupation); setListSearch(''); }} />
+          <FieldRow icon="school-outline"    label="Education"  value={educationLabel}  onEdit={() => openSelect('education', user.education)} />
         </View>
         </View>
 
@@ -794,15 +812,15 @@ export default function MyProfileScreen() {
         <LocationPicker value={editLocation} onChange={setEditLocation} />
       </EditModal>
 
-      {/* ════ AFRICAN ORIGIN ════ */}
-      <EditModal visible={editing === 'origin_location'} title="African Origin" onClose={close} saving={saving}
+      {/* ════ ORIGIN ════ */}
+      <EditModal visible={editing === 'origin_location'} title="Origin" onClose={close} saving={saving}
         onSave={() => save({
           origin_country: editOriginLocation.country?.trim() || null,
           origin_state:   editOriginLocation.subdivision?.trim() || null,
           origin_city:    editOriginLocation.city?.trim() || null,
         })}>
         <Text style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 16, lineHeight: 20 }}>
-          Setting your African origin enables ethnicity and language options specific to your country.
+          Setting your origin enables ethnicity and language options specific to your country.
         </Text>
         <LocationPicker value={editOriginLocation} onChange={setEditOriginLocation} />
       </EditModal>
@@ -851,9 +869,9 @@ export default function MyProfileScreen() {
         ) : needsOriginForData ? (
           <TouchableOpacity
             onPress={() => { close(); setTimeout(openOriginLocation, 300); }}
-            style={{ borderRadius: 14, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08`, padding: 18, alignItems: 'center', gap: 10 }}>
+            style={{ borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primaryBorder, backgroundColor: COLORS.primarySurface, padding: 18, alignItems: 'center', gap: 10 }}>
             <Ionicons name="flag-outline" size={28} color={COLORS.primary} />
-            <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.primary, textAlign: 'center' }}>Set your African origin first</Text>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.primary, textAlign: 'center' }}>Set your origin first</Text>
             <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}>
               Tap to set your origin country and unlock ethnicity options for your heritage.
             </Text>
@@ -915,9 +933,9 @@ export default function MyProfileScreen() {
         ) : needsOriginForData ? (
           <TouchableOpacity
             onPress={() => { close(); setTimeout(openOriginLocation, 300); }}
-            style={{ borderRadius: 14, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08`, padding: 18, alignItems: 'center', gap: 10 }}>
+            style={{ borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primaryBorder, backgroundColor: COLORS.primarySurface, padding: 18, alignItems: 'center', gap: 10 }}>
             <Ionicons name="flag-outline" size={28} color={COLORS.primary} />
-            <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.primary, textAlign: 'center' }}>Set your African origin first</Text>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.primary, textAlign: 'center' }}>Set your origin first</Text>
             <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}>
               Tap to set your origin country and unlock language options for your heritage.
             </Text>
@@ -989,7 +1007,7 @@ export default function MyProfileScreen() {
       </EditModal>
 
       {/* ════ HAS CHILDREN ════ */}
-      <EditModal visible={editing === 'has_children'} title="Do you have children?" onClose={close} saving={saving}
+      <EditModal visible={editing === 'has_children'} title="Has children" onClose={close} saving={saving}
         onSave={() => save({ has_children: editBool })}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
           {HAS_CHILDREN_OPTIONS.map(opt => {
@@ -1044,26 +1062,29 @@ export default function MyProfileScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  headerTitle: { fontSize: 22, fontWeight: FONT.extrabold, color: COLORS.textStrong },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: COLORS.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border },
   iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
+  completionPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.primarySurface, borderWidth: 1, borderColor: COLORS.primaryBorder },
+  completionPillTxt: { fontSize: 11, fontWeight: FONT.extrabold, color: COLORS.primary, letterSpacing: 0.2 },
   onlineBadge: { position: 'absolute', top: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.xl },
   onlineDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.white },
   onlineText: { fontSize: 12, color: COLORS.white, fontWeight: FONT.semibold },
   cameraBtn: { position: 'absolute', bottom: 60, right: 14, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)' },
   heroInfo: { position: 'absolute', bottom: 16, left: 16, right: 60 },
-  heroName: { fontSize: 26, fontWeight: FONT.extrabold, color: COLORS.white, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  heroName: { fontSize: 30, fontFamily: FONT.displayFamily, color: COLORS.white, textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6, letterSpacing: 0.3 },
   heroLocation: { fontSize: FONT.sm, color: 'rgba(255,255,255,0.85)' },
   statsBar: { flexDirection: 'row', backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border, marginBottom: 8 },
   statItem: { flex: 1, alignItems: 'center', paddingVertical: 14, gap: 3 },
   statValue: { fontSize: FONT.lg, fontWeight: FONT.bold, color: COLORS.textStrong },
   statLabel: { fontSize: FONT.xs, color: COLORS.textSecondary },
-  completion: { margin: 12, marginBottom: 8, padding: 16, borderRadius: RADIUS.lg, backgroundColor: `${COLORS.primary}10`, borderWidth: 1.5, borderColor: `${COLORS.primary}30` },
+  completionInline: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: COLORS.primarySurface, borderWidth: 1, borderColor: COLORS.primaryBorder },
+  completionInlineTxt: { flex: 1, fontSize: 12.5, color: COLORS.text, lineHeight: 17 },
+  completionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary },
   section: { backgroundColor: COLORS.white, marginBottom: 8, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 8 },
   sectionTitle: { fontSize: FONT.xs, fontWeight: FONT.extrabold, color: COLORS.earth, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 },
   sectionEditBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
   bioText: { flex: 1, fontSize: FONT.md, color: COLORS.textStrong, lineHeight: 23 },
-  emptyPrompt: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADIUS.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}08`, marginBottom: 8 },
+  emptyPrompt: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADIUS.md, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primaryBorder, backgroundColor: COLORS.primarySurface, marginBottom: 8 },
   fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   fieldIcon: { width: 32, height: 32, borderRadius: 9, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
   fieldIconEmpty: {
@@ -1076,8 +1097,7 @@ const s = StyleSheet.create({
   fieldValueEmpty: { color: COLORS.emptyField, fontWeight: FONT.semibold, fontStyle: 'italic' },
   badge: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.xl, backgroundColor: COLORS.savanna, borderWidth: 1, borderColor: COLORS.border },
   badgeText: { fontSize: FONT.sm, color: COLORS.textStrong, fontWeight: FONT.semibold },
-  addPhotoTile: { backgroundColor: `${COLORS.primary}08`, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  photoStrip:     { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  addPhotoTile: { backgroundColor: COLORS.primarySurface, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primaryBorder, alignItems: 'center', justifyContent: 'center' },
   stripThumb:     { width: 56, height: 56, borderRadius: RADIUS.md, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
   stripThumbActive:{ borderColor: COLORS.primary },
   stripImg:       { width: '100%', height: '100%' },
@@ -1093,15 +1113,15 @@ const em = StyleSheet.create({
   textArea: { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12, fontSize: FONT.md, color: COLORS.textStrong, backgroundColor: COLORS.white, minHeight: 140, textAlignVertical: 'top' },
   searchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: COLORS.white, marginBottom: 14 },
   option: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white },
-  optionOn: { borderColor: COLORS.success, backgroundColor: `${COLORS.success}12` },
+  optionOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
   optionTxt: { fontSize: FONT.md, color: COLORS.textStrong, fontWeight: FONT.medium },
   optionTxtOn: { color: COLORS.success, fontWeight: FONT.bold },
   bigChip: { flex: 1, paddingVertical: 16, borderRadius: RADIUS.lg, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white, alignItems: 'center' },
-  bigChipOn: { borderColor: COLORS.success, backgroundColor: `${COLORS.success}12` },
+  bigChipOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
   bigChipTxt: { fontSize: FONT.md, color: COLORS.textSecondary, fontWeight: FONT.medium },
   bigChipTxtOn: { color: COLORS.success, fontWeight: FONT.bold },
   chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white },
-  chipOn: { borderColor: COLORS.success, backgroundColor: `${COLORS.success}12` },
+  chipOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
   chipTxt: { fontSize: 14, color: COLORS.textSecondary, fontWeight: FONT.medium },
   chipTxtOn: { color: COLORS.success, fontWeight: FONT.bold },
   groupLabel: { fontSize: FONT.sm, fontWeight: FONT.bold, color: COLORS.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },

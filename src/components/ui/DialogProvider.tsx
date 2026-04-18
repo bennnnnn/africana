@@ -124,6 +124,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
               ) : null}
               <Text style={styles.title}>{dialog?.title}</Text>
               {!!dialog?.message && <Text style={styles.message}>{dialog.message}</Text>}
+              {dialog?.content ? <View style={styles.dialogExtra}>{dialog.content}</View> : null}
 
               <View style={[styles.btnRow, useInlineActions && styles.btnRowInline]}>
                 {actions.map((action, index) => (
@@ -227,6 +228,9 @@ const styles = StyleSheet.create({
     fontWeight: FONT.extrabold,
     color: COLORS.textStrong,
     marginBottom: 8,
+  },
+  dialogExtra: {
+    marginTop: 4,
   },
   message: {
     fontSize: FONT.md,

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
 
 export type DialogActionStyle = 'default' | 'primary' | 'secondary' | 'destructive' | 'cancel';
@@ -11,9 +12,10 @@ export type DialogAction = {
 export type DialogConfig = {
   title: string;
   message?: string;
-  tone?: 'default' | 'success' | 'danger';
   /** Ionicons name, e.g. `alert-circle-outline` */
   icon?: string;
+  /** Optional body below `message` (e.g. toggles). */
+  content?: ReactNode;
   actions?: DialogAction[];
 };
 

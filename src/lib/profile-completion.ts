@@ -1,5 +1,5 @@
 import type { User } from '@/types';
-import { isInterestedInAlignedWithGender } from '@/lib/gender-match';
+import { isInterestedInProvided } from '@/lib/gender-match';
 
 /** Minimum profile needed before main app (Discover). Optional fields (bio, photo, work, etc.) do not block. */
 export function isProfileCompleteForDiscover(user: User | null | undefined): boolean {
@@ -7,7 +7,7 @@ export function isProfileCompleteForDiscover(user: User | null | undefined): boo
   const nameOk = Boolean(user.full_name?.trim());
   const birthOk = Boolean(user.birthdate && String(user.birthdate).trim());
   const genderOk = user.gender === 'male' || user.gender === 'female';
-  const interestedOk = isInterestedInAlignedWithGender(user.gender, user.interested_in);
+  const interestedOk = isInterestedInProvided(user.interested_in);
   const countryOk = Boolean(user.country?.trim());
   return nameOk && birthOk && genderOk && interestedOk && countryOk;
 }

@@ -4,6 +4,10 @@
  * PAYMENTS_ENABLED = false → everyone gets free access, upgrade UI shows "Coming Soon"
  * PAYMENTS_ENABLED = true  → RevenueCat is live, premium gating is active
  *
+ * Early growth: users who share a profile (see share-reward.ts) can receive Gold-tier
+ * access until total profiles exceed GROWTH_SHARE_REWARD_UNTIL_PROFILE_COUNT, if they
+ * have no active paid subscription (RevenueCat / DB).
+ *
  * To activate payments:
  *   1. Set PAYMENTS_ENABLED = true below
  *   2. npx expo install react-native-purchases
@@ -17,6 +21,7 @@
 
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import { growthShareRewardsCurrentlyApplies, userHasRecordedProfileShare } from './share-reward';
 
 // ── Feature flag ──────────────────────────────────────────────────────────────
 export const PAYMENTS_ENABLED = false;
@@ -124,7 +129,13 @@ export async function getSubscription(userId: string): Promise<Subscription> {
     .eq('user_id', userId)
     .single();
 
-  if (!data || !data.is_active) return FREE_SUB;
+  if (!data || !data.is_active) {
+    // Early growth: no paid sub yet — Gold for users who helped spread the word.
+    if ((await growthShareRewardsCurrentlyApplies()) && (await userHasRecordedProfileShare(userId))) {
+      return { plan: 'gold', expiresAt: null, isActive: true, provider: 'manual' };
+    }
+    return FREE_SUB;
+  }
   if (data.expires_at && new Date(data.expires_at) < new Date()) {
     return { ...FREE_SUB, expiresAt: data.expires_at };
   }

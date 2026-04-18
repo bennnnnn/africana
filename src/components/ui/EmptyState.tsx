@@ -18,7 +18,7 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
           width: 80,
           height: 80,
           borderRadius: 40,
-          backgroundColor: `${COLORS.primary}15`,
+          backgroundColor: COLORS.primarySurface,
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: 20,

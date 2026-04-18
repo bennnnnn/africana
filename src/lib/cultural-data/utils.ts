@@ -8,6 +8,21 @@ export function unique(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+function ethnicityLanguageList(
+  country: CountryCultureData | null | undefined,
+  ethnicity: string | null | undefined
+): string[] {
+  if (!country?.ethnicityLanguages || !ethnicity?.trim()) return [];
+  const e = ethnicity.trim();
+  const m = country.ethnicityLanguages;
+  return (
+    m[e] ??
+    m[normalizeKey(e)] ??
+    m[e.replace(/_/g, ' ')] ??
+    []
+  );
+}
+
 export function buildEthnicityOptions(
   country: CountryCultureData | null,
   subdivision?: string | null,
@@ -38,7 +53,7 @@ export function buildLanguageOptions(
   if (!country && fallbackLanguages.length === 0) return null;
 
   const prioritized = unique([
-    ...(ethnicity ? country?.ethnicityLanguages?.[ethnicity] ?? [] : []),
+    ...(ethnicity ? ethnicityLanguageList(country, ethnicity) : []),
     ...(city ? country?.cityLanguages?.[normalizeKey(city)] ?? country?.cityLanguages?.[city] ?? [] : []),
     ...(subdivision
       ? country?.subdivisionLanguages?.[normalizeKey(subdivision)] ?? country?.subdivisionLanguages?.[subdivision] ?? []

@@ -60,7 +60,14 @@ async function setupAndroidChannels() {
       name: 'Profile Views',
       importance: Notifications.AndroidImportance.LOW,
       vibrationPattern: [],
-      lightColor: '#8B5E3C',
+      lightColor: '#C84B31',
+    });
+    await Notifications.setNotificationChannelAsync('favourite', {
+      name: 'Stars',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default',
+      vibrationPattern: [0, 120],
+      lightColor: '#F6C458',
     });
   } catch {}
 }
@@ -101,7 +108,7 @@ export async function registerForPushNotifications(userId: string): Promise<void
 export async function sendLocalNotification(
   title: string,
   body: string,
-  channelId: 'message' | 'like' | 'match' | 'view' = 'match',
+  channelId: 'message' | 'like' | 'match' | 'view' | 'favourite' = 'match',
   data?: Record<string, string>,
 ): Promise<void> {
   if (!Notifications) return;
@@ -115,7 +122,7 @@ export async function sendLocalNotification(
 
 // ── Call Edge Function to push-notify another user ────────────────────────────
 export async function notifyUser(params: {
-  type: 'message' | 'like' | 'match' | 'view';
+  type: 'message' | 'like' | 'match' | 'view' | 'favourite';
   recipientId: string;
   senderId: string;
   senderName: string;

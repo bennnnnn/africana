@@ -13,7 +13,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signInWithGoogle } from '@/lib/google-auth';
 import { useAuthStore } from '@/store/auth.store';
-import { COLORS } from '@/constants';
+import { COLORS, FONT } from '@/constants';
 import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
 import { appDialog } from '@/lib/app-dialog';
 
@@ -217,10 +217,10 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   appName: {
-    fontSize: 34,
-    fontWeight: '800',
+    fontSize: 42,
+    fontFamily: FONT.displayFamily,
     color: '#FFFFFF',
-    letterSpacing: -1,
+    letterSpacing: 0.5,
   },
   slidesWrapper: {
     flex: 1,
@@ -243,12 +243,12 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   slideTitle: {
-    fontSize: 30,
-    fontWeight: '800',
+    fontSize: 32,
+    fontFamily: FONT.displayFamily,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: -0.5,
-    lineHeight: 36,
+    letterSpacing: 0.2,
+    lineHeight: 40,
     marginBottom: 14,
   },
   slideDesc: {

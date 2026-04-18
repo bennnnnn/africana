@@ -93,16 +93,24 @@ export function ReportUserModal({
                     borderRadius: RADIUS.lg,
                     paddingHorizontal: 14,
                     paddingVertical: 13,
-                    backgroundColor: selected ? `${COLORS.primary}12` : COLORS.white,
+                    backgroundColor: selected ? COLORS.successSurface : COLORS.white,
                     borderWidth: 1,
-                    borderColor: selected ? COLORS.primary : COLORS.border,
+                    borderColor: selected ? COLORS.success : COLORS.border,
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                   }}
                 >
-                  <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.textStrong }}>{reason}</Text>
-                  {selected ? <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} /> : null}
+                  <Text
+                    style={{
+                      fontSize: FONT.md,
+                      fontWeight: FONT.bold,
+                      color: selected ? COLORS.success : COLORS.textStrong,
+                    }}
+                  >
+                    {reason}
+                  </Text>
+                  {selected ? <Ionicons name="checkmark-circle" size={18} color={COLORS.success} /> : null}
                 </TouchableOpacity>
               );
             })}

@@ -8,6 +8,21 @@ type CachedPayloadRow = {
 let dbPromise: Promise<SQLite.SQLiteDatabase | null> | null = null;
 
 /**
+ * expo-sqlite: concurrent `withTransactionAsync` / `execAsync` on one DB causes
+ * "cannot start a transaction within a transaction" / rollback errors. Serialize all access.
+ */
+let dbAccessChain: Promise<unknown> = Promise.resolve();
+
+function runSerialized<T>(fn: () => Promise<T>): Promise<T> {
+  const run = dbAccessChain.then(() => fn());
+  dbAccessChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+/**
  * Open DB once. Returns null if native SQLite fails (avoids crashing the app / uncaught rejections).
  * Avoids multi-statement execAsync and index column DESC/ASC — some RN SQLite builds reject them.
  */
@@ -103,120 +118,132 @@ function safeParseMessage(payload: string): Message | null {
 
 export async function getCachedConversations(userId: string): Promise<Conversation[]> {
   if (!userId) return [];
-  const db = await getDb();
-  if (!db) return [];
-  const rows = await db.getAllAsync<CachedPayloadRow>(
-    `SELECT payload
+  return runSerialized(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const rows = await db.getAllAsync<CachedPayloadRow>(
+      `SELECT payload
      FROM cached_conversations
      WHERE user_id = ?
      ORDER BY CASE WHEN sort_timestamp IS NULL OR sort_timestamp = '' THEN 1 ELSE 0 END, sort_timestamp DESC`,
-    userId,
-  );
+      userId,
+    );
 
-  return rows
-    .map((row) => safeParseConversation(row.payload))
-    .filter((conversation): conversation is Conversation => !!conversation);
+    return rows
+      .map((row) => safeParseConversation(row.payload))
+      .filter((conversation): conversation is Conversation => !!conversation);
+  });
 }
 
 export async function getCachedConversationSnapshot(
   userId: string,
 ): Promise<{ found: boolean; conversations: Conversation[] }> {
   if (!userId) return { found: false, conversations: [] };
-  const db = await getDb();
-  if (!db) return { found: false, conversations: [] };
-  const row = await db.getFirstAsync<CachedPayloadRow>(
-    `SELECT payload
+  return runSerialized(async () => {
+    const db = await getDb();
+    if (!db) return { found: false, conversations: [] };
+    const row = await db.getFirstAsync<CachedPayloadRow>(
+      `SELECT payload
      FROM cached_conversation_snapshots
      WHERE user_id = ?`,
-    userId,
-  );
+      userId,
+    );
 
-  if (!row?.payload) {
-    return { found: false, conversations: [] };
-  }
+    if (!row?.payload) {
+      return { found: false, conversations: [] };
+    }
 
-  try {
-    const parsed = JSON.parse(row.payload) as Conversation[];
-    return {
-      found: true,
-      conversations: parsed.map((conversation) => ({
-        ...conversation,
-        unread_count: conversation.unread_count ?? 0,
-      })),
-    };
-  } catch {
-    return { found: false, conversations: [] };
-  }
+    try {
+      const parsed = JSON.parse(row.payload) as Conversation[];
+      return {
+        found: true,
+        conversations: parsed.map((conversation) => ({
+          ...conversation,
+          unread_count: conversation.unread_count ?? 0,
+        })),
+      };
+    } catch {
+      return { found: false, conversations: [] };
+    }
+  });
 }
 
 export async function replaceCachedConversations(userId: string, conversations: Conversation[]): Promise<void> {
   if (!userId) return;
-  const db = await getDb();
-  if (!db) return;
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
-      `INSERT OR REPLACE INTO cached_conversation_snapshots (user_id, payload)
-       VALUES (?, ?)`,
-      userId,
-      JSON.stringify(conversations),
-    );
-    await db.runAsync('DELETE FROM cached_conversations WHERE user_id = ?', userId);
-
-    for (const conversation of conversations) {
+  await runSerialized(async () => {
+    const db = await getDb();
+    if (!db) return;
+    await db.withTransactionAsync(async () => {
       await db.runAsync(
-        `INSERT OR REPLACE INTO cached_conversations (user_id, conversation_id, sort_timestamp, payload)
-         VALUES (?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO cached_conversation_snapshots (user_id, payload)
+       VALUES (?, ?)`,
         userId,
-        conversation.id,
-        conversation.last_message_at ?? conversation.created_at ?? null,
-        serializeConversation(conversation),
+        JSON.stringify(conversations),
       );
-    }
+      await db.runAsync('DELETE FROM cached_conversations WHERE user_id = ?', userId);
+
+      for (const conversation of conversations) {
+        await db.runAsync(
+          `INSERT OR REPLACE INTO cached_conversations (user_id, conversation_id, sort_timestamp, payload)
+         VALUES (?, ?, ?, ?)`,
+          userId,
+          conversation.id,
+          conversation.last_message_at ?? conversation.created_at ?? null,
+          serializeConversation(conversation),
+        );
+      }
+    });
   });
 }
 
 export async function getCachedMessages(conversationId: string): Promise<Message[]> {
   if (!conversationId) return [];
-  const db = await getDb();
-  if (!db) return [];
-  const rows = await db.getAllAsync<CachedPayloadRow>(
-    `SELECT payload
+  return runSerialized(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const rows = await db.getAllAsync<CachedPayloadRow>(
+      `SELECT payload
      FROM cached_messages
      WHERE conversation_id = ?
      ORDER BY created_at ASC`,
-    conversationId,
-  );
+      conversationId,
+    );
 
-  return rows
-    .map((row) => safeParseMessage(row.payload))
-    .filter((message): message is Message => !!message);
+    return rows
+      .map((row) => safeParseMessage(row.payload))
+      .filter((message): message is Message => !!message);
+  });
 }
 
 export async function replaceCachedMessages(conversationId: string, messages: Message[]): Promise<void> {
   if (!conversationId) return;
-  const db = await getDb();
-  if (!db) return;
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM cached_messages WHERE conversation_id = ?', conversationId);
+  await runSerialized(async () => {
+    const db = await getDb();
+    if (!db) return;
+    await db.withTransactionAsync(async () => {
+      await db.runAsync('DELETE FROM cached_messages WHERE conversation_id = ?', conversationId);
 
-    for (const message of messages) {
-      await db.runAsync(
-        `INSERT OR REPLACE INTO cached_messages (conversation_id, message_id, created_at, payload)
+      for (const message of messages) {
+        await db.runAsync(
+          `INSERT OR REPLACE INTO cached_messages (conversation_id, message_id, created_at, payload)
          VALUES (?, ?, ?, ?)`,
-        conversationId,
-        message.id,
-        message.created_at,
-        serializeMessage(message),
-      );
-    }
+          conversationId,
+          message.id,
+          message.created_at,
+          serializeMessage(message),
+        );
+      }
+    });
   });
 }
 
 export async function clearCachedMessages(conversationId: string): Promise<void> {
   if (!conversationId) return;
-  const db = await getDb();
-  if (!db) return;
-  await db.runAsync('DELETE FROM cached_messages WHERE conversation_id = ?', conversationId);
+  await runSerialized(async () => {
+    const db = await getDb();
+    if (!db) return;
+    await db.runAsync('DELETE FROM cached_messages WHERE conversation_id = ?', conversationId);
+  });
 }
 
 /** Background persist after optimistic updates — never surfaces as an uncaught promise rejection. */

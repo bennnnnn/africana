@@ -18,10 +18,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
-import { supabase } from '@/lib/supabase';
 import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ScreenTitle } from '@/components/ui/ScreenTitle';
+import { SkeletonRow } from '@/components/ui/Skeleton';
 import { COLORS, RADIUS, FONT } from '@/constants';
+import haptics from '@/lib/haptics';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -32,20 +34,10 @@ export default function MessagesScreen() {
   const tabBarHeight = 56 + insets.bottom;
   const { user } = useAuthStore();
   const { conversations, isLoading, fetchConversations, deleteConversation } = useChatStore();
-  const { showDialog } = useDialog();
+  const { showDialog, showToast } = useDialog();
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-
-  const scheduleRefresh = useCallback(() => {
-    if (!user) return;
-    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-    refreshTimeoutRef.current = setTimeout(() => {
-      fetchConversations(user.id);
-    }, 120);
-  }, [fetchConversations, user?.id]);
 
   // Re-fetch when app returns from background — catches messages missed while suspended
   useEffect(() => {
@@ -58,33 +50,7 @@ export default function MessagesScreen() {
     return () => sub.remove();
   }, [fetchConversations, user?.id]);
 
-  useEffect(() => {
-    if (!user) return;
-    fetchConversations(user.id);
-
-    channelRef.current = supabase
-      .channel(`conv-list:${user.id}:${Date.now()}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        const message = payload.new as { conversation_id?: string; sender_id?: string };
-        if (!message.conversation_id || message.sender_id === user.id) return;
-        // Always refresh: new threads won’t be in local list until fetch runs.
-        scheduleRefresh();
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, (payload) => {
-        const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
-        if (ids.includes(user.id)) scheduleRefresh();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, (payload) => {
-        const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
-        if (ids.includes(user.id)) scheduleRefresh();
-      })
-      .subscribe();
-
-    return () => {
-      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
-    };
-  }, [scheduleRefresh, user?.id]);
+  // Realtime + eager fetch live in (tabs)/_layout — avoids duplicate channels and triple fetch on open.
 
   useFocusEffect(
     useCallback(() => {
@@ -124,27 +90,32 @@ export default function MessagesScreen() {
   );
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.surface }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.white }}>
       {/* Header */}
       <View style={s.header}>
-        <Text style={s.title}>Messages</Text>
+        <ScreenTitle>Messages</ScreenTitle>
       </View>
 
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: tabBarHeight + 16 }}
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        updateCellsBatchingPeriod={50}
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 16, backgroundColor: COLORS.white }}
+        style={{ backgroundColor: COLORS.white }}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={conversations.length > 0 ? ListHeader : null}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
         }
-        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        ItemSeparatorComponent={() => <View style={s.sep} />}
         ListEmptyComponent={
           isLoading ? (
-            <View style={{ paddingTop: 16, gap: 8 }}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <View key={i} style={s.skeleton} />
+            <View style={{ paddingTop: 8 }}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonRow key={i} />
               ))}
             </View>
           ) : (
@@ -175,18 +146,28 @@ export default function MessagesScreen() {
                 })
               }
               onLongPress={() => {
+                const otherName = other?.full_name ?? 'this user';
                 showDialog({
                   title: 'Delete conversation',
-                  message: `Delete your conversation with ${other?.full_name ?? 'this user'}? This cannot be undone.`,
+                  message: `Your entire chat with ${otherName} will be permanently removed. This cannot be undone.`,
+                  icon: 'trash-outline',
                   actions: [
-                    { label: 'Cancel' },
-                    { label: 'Delete', style: 'destructive', onPress: () => deleteConversation(item.id) },
+                    { label: 'Cancel', style: 'cancel' },
+                    {
+                      label: 'Delete',
+                      style: 'destructive',
+                      onPress: async () => {
+                        haptics.tapMedium();
+                        await deleteConversation(item.id);
+                        showToast({ message: 'Conversation deleted', icon: 'trash-outline' });
+                      },
+                    },
                   ],
                 });
               }}
               delayLongPress={500}
-              style={s.card}
-              activeOpacity={0.82}
+              style={s.row}
+              activeOpacity={0.65}
             >
               <Avatar
                 uri={other?.avatar_url}
@@ -230,27 +211,25 @@ export default function MessagesScreen() {
 const s = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
     backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: COLORS.border,
   },
-  title:    { fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.text },
 
   // ── Search ─────────────────────────────────────────────────────────────────
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.savanna,
     borderRadius: RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    marginBottom: 12,
-    marginTop: 8,
+    marginHorizontal: 16,
+    marginBottom: 4,
+    marginTop: 12,
   },
   searchInput: {
     flex: 1,
@@ -259,18 +238,18 @@ const s = StyleSheet.create({
     padding: 0,
   },
 
-  // ── Conversation card ───────────────────────────────────────────────────────
-  card: {
+  // ── Conversation row (flat, hairline-separated) ────────────────────────────
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.white,
-    borderRadius: RADIUS.xl,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  sep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: COLORS.border,
+    marginLeft: 80,
   },
   cardTop: {
     flexDirection: 'row',
@@ -301,13 +280,4 @@ const s = StyleSheet.create({
     marginLeft: 8,
   },
   badgeText: { color: COLORS.white, fontSize: FONT.xs, fontWeight: FONT.bold },
-
-  // ── Loading skeleton ────────────────────────────────────────────────────────
-  skeleton: {
-    height: 76,
-    borderRadius: RADIUS.xl,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
 });

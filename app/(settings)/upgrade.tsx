@@ -47,6 +47,12 @@ export default function UpgradeScreen() {
           <Text style={s.heroSub}>
             Get more matches, see who likes you, and stand out from the crowd.
           </Text>
+          <View style={s.growthCallout}>
+            <Ionicons name="share-social-outline" size={20} color={COLORS.primary} />
+            <Text style={s.growthCalloutText}>
+              Help Africana grow: share someone’s profile from their screen. Early supporters can earn Gold-level access while we’re still small.
+            </Text>
+          </View>
         </View>
 
         {/* Plans */}
@@ -103,6 +109,25 @@ const s = StyleSheet.create({
   heroEmoji: { fontSize: 56, marginBottom: 10 },
   heroTitle: { fontSize: 26, fontWeight: '900', color: COLORS.text, marginBottom: 8 },
   heroSub: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 21, paddingHorizontal: 16 },
+  growthCallout: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginTop: 20,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: COLORS.primarySurface,
+    borderWidth: 1,
+    borderColor: COLORS.primaryBorder,
+    maxWidth: width - 40,
+  },
+  growthCalloutText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.text,
+    fontWeight: '600',
+  },
   planCard: {
     backgroundColor: '#FFF',
     borderRadius: 20,

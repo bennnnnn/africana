@@ -54,7 +54,7 @@ export default function ForgotPasswordScreen() {
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
             <View style={{
               width: 80, height: 80, borderRadius: 40,
-              backgroundColor: `${COLORS.success}15`,
+              backgroundColor: COLORS.successSurface,
               alignItems: 'center', justifyContent: 'center',
             }}>
               <Ionicons name="mail-open-outline" size={38} color={COLORS.success} />
