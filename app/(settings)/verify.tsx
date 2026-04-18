@@ -23,7 +23,7 @@ import { track, EVENTS } from '@/lib/analytics';
 export default function VerifyScreen() {
   const { colors } = useTheme();
   const { user, updateProfile } = useAuthStore();
-  const { showDialog } = useDialog();
+  const { showDialog, showToast } = useDialog();
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [selfieMime, setSelfieMime] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -99,14 +99,11 @@ export default function VerifyScreen() {
 
       track(EVENTS.VERIFICATION_COMPLETE);
 
-      showDialog({
-        title: 'Submitted',
-        message: 'Your verification selfie has been submitted. We will review it within 24 to 48 hours.',
+      showToast({
+        message: 'Submitted! We\u2019ll review within 24\u201348 hours.',
         icon: 'checkmark-circle-outline',
-        actions: [
-          { label: 'OK', style: 'primary', onPress: () => router.back() },
-        ],
       });
+      router.back();
     } catch (e: any) {
       showDialog({
         title: 'Upload failed',

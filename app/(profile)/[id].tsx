@@ -52,10 +52,13 @@ import { ProfileCompletionNudgeBanner } from '@/components/profile/ProfileComple
 import { useDialog } from '@/components/ui/DialogProvider';
 import { ReportUserModal } from '@/components/ui/ReportUserModal';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
+import { SkeletonProfile } from '@/components/ui/Skeleton';
 import { track, EVENTS } from '@/lib/analytics';
 import { hasExistingReport } from '@/lib/social-actions';
 import { recordProfileShareEvent, SHARE_REWARD_TOAST } from '@/lib/share-reward';
 import { getProfileSeed } from '@/lib/profile-seed-cache';
+import { isUserEffectivelyOnline } from '@/lib/utils';
+import { SPRING, SNAP_IN } from '@/lib/motion';
 
 const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female' };
 const profileGalleryCache = new Map<string, string[]>();
@@ -449,6 +452,32 @@ export default function ProfileViewScreen() {
   const orderedUserIds = useProfileBrowseStore((s) => s.orderedUserIds);
   const [photoViewerVisible, setPhotoViewerVisible] = useState(routeWantsPhotoViewer);
   const [viewerPhotoIndex, setViewerPhotoIndex] = useState(routePhotoIndex);
+  /**
+   * The photo viewer is a `<Modal>`, which on iOS/Android renders in a separate
+   * native window. The DialogProvider's toast lives in the underlying tree, so
+   * `showToast` calls fire but the bubble is hidden behind the modal. We render
+   * a parallel toast _inside_ the modal so feedback (Liked!, Added to favourites,
+   * etc.) is actually visible while photos are open.
+   */
+  const [viewerToast, setViewerToast] = useState<{ icon: keyof typeof Ionicons.glyphMap; message: string } | null>(null);
+  const viewerToastAnim = useRef(new Animated.Value(0)).current;
+  const viewerToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showViewerToast = useCallback((cfg: { icon: keyof typeof Ionicons.glyphMap; message: string }) => {
+    if (viewerToastTimerRef.current) clearTimeout(viewerToastTimerRef.current);
+    viewerToastAnim.setValue(0);
+    setViewerToast(cfg);
+    Animated.spring(viewerToastAnim, { toValue: 1, ...SPRING }).start();
+    viewerToastTimerRef.current = setTimeout(() => {
+      Animated.timing(viewerToastAnim, { toValue: 0, ...SNAP_IN }).start(() => {
+        setViewerToast(null);
+      });
+    }, 1800);
+  }, [viewerToastAnim]);
+  useEffect(() => {
+    return () => {
+      if (viewerToastTimerRef.current) clearTimeout(viewerToastTimerRef.current);
+    };
+  }, []);
 
   // Seed from the in-memory cache the caller just wrote (discover / likes / etc.)
   // so the profile paints instantly. A background fetch replaces this with fresh
@@ -922,11 +951,7 @@ export default function ProfileViewScreen() {
   );
 
   if (isLoading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color={COLORS.textStrong} />
-      </View>
-    );
+    return <SkeletonProfile />;
   }
 
   if (!profile) {
@@ -974,7 +999,7 @@ export default function ProfileViewScreen() {
   const displayOnlineStatus: 'online' | 'offline' =
     !isOwnProfile && profile.online_visible === false
       ? 'offline'
-      : profile.online_status === 'online'
+      : isUserEffectivelyOnline(profile.online_status, profile.last_seen)
         ? 'online'
         : 'offline';
 
@@ -1028,26 +1053,41 @@ export default function ProfileViewScreen() {
     if (isMatch && !wasLiked) {
       haptics.success();
       setMatchUser(profile);
-      showToast({ icon: 'flame', message: "It's a match!" });
+      // Match modal handles its own UI; no toast needed here.
     } else {
-      showToast({
-        icon: wasLiked ? 'heart-outline' : 'heart',
+      const toastCfg = {
+        icon: (wasLiked ? 'heart-outline' : 'heart') as keyof typeof Ionicons.glyphMap,
         message: wasLiked ? 'Unliked' : 'Liked!',
-      });
+      };
+      // Photo viewer is a Modal — root toast renders behind it. Show inside.
+      if (photoViewerVisible) showViewerToast(toastCfg);
+      else showToast(toastCfg);
     }
   };
 
   const handleMessage = async () => {
     if (!currentUser || recipientMessagesPaused) return;
-    if (photoViewerVisible) {
-      setPhotoViewerVisible(false);
+    const wasInViewer = photoViewerVisible;
+    if (wasInViewer) {
+      // Use closePhotoViewer (not raw setState) so the viewer/photo route
+      // params get reset — otherwise navigating back to the profile from the
+      // chat reopens the photo viewer.
+      closePhotoViewer();
     }
     const convId = await getOrCreateConversation(currentUser.id, profile.id);
     if (!convId) return;
     const peerId = profile.id;
-    InteractionManager.runAfterInteractions(() => {
+    const navigate = () => {
       router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: peerId } });
-    });
+    };
+    if (wasInViewer) {
+      // Wait for the modal-close animation to actually run before pushing the
+      // chat route. Pushing while the modal is still on screen makes the new
+      // screen render behind it on iOS and feels like nothing happened.
+      setTimeout(() => InteractionManager.runAfterInteractions(navigate), 220);
+      return;
+    }
+    InteractionManager.runAfterInteractions(navigate);
   };
 
   const handleFavourite = async () => {
@@ -1059,13 +1099,17 @@ export default function ProfileViewScreen() {
         .eq('user_id', currentUser.id)
         .eq('favourited_id', profile.id);
       setIsFavourite(false);
-      showToast({ icon: 'star-outline', message: 'Removed from favourites' });
+      const toastCfg = { icon: 'star-outline' as keyof typeof Ionicons.glyphMap, message: 'Removed from favourites' };
+      if (photoViewerVisible) showViewerToast(toastCfg);
+      else showToast(toastCfg);
     } else {
       await supabase
         .from('favourites')
         .insert({ user_id: currentUser.id, favourited_id: profile.id });
       setIsFavourite(true);
-      showToast({ icon: 'star', message: 'Added to favourites' });
+      const toastCfg = { icon: 'star' as keyof typeof Ionicons.glyphMap, message: 'Added to favourites' };
+      if (photoViewerVisible) showViewerToast(toastCfg);
+      else showToast(toastCfg);
       track(EVENTS.FAVOURITE_ADDED);
       void notifyUser({
         type: 'favourite',
@@ -1115,21 +1159,11 @@ export default function ProfileViewScreen() {
     if (!currentUser || !profile) return;
     try {
       if (await hasExistingReport(currentUser.id, profile.id)) {
-        showDialog({
-          title: 'Already reported',
-          message: 'You have already submitted a report for this user.',
-          icon: 'information-circle-outline',
-          actions: [{ label: 'OK', style: 'primary' }],
-        });
+        showToast({ message: 'You\u2019ve already reported this user.', icon: 'information-circle-outline' });
         return;
       }
     } catch {
-      showDialog({
-        title: 'Something went wrong',
-        message: 'Could not check report status. Please try again.',
-        icon: 'alert-circle-outline',
-        actions: [{ label: 'OK', style: 'primary' }],
-      });
+      showToast({ message: 'Could not check report status. Please try again.', icon: 'alert-circle-outline' });
       return;
     }
     setReportPromptVisible(true);
@@ -1936,6 +1970,37 @@ export default function ProfileViewScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+          ) : null}
+          {viewerToast ? (
+            <Animated.View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: Math.max(insets.bottom + 110, 130),
+                alignItems: 'center',
+                opacity: viewerToastAnim,
+                transform: [{ scale: viewerToastAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }],
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  backgroundColor: 'rgba(17,17,17,0.92)',
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  borderRadius: 999,
+                }}
+              >
+                <Ionicons name={viewerToast.icon} size={14} color={COLORS.white} />
+                <Text style={{ color: COLORS.white, fontSize: 13, fontWeight: '600' }}>
+                  {viewerToast.message}
+                </Text>
+              </View>
+            </Animated.View>
           ) : null}
         </GestureHandlerRootView>
       </Modal>

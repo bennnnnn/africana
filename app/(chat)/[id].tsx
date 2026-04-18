@@ -3,8 +3,14 @@ import type { KeyboardEvent, NativeScrollEvent, NativeSyntheticEvent } from 'rea
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   Animated, Keyboard, Platform, AppState, AppStateStatus,
-  StyleSheet, Dimensions, Pressable,
+  StyleSheet, Dimensions, Pressable, ActivityIndicator,
 } from 'react-native';
+// Universal keyboard handling. `KeyboardAvoidingView` from
+// react-native-keyboard-controller reads keyboard insets from native
+// platform APIs (WindowInsetsCompat on Android, native observer on iOS),
+// so it works identically on Samsung, MIUI, ColorOS, and iOS — no manual
+// per-OEM math needed.
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -26,6 +32,8 @@ import { User, Message } from '@/types';
 import { COLORS, RADIUS, FONT, SHADOWS, DEFAULT_AVATAR } from '@/constants';
 import { getHiddenMessageIds, persistHiddenMessageIds } from '@/lib/hidden-messages';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
+import { isUserEffectivelyOnline } from '@/lib/utils';
+import { SPRING, SNAP_OUT } from '@/lib/motion';
 import haptics from '@/lib/haptics';
 import * as Clipboard from 'expo-clipboard';
 import dayjs from 'dayjs';
@@ -120,7 +128,10 @@ export default function ChatScreen() {
   }
   const { user, settings } = useAuthStore();
   const outgoingMessagingDisabled = settings?.receive_messages === false;
-  const { messages, fetchMessages, sendMessage, deleteMessage, markMessagesRead, addMessage } = useChatStore();
+  const { messages, fetchMessages, sendMessage, deleteMessage, markMessagesRead, addMessage, applyMessageUpdate } = useChatStore();
+  const hasMoreOlder = useChatStore((s) => !!s.hasMoreMessages[conversationId]);
+  const isLoadingOlder = useChatStore((s) => !!s.loadingOlderMessages[conversationId]);
+  const loadOlderMessages = useChatStore((s) => s.loadOlderMessages);
   const { likedUserIds, toggleLike, fetchLikedUserIds } = useDiscoverStore();
   const { showDialog, showToast } = useDialog();
 
@@ -130,13 +141,20 @@ export default function ChatScreen() {
   /**
    * Typing indicator state:
    *  - `peerTyping`      → peer keystrokes seen recently; header switches to "Typing…".
-   *  - `liveChannelRef`  → realtime channel so the composer's onChangeText can send broadcasts
-   *                         without rebuilding the subscription.
+   *  - `typingChannelRef`→ DEDICATED typing channel so the inbox can subscribe to
+   *                         typing events without colliding with the postgres_changes
+   *                         listener on `chat-live:${convId}` (the supabase JS client
+   *                         dedupes channels by topic and refuses to add
+   *                         postgres_changes callbacks after the topic is already
+   *                         subscribed elsewhere).
    *  - `peerTypingTimerRef` clears the indicator after 3s of silence.
    *  - `lastTypingSentRef` throttles outgoing broadcasts to once every 2.5s.
    */
   const [peerTyping, setPeerTyping]       = useState(false);
-  const liveChannelRef                    = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const typingChannelRef                  = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  /** Set to true only once the channel hits SUBSCRIBED. Prevents send() racing
+   *  the join handshake (which silently swallowed the very first key-press). */
+  const typingChannelReadyRef             = useRef(false);
   const peerTypingTimerRef                = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef                 = useRef(0);
   const [text, setText]                   = useState('');
@@ -171,7 +189,9 @@ export default function ChatScreen() {
 
   const insets = useSafeAreaInsets();
   const [chatHeaderHeight, setChatHeaderHeight] = useState(0);
-  /** Lifts list + composer above the keyboard (KAV alone was not enough on iOS here). */
+  /** Whether the soft keyboard is open. Used only to auto-scroll to the
+   *  bottom of the message list and to tweak composer padding — actual
+   *  layout lifting is handled by `KeyboardAvoidingView`. */
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
@@ -188,6 +208,16 @@ export default function ChatScreen() {
     () => convMessages.filter((m) => !hiddenIds.has(m.id)),
     [convMessages, hiddenIds],
   );
+  /**
+   * If the conversation list says there's a `last_message`, we know messages
+   * exist — don't flash "No messages yet" while the cache/network is still
+   * loading them in. Keeps the screen calm during the brief seed window.
+   */
+  const conversationHasMessages = useMemo(() => {
+    if (!conversationId) return false;
+    const conv = getChatStoreState().conversations.find((c) => c.id === conversationId);
+    return !!(conv?.last_message || conv?.last_message_at);
+  }, [conversationId]);
   const listData = visibleMessages;
   const listItems = useMemo<ChatListItem[]>(() => {
     const items: ChatListItem[] = [];
@@ -311,30 +341,34 @@ export default function ChatScreen() {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
     const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
     isNearBottomRef.current = distanceFromBottom < 80;
-  }, []);
-
-  useEffect(() => {
-    const overlap = (e: KeyboardEvent) => {
-      const winH = Dimensions.get('window').height;
-      const { screenY, height } = e.endCoordinates;
-      let inset = Math.max(0, winH - screenY);
-      if (Platform.OS === 'android' && height > 0 && screenY <= 0) {
-        inset = height;
-      }
-      setKeyboardHeight(inset);
-    };
-    const clear = () => setKeyboardHeight(0);
-
-    if (Platform.OS === 'ios') {
-      const sub = Keyboard.addListener('keyboardWillChangeFrame', overlap);
-      return () => sub.remove();
+    // Pull in the next page of older messages when the user scrolls within
+    // ~one screen of the top. The store guards against duplicate concurrent
+    // loads, so it's safe to trigger this on every onScroll tick.
+    if (
+      conversationId &&
+      hasMoreOlder &&
+      !isLoadingOlder &&
+      contentOffset.y < layoutMeasurement.height * 0.6
+    ) {
+      void loadOlderMessages(conversationId);
     }
+  }, [conversationId, hasMoreOlder, isLoadingOlder, loadOlderMessages]);
 
-    const show = Keyboard.addListener('keyboardDidShow', overlap);
-    const hide = Keyboard.addListener('keyboardDidHide', clear);
+  // Track keyboard open/closed only for auto-scroll-to-bottom and minor UI
+  // adjustments. The ACTUAL lifting of the composer above the keyboard is
+  // handled by `KeyboardAvoidingView` from react-native-keyboard-controller.
+  useEffect(() => {
+    const onShow = (e: KeyboardEvent) => {
+      setKeyboardHeight(e?.endCoordinates?.height ?? 0);
+    };
+    const onHide = () => setKeyboardHeight(0);
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, onShow);
+    const hideSub = Keyboard.addListener(hideEvt, onHide);
     return () => {
-      show.remove();
-      hide.remove();
+      showSub.remove();
+      hideSub.remove();
     };
   }, []);
 
@@ -387,24 +421,22 @@ export default function ChatScreen() {
     const init = async () => {
       const seeded = getChatStoreState().conversations.find((c) => c.id === conversationId);
       if (seeded?.other_user) {
-        setOtherUser(seeded.other_user);
+        // accepts_messages / online_visible now live on profiles (mirrored from
+        // user_settings via trigger), so the seeded peer already carries them.
+        // We used to do an extra .select() here on every chat open — that was
+        // a full network round-trip blocking the perceived "messages appearing".
+        const peerSeed = seeded.other_user;
+        const effectiveOnline =
+          peerSeed.online_visible === false
+            ? 'offline'
+            : isUserEffectivelyOnline(peerSeed.online_status, peerSeed.last_seen)
+              ? 'online'
+              : 'offline';
+        setOtherUser({ ...peerSeed, online_status: effectiveOnline });
+        if (peerSeed.accepts_messages === false) setMessagingDisabled(true);
         setLoading(false);
-        const otherId = seeded.other_user.id;
         void markMessagesRead(conversationId, user.id);
-        const [, { data: privacy }] = await Promise.all([
-          fetchMessages(conversationId),
-          supabase
-            .from('profiles')
-            .select('accepts_messages, online_visible, online_status')
-            .eq('id', otherId)
-            .maybeSingle(),
-        ]);
-        if (privacy?.accepts_messages === false) setMessagingDisabled(true);
-        if (privacy && seeded.other_user) {
-          const effectiveOnline =
-            privacy.online_visible === false ? 'offline' : (seeded.other_user.online_status ?? privacy.online_status ?? 'offline');
-          setOtherUser({ ...seeded.other_user, online_status: effectiveOnline });
-        }
+        void fetchMessages(conversationId);
         return;
       }
 
@@ -419,7 +451,11 @@ export default function ChatScreen() {
         const { data: raw } = await supabase.from('profiles').select('*').eq('id', peerFromRoute).maybeSingle();
         if (raw) {
           const effectiveOnline =
-            raw.online_visible === false ? 'offline' : (raw.online_status ?? 'offline');
+            raw.online_visible === false
+              ? 'offline'
+              : isUserEffectivelyOnline(raw.online_status, raw.last_seen)
+                ? 'online'
+                : 'offline';
           setOtherUser({ ...raw, online_status: effectiveOnline });
           if (raw.accepts_messages === false) setMessagingDisabled(true);
           setLoading(false);
@@ -443,7 +479,11 @@ export default function ChatScreen() {
           const { data: raw } = await supabase.from('profiles').select('*').eq('id', otherId).maybeSingle();
           if (raw) {
             const effectiveOnline =
-              raw.online_visible === false ? 'offline' : (raw.online_status ?? 'offline');
+              raw.online_visible === false
+                ? 'offline'
+                : isUserEffectivelyOnline(raw.online_status, raw.last_seen)
+                  ? 'online'
+                  : 'offline';
             setOtherUser({ ...raw, online_status: effectiveOnline });
             if (raw.accepts_messages === false) setMessagingDisabled(true);
           }
@@ -465,26 +505,59 @@ export default function ChatScreen() {
     };
   }, [conversationId, user?.id]);
 
-  // ── Realtime subscription — separate effect so store updates don't rebuild it ─
+  // ── Realtime subscriptions ────────────────────────────────────────────────
+  //
+  // We split into TWO channels intentionally:
+  //   1. `chat-live:${convId}` — postgres_changes (new messages). The Messages
+  //      tab must NOT subscribe to this same topic; supabase-js dedupes channels
+  //      by topic, and adding postgres_changes to an already-subscribed topic
+  //      from elsewhere throws "Cannot add 'postgres_changes' callbacks ...".
+  //   2. `chat-typing:${convId}` — broadcast-only typing pings. Both the chat
+  //      screen AND the inbox subscribe here. Broadcasts are safe to share.
   useEffect(() => {
     if (!conversationId || !user) return;
 
-    const channel = supabase
-      .channel(`chat-live:${conversationId}`, {
-        config: { broadcast: { self: false } },
-      })
+    // Unique topic suffix per mount. supabase-js dedupes channels by topic
+    // and forbids adding `postgres_changes` callbacks to a topic that's
+    // already subscribed — so if a previous mount's channel hasn't fully
+    // torn down (common with hot reload + React's dev double-mount), the
+    // new mount would otherwise throw "Cannot add 'postgres_changes'
+    // callbacks ...". The topic name is internal to this client; Postgres
+    // routes events by the `filter`, not by topic name, so different
+    // clients don't need to share this topic for INSERT/UPDATE delivery.
+    const liveTopic = `chat-live:${conversationId}:${Math.random().toString(36).slice(2, 10)}`;
+
+    const messagesChannel = supabase
+      .channel(liveTopic)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'messages',
         filter: `conversation_id=eq.${conversationId}`,
       }, (payload) => {
         const newMsg = payload.new as Message;
         if (newMsg.sender_id !== user.id) {
-          // Incoming message implicitly ends their "typing" state.
           if (peerTypingTimerRef.current) clearTimeout(peerTypingTimerRef.current);
           setPeerTyping(false);
           addMessage(conversationId, newMsg);
           markMessagesRead(conversationId, user.id);
         }
+      })
+      // UPDATE events let "Seen" / read_at flip in real time on the sender's
+      // side. Without this, ✓ stays single-tick until the sender re-opens the
+      // conversation (which is exactly the bug the user reported).
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'messages',
+        filter: `conversation_id=eq.${conversationId}`,
+      }, (payload) => {
+        const updated = payload.new as Message;
+        applyMessageUpdate(conversationId, updated);
+      })
+      .subscribe();
+
+    const typingChannel = supabase
+      .channel(`chat-typing:${conversationId}`, {
+        // ack: false  → no per-send round-trip; lower latency for typing
+        // self:false  → don't echo our own broadcast back to ourselves
+        config: { broadcast: { self: false, ack: false } },
       })
       .on('broadcast', { event: 'typing' }, (payload) => {
         const senderId = (payload.payload as { userId?: string } | undefined)?.userId;
@@ -493,16 +566,35 @@ export default function ChatScreen() {
         if (peerTypingTimerRef.current) clearTimeout(peerTypingTimerRef.current);
         peerTypingTimerRef.current = setTimeout(() => setPeerTyping(false), 3000);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        // NOTE: this callback only fires on state TRANSITIONS. If supabase-js
+        // dedupes our channel against a topic the Messages tab already joined,
+        // we may never see 'SUBSCRIBED' here. We rely on a synchronous
+        // state === 'joined' check at send time as the real gate. Logging here
+        // is purely for debugging.
+        if (status === 'SUBSCRIBED') {
+          typingChannelReadyRef.current = true;
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          typingChannelReadyRef.current = false;
+          if (err) console.warn('[Chat] typing channel', status, err.message);
+        }
+      });
 
-    liveChannelRef.current = channel;
+    typingChannelRef.current = typingChannel;
+    // If the channel was already joined when we attached (shared topic case),
+    // the subscribe callback won't fire — flip the gate ourselves.
+    if ((typingChannel as unknown as { state?: string }).state === 'joined') {
+      typingChannelReadyRef.current = true;
+    }
 
     return () => {
       if (peerTypingTimerRef.current) clearTimeout(peerTypingTimerRef.current);
       peerTypingTimerRef.current = null;
-      liveChannelRef.current = null;
+      typingChannelRef.current = null;
+      typingChannelReadyRef.current = false;
       setPeerTyping(false);
-      supabase.removeChannel(channel);
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(typingChannel);
     };
   }, [conversationId, user?.id]);
 
@@ -532,10 +624,10 @@ export default function ChatScreen() {
   // ── Menus ────────────────────────────────────────────────────────────────────
   const openMenu = () => {
     setMenuVisible(true);
-    Animated.spring(menuAnim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 }).start();
+    Animated.spring(menuAnim, { toValue: 1, ...SPRING }).start();
   };
   const closeMenu = () => {
-    Animated.timing(menuAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => setMenuVisible(false));
+    Animated.timing(menuAnim, { toValue: 0, ...SNAP_OUT }).start(() => setMenuVisible(false));
   };
   // ── Actions ──────────────────────────────────────────────────────────────────
   const handleSend = async () => {
@@ -544,10 +636,12 @@ export default function ChatScreen() {
     const content = text.trim();
     const cid = conversationId;
     setText('');
+    haptics.tapLight();
     pendingScrollModeRef.current = 'smooth';
     const { error } = await sendMessage(cid, user.id, content, user.full_name);
     if (error) {
       setText(content);
+      haptics.error();
       let toastMessage: string;
       if (error === ERROR_RECIPIENT_MESSAGES_DISABLED || error === ERROR_SENDER_MESSAGES_DISABLED) {
         toastMessage = error;
@@ -567,11 +661,11 @@ export default function ChatScreen() {
     haptics.tapMedium();
     setMsgSheet({ messageId, isOwn, content });
     reactionAnim.setValue(0);
-    Animated.spring(reactionAnim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 }).start();
+    Animated.spring(reactionAnim, { toValue: 1, ...SPRING }).start();
   }, [reactionAnim]);
 
   const closeMsgSheet = () => {
-    Animated.timing(reactionAnim, { toValue: 0, duration: 150, useNativeDriver: true })
+    Animated.timing(reactionAnim, { toValue: 0, ...SNAP_OUT })
       .start(() => setMsgSheet(null));
   };
 
@@ -655,6 +749,7 @@ export default function ChatScreen() {
     closeMenu();
     if (!user || !peer) return;
     const wasLiked = likedUserIds.has(peer.id);
+    if (!wasLiked) haptics.tapLight();
     toggleLike(user.id, peer.id);
     showToast({ message: wasLiked ? 'Unliked' : 'Liked' });
   };
@@ -667,6 +762,7 @@ export default function ChatScreen() {
       setIsFavourite(false);
       showToast({ message: 'Removed from favourites' });
     } else {
+      haptics.tapLight();
       await supabase.from('favourites').insert({ user_id: user.id, favourited_id: peer.id });
       setIsFavourite(true);
       showToast({ message: 'Added to favourites' });
@@ -678,21 +774,11 @@ export default function ChatScreen() {
     if (!user || !peer) return;
     try {
       if (await hasExistingReport(user.id, peer.id)) {
-        showDialog({
-          title: 'Already reported',
-          message: 'You have already submitted a report for this user.',
-          icon: 'information-circle-outline',
-          actions: [{ label: 'OK', style: 'primary' }],
-        });
+        showToast({ message: 'You\u2019ve already reported this user.', icon: 'information-circle-outline' });
         return;
       }
     } catch {
-      showDialog({
-        title: 'Something went wrong',
-        message: 'Could not check report status. Please try again.',
-        icon: 'alert-circle-outline',
-        actions: [{ label: 'OK', style: 'primary' }],
-      });
+      showToast({ message: 'Could not check report status. Please try again.', icon: 'alert-circle-outline' });
       return;
     }
     setReportModalVisible(true);
@@ -720,7 +806,7 @@ export default function ChatScreen() {
 
   const conversationPane = (
     <>
-      {!loading && visibleMessages.length === 0 && (
+      {!loading && visibleMessages.length === 0 && !conversationHasMessages && (
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 60, alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
             No messages yet.{'\n'}Say hello! 👋
@@ -745,6 +831,17 @@ export default function ChatScreen() {
         keyboardDismissMode="interactive"
         onScroll={handleListScroll}
         scrollEventThrottle={16}
+        // When older messages page in at the top, keep whatever the user is
+        // currently looking at fixed in place instead of letting the list
+        // jump up by the height of the newly-prepended rows.
+        maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
+        ListHeaderComponent={
+          isLoadingOlder ? (
+            <View style={{ paddingVertical: 10, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={COLORS.textMuted} />
+            </View>
+          ) : null
+        }
         ListEmptyComponent={null}
         renderItem={({ item }) => item.type === 'date' ? (
           <View style={{ alignItems: 'center', marginVertical: 6 }}>
@@ -785,15 +882,27 @@ export default function ChatScreen() {
               // Throttle typing broadcasts to at most one every 2.5 s while
               // actively typing. Receivers auto-clear after 3 s so the cadence
               // keeps the indicator live without flooding the channel.
-              if (!v.trim() || !user || !liveChannelRef.current) return;
+              if (!v.trim() || !user || !typingChannelRef.current) return;
               const now = Date.now();
               if (now - lastTypingSentRef.current < 2500) return;
+              const ch = typingChannelRef.current;
+              // Gate on the channel's *current* state — the subscribe()
+              // callback only fires on transitions and may never fire if
+              // supabase-js dedupes against a topic the Messages tab joined
+              // first. Reading state synchronously is the only reliable check.
+              const chState = (ch as unknown as { state?: string }).state;
+              const isReady = chState === 'joined' || typingChannelReadyRef.current;
+              if (!isReady) return;
               lastTypingSentRef.current = now;
-              void liveChannelRef.current.send({
-                type: 'broadcast',
-                event: 'typing',
-                payload: { userId: user.id },
-              });
+              ch
+                .send({
+                  type: 'broadcast',
+                  event: 'typing',
+                  payload: { userId: user.id },
+                })
+                .catch((e: unknown) => {
+                  console.warn('[Chat] typing send failed', e);
+                });
             }}
             placeholder="Type a message…"
             placeholderTextColor={COLORS.textMuted}
@@ -820,19 +929,20 @@ export default function ChatScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
       {/*
-        Header stays absolute. Bottom inset = overlap between window bottom and keyboard top
-        (works with iOS animations; on Android with adjustResize, winH often already shrinks so
-        overlap ≈ 0 and we do not double-pad).
+        Universal cross-OEM keyboard handling. KeyboardAvoidingView from
+        react-native-keyboard-controller reads native window insets, so it
+        lifts the composer to exactly the right position on every device
+        (Samsung One UI, MIUI, ColorOS, iOS) — no per-OEM math.
+        `keyboardVerticalOffset` accounts for our absolutely-positioned
+        custom header so KAV doesn't try to lift content above the header.
       */}
-      <View
-        style={{
-          flex: 1,
-          marginTop: bodyTopInset,
-          paddingBottom: keyboardHeight,
-        }}
+      <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={bodyTopInset}
+        style={{ flex: 1, marginTop: bodyTopInset }}
       >
         <View style={{ flex: 1 }}>{conversationPane}</View>
-      </View>
+      </KeyboardAvoidingView>
 
       <View
         pointerEvents="box-none"

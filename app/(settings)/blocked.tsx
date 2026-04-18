@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -21,6 +22,59 @@ import { appDialog } from '@/lib/app-dialog';
 interface BlockedUser extends User {
   block_id: string;
 }
+
+const ROW_HEIGHT = 88; // 50 avatar + 14*2 padding + 10 marginBottom
+
+const BlockedRow = memo(function BlockedRow({
+  item,
+  onUnblock,
+}: {
+  item: BlockedUser;
+  onUnblock: (blockId: string, name: string) => void;
+}) {
+  const avatar =
+    item.avatar_url ||
+    (item.profile_photos ?? [])[0] ||
+    `${DEFAULT_AVATAR}${encodeURIComponent(item.full_name.charAt(0))}`;
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.white,
+        borderRadius: 14,
+        padding: 14,
+        marginBottom: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 1,
+      }}
+    >
+      <Image
+        source={{ uri: avatar }}
+        style={{ width: 50, height: 50, borderRadius: 25, marginRight: 12 }}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={120}
+        recyclingKey={item.id}
+      />
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.text }}>
+          {item.full_name}
+        </Text>
+        <Text style={{ fontSize: FONT.sm, color: COLORS.textSecondary }}>{item.country}</Text>
+      </View>
+      <Button
+        title="Unblock"
+        variant="outline"
+        size="sm"
+        onPress={() => onUnblock(item.block_id, item.full_name)}
+      />
+    </View>
+  );
+});
 
 export default function BlockedUsersScreen() {
   const { user } = useAuthStore();
@@ -82,6 +136,16 @@ export default function BlockedUsersScreen() {
     fetchBlockedUsers().finally(() => setIsLoading(false));
   }, [user, fetchBlockedUsers]);
 
+  const renderItem = useCallback(
+    ({ item }: { item: BlockedUser }) => <BlockedRow item={item} onUnblock={unblock} />,
+    [],
+  );
+  const keyExtractor = useCallback((item: BlockedUser) => item.id, []);
+  const getItemLayout = useCallback(
+    (_: any, index: number) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }),
+    [],
+  );
+
   const unblock = (blockId: string, name: string) => {
     appDialog({
       title: 'Unblock',
@@ -142,7 +206,13 @@ export default function BlockedUsersScreen() {
       ) : (
         <FlatList
           data={blockedUsers}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          getItemLayout={getItemLayout}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          windowSize={9}
+          removeClippedSubviews={Platform.OS === 'android'}
           contentContainerStyle={{ padding: 16 }}
           ListEmptyComponent={
             <EmptyState
@@ -151,47 +221,6 @@ export default function BlockedUsersScreen() {
               description="Users you block will appear here."
             />
           }
-          renderItem={({ item }) => {
-            const avatar =
-              item.avatar_url ||
-              (item.profile_photos ?? [])[0] ||
-              `${DEFAULT_AVATAR}${encodeURIComponent(item.full_name.charAt(0))}`;
-            return (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: COLORS.white,
-                  borderRadius: 14,
-                  padding: 14,
-                  marginBottom: 10,
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.05,
-                  shadowRadius: 4,
-                  elevation: 1,
-                }}
-              >
-                <Image
-                  source={{ uri: avatar }}
-                  style={{ width: 50, height: 50, borderRadius: 25, marginRight: 12 }}
-                  contentFit="cover"
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.text }}>
-                    {item.full_name}
-                  </Text>
-                  <Text style={{ fontSize: FONT.sm, color: COLORS.textSecondary }}>{item.country}</Text>
-                </View>
-                <Button
-                  title="Unblock"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => unblock(item.block_id, item.full_name)}
-                />
-              </View>
-            );
-          }}
         />
       )}
     </SafeAreaView>

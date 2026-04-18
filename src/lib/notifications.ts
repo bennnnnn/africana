@@ -129,20 +129,13 @@ export async function notifyUser(params: {
   extra?: Record<string, string>;
 }): Promise<void> {
   try {
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-    if (!supabaseUrl) return;
-
+    // Use functions.invoke so the SDK attaches BOTH the user JWT (Authorization)
+    // and the project apikey header — bare fetch was missing apikey, which is
+    // why every notify call was returning 401 at the gateway.
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
-    await fetch(`${supabaseUrl}/functions/v1/notify`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify(params),
-    });
+    await supabase.functions.invoke('notify', { body: params });
   } catch {
     // Non-critical — best effort
   }

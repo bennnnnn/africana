@@ -1,11 +1,14 @@
-import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef, memo } from 'react';
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
+  Pressable,
   RefreshControl,
   StyleSheet,
+  Animated,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -18,6 +21,9 @@ import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useChatStore } from '@/store/chat.store';
 import { useActivityStore } from '@/store/activity.store';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
+import { isUserEffectivelyOnline } from '@/lib/utils';
+import { SETTLE } from '@/lib/motion';
+import haptics from '@/lib/haptics';
 import { User } from '@/types';
 import { COLORS, FONT, DEFAULT_AVATAR } from '@/constants';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -28,19 +34,19 @@ type Tab = 'matches' | 'received' | 'viewers' | 'favourites';
 
 const PAGE_SIZE = 20;
 const LIST_STALE_MS = 15_000;
+const ROW_HEIGHT = 72;
 
 const TAB_ORDER: Tab[] = ['matches', 'received', 'viewers', 'favourites'];
 
 const TAB_META: Record<Tab, {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  subtitle: string;
+  iconActive: keyof typeof Ionicons.glyphMap;
 }> = {
-  matches:    { label: 'Matches', icon: 'flame', title: 'Your matches',  subtitle: 'People who liked you back.' },
-  received:   { label: 'Likes',   icon: 'heart', title: 'Likes for you', subtitle: 'Members who liked your profile.' },
-  viewers:    { label: 'Views',   icon: 'eye',   title: 'Profile views', subtitle: 'People who checked out your profile.' },
-  favourites: { label: 'Stars',   icon: 'star',  title: 'Starred you',   subtitle: 'Members who starred your profile.' },
+  matches:    { label: 'Matches', icon: 'flame-outline', iconActive: 'flame' },
+  received:   { label: 'Likes',   icon: 'heart-outline', iconActive: 'heart' },
+  viewers:    { label: 'Views',   icon: 'eye-outline',   iconActive: 'eye'   },
+  favourites: { label: 'Stars',   icon: 'star-outline',  iconActive: 'star'  },
 };
 
 async function fetchUsersForTab(
@@ -90,6 +96,83 @@ async function fetchUsersForTab(
   return nextList;
 }
 
+/**
+ * Row is hoisted + memoized so switching tabs (or live-refresh of one list)
+ * doesn't re-render rows whose underlying user data hasn't changed. The big
+ * win is on tab switch: previously the inline renderItem closure captured
+ * `activeTab` and `activeList`, so every row re-rendered on every tap.
+ */
+const LikesRow = memo(function LikesRow({
+  user: u,
+  isMutual,
+  showMessageButton,
+  onPress,
+  onMessagePress,
+}: {
+  user: User;
+  isMutual: boolean;
+  showMessageButton: boolean;
+  onPress: (u: User) => void;
+  onMessagePress: (id: string) => void;
+}) {
+  const avatar =
+    u.avatar_url ||
+    (u.profile_photos ?? [])[0] ||
+    `${DEFAULT_AVATAR}${encodeURIComponent((u.full_name ?? '?').charAt(0))}`;
+  const today = new Date();
+  const bday = u.birthdate ? new Date(u.birthdate) : null;
+  const age = bday
+    ? today.getFullYear() -
+      bday.getFullYear() -
+      (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
+    : null;
+  const location = [u.city, u.country].filter(Boolean).join(', ');
+  const isOnline = isUserEffectivelyOnline(u.online_status, u.last_seen);
+  return (
+    <TouchableOpacity
+      onPress={() => onPress(u)}
+      style={s.row}
+      activeOpacity={0.82}
+    >
+      <View style={s.avatarWrap}>
+        <Image source={{ uri: avatar }} style={s.avatar} contentFit="cover" cachePolicy="memory-disk" transition={120} recyclingKey={u.id} />
+        <View style={[s.onlineDot, { backgroundColor: isOnline ? COLORS.online : COLORS.offline }]} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={s.rowName} numberOfLines={1}>
+            {u.full_name}
+            {age ? `, ${age}` : ''}
+          </Text>
+          {isMutual ? <Text style={{ fontSize: 12 }}>🔥</Text> : null}
+        </View>
+        {location ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
+            <Ionicons name="location-outline" size={11} color={COLORS.textSecondary} />
+            <Text style={s.rowLoc} numberOfLines={1}>
+              {location}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      {showMessageButton ? (
+        <TouchableOpacity
+          onPress={(e) => {
+            e.stopPropagation();
+            onMessagePress(u.id);
+          }}
+          style={s.msgBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="chatbubble-ellipses" size={20} color={COLORS.primary} />
+        </TouchableOpacity>
+      ) : (
+        <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+      )}
+    </TouchableOpacity>
+  );
+});
+
 export default function LikesScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 56 + insets.bottom;
@@ -131,7 +214,7 @@ export default function LikesScreen() {
   });
   const fetchActivityCountsRef = useRef<() => Promise<Record<Tab, number> | null>>(async () => null);
 
-  const profileSelect = 'id, full_name, birthdate, city, country, avatar_url, profile_photos, online_status';
+  const profileSelect = 'id, full_name, birthdate, city, country, avatar_url, profile_photos, online_status, last_seen';
 
   const fetchBlockedSet = useCallback(async (force = false) => {
     if (!user) return new Set<string>();
@@ -238,9 +321,18 @@ export default function LikesScreen() {
         );
       }
       if (cancelled) return;
-      // Only load the tab the user actually sees. Other tabs load lazily
-      // when they're tapped — huge win when the user only checks one.
+      // Load the tab the user actually sees first, then warm the rest in the
+      // background after interactions settle. Switching tabs after the warm-up
+      // feels instant since the lists are already in memory.
       await loadTabRef.current(activeTab, true);
+      if (cancelled) return;
+      InteractionManager.runAfterInteractions(() => {
+        if (cancelled) return;
+        for (const t of TAB_ORDER) {
+          if (t === activeTab) continue;
+          void loadTabRef.current(t, false);
+        }
+      });
     })();
 
     return () => {
@@ -321,15 +413,27 @@ export default function LikesScreen() {
     setRefreshing(false);
   };
 
-  const handleMessage = async (toUserId: string) => {
+  const handleMessage = useCallback(async (toUserId: string) => {
     if (!user) return;
     const convId = await getOrCreateConversation(user.id, toUserId);
     if (convId) {
       router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: toUserId } });
     }
-  };
+  }, [user, getOrCreateConversation]);
+
+  // Drives the sliding indicator under the tab strip. We measure the strip
+  // once and animate `translateX` between four equal segments — much smoother
+  // than swapping background colors on the icon circles.
+  const [tabStripWidth, setTabStripWidth] = useState(0);
+  const indicatorAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const idx = TAB_ORDER.indexOf(activeTab);
+    Animated.spring(indicatorAnim, { toValue: idx, ...SETTLE }).start();
+  }, [activeTab, indicatorAnim]);
 
   const handleTabPress = (t: Tab) => {
+    if (t === activeTab) return;
+    haptics.tapLight();
     setActiveTab(t);
     if ((counts[t] ?? 0) > 0) {
       void markTabSeen(t);
@@ -337,6 +441,25 @@ export default function LikesScreen() {
     // Fetch on first visit (or if stale). No-op when cached and fresh.
     void loadTabRef.current(t, false);
   };
+
+  // Mirror lists into a ref so handleRowPress / handleMessage keep a stable
+  // identity — otherwise the memoized LikesRow re-renders every time any tab
+  // refreshes, even ones the user isn't looking at.
+  const listsRef = useRef(lists);
+  useEffect(() => { listsRef.current = lists; }, [lists]);
+
+  const handleRowPress = useCallback((u: User) => {
+    setProfileSeed(u);
+    const list = listsRef.current[activeTabRef.current] ?? [];
+    useProfileBrowseStore.getState().setOrderedUserIds(list.map((x) => x.id));
+    router.push(`/(profile)/${u.id}`);
+  }, []);
+
+  const handleMessageStable = useCallback((toUserId: string) => {
+    void handleMessage(toUserId);
+  }, [handleMessage]);
+
+
 
   const matchIds = useMemo(() => new Set((lists.matches ?? []).map((item) => item.id)), [lists.matches]);
 
@@ -365,57 +488,93 @@ export default function LikesScreen() {
     },
   };
 
+  const showMessageButton = activeTab === 'matches';
+  const segmentWidth = tabStripWidth > 0 ? tabStripWidth / TAB_ORDER.length : 0;
+
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.surface }}>
       <View style={s.header}>
-        <ScreenTitle>{TAB_META[activeTab].title}</ScreenTitle>
-        <Text style={s.subtitle}>{TAB_META[activeTab].subtitle}</Text>
+        <ScreenTitle>Activity</ScreenTitle>
       </View>
 
-      <View style={s.tabsWrap}>
+      <View
+        style={s.tabsWrap}
+        onLayout={(e) => {
+          const w = e.nativeEvent.layout.width;
+          if (w > 0 && Math.abs(w - tabStripWidth) > 0.5) setTabStripWidth(w);
+        }}
+      >
+        {segmentWidth > 0 ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              s.tabIndicator,
+              {
+                width: segmentWidth - 16,
+                transform: [
+                  {
+                    translateX: indicatorAnim.interpolate({
+                      inputRange: [0, TAB_ORDER.length - 1],
+                      outputRange: [8, 8 + segmentWidth * (TAB_ORDER.length - 1)],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        ) : null}
         {TAB_ORDER.map((t) => {
           const isActive = activeTab === t;
           const meta = TAB_META[t];
           const c = counts[t] ?? 0;
           return (
-            <TouchableOpacity
+            <Pressable
               key={t}
               onPress={() => handleTabPress(t)}
-              activeOpacity={0.75}
               style={s.tabItem}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              accessibilityLabel={`${meta.label}${c > 0 ? `, ${c} new` : ''}`}
             >
-              <View style={[s.tabIconCircle, isActive && s.tabIconCircleActive]}>
+              <View style={s.tabIconRow}>
                 <Ionicons
-                  name={meta.icon}
-                  size={18}
+                  name={isActive ? meta.iconActive : meta.icon}
+                  size={16}
                   color={isActive ? COLORS.white : COLORS.textSecondary}
                 />
+                <Text
+                  style={[s.tabLabel, isActive && s.tabLabelActive]}
+                  numberOfLines={1}
+                >
+                  {meta.label}
+                </Text>
                 {c > 0 ? (
-                  <View style={s.tabBadge}>
-                    <Text style={s.tabBadgeTxt}>{c > 99 ? '99+' : c}</Text>
+                  <View style={[s.tabBadge, isActive && s.tabBadgeActive]}>
+                    <Text style={[s.tabBadgeTxt, isActive && s.tabBadgeTxtActive]}>
+                      {c > 99 ? '99+' : c}
+                    </Text>
                   </View>
                 ) : null}
               </View>
-              <Text
-                style={[s.tabLabel, isActive && s.tabLabelActive]}
-                numberOfLines={1}
-              >
-                {meta.label}
-              </Text>
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </View>
 
       <FlatList
         data={activeList}
-        keyExtractor={(u) => `${activeTab}-${u.id}`}
+        keyExtractor={keyExtractor}
         contentContainerStyle={{ paddingBottom: tabBarHeight + 16, flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
+        getItemLayout={getItemLayout}
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        removeClippedSubviews
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
         }
-        ItemSeparatorComponent={() => <View style={s.sep} />}
+        ItemSeparatorComponent={ItemSeparator}
         ListEmptyComponent={
           !loadedTabs.has(activeTab) && !refreshing ? (
             <View style={{ paddingTop: 8 }}>
@@ -431,130 +590,75 @@ export default function LikesScreen() {
             />
           )
         }
-        renderItem={({ item: u }) => {
-          const isMutual = activeTab !== 'matches' && matchIds.has(u.id);
-          const avatar =
-            u.avatar_url ||
-            (u.profile_photos ?? [])[0] ||
-            `${DEFAULT_AVATAR}${encodeURIComponent((u.full_name ?? '?').charAt(0))}`;
-          const today = new Date();
-          const bday = u.birthdate ? new Date(u.birthdate) : null;
-          const age = bday
-            ? today.getFullYear() -
-              bday.getFullYear() -
-              (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
-            : null;
-          const location = [u.city, u.country].filter(Boolean).join(', ');
-          const isOnline = u.online_status === 'online';
-          return (
-            <TouchableOpacity
-              onPress={() => {
-                setProfileSeed(u);
-                useProfileBrowseStore.getState().setOrderedUserIds(activeList.map((x) => x.id));
-                router.push(`/(profile)/${u.id}`);
-              }}
-              style={s.row}
-              activeOpacity={0.82}
-            >
-              <View style={s.avatarWrap}>
-                <Image source={{ uri: avatar }} style={s.avatar} contentFit="cover" />
-                <View style={[s.onlineDot, { backgroundColor: isOnline ? COLORS.online : COLORS.offline }]} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={s.rowName} numberOfLines={1}>
-                    {u.full_name}
-                    {age ? `, ${age}` : ''}
-                  </Text>
-                  {isMutual ? <Text style={{ fontSize: 12 }}>🔥</Text> : null}
-                </View>
-                {location ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
-                    <Ionicons name="location-outline" size={11} color={COLORS.textSecondary} />
-                    <Text style={s.rowLoc} numberOfLines={1}>
-                      {location}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-              {activeTab === 'matches' ? (
-                <TouchableOpacity
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handleMessage(u.id);
-                  }}
-                  style={s.msgBtn}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="chatbubble-ellipses" size={20} color={COLORS.primary} />
-                </TouchableOpacity>
-              ) : (
-                <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
-              )}
-            </TouchableOpacity>
-          );
-        }}
+        renderItem={({ item: u }) => (
+          <LikesRow
+            user={u}
+            isMutual={activeTab !== 'matches' && matchIds.has(u.id)}
+            showMessageButton={showMessageButton}
+            onPress={handleRowPress}
+            onMessagePress={handleMessageStable}
+          />
+        )}
       />
     </SafeAreaView>
   );
 }
 
+const keyExtractor = (u: User) => u.id;
+const getItemLayout = (_: ArrayLike<User> | null | undefined, index: number) => ({
+  length: ROW_HEIGHT,
+  offset: ROW_HEIGHT * index,
+  index,
+});
+const ItemSeparator = () => <View style={s.sep} />;
+
 const s = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
     paddingTop: 14,
-    paddingBottom: 10,
+    paddingBottom: 6,
     backgroundColor: COLORS.white,
-  },
-  subtitle: {
-    fontSize: FONT.sm,
-    color: COLORS.textSecondary,
-    lineHeight: 18,
-    marginTop: 2,
   },
   tabsWrap: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: COLORS.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: COLORS.border,
-    paddingHorizontal: 6,
+    paddingHorizontal: 0,
     paddingTop: 4,
     paddingBottom: 10,
+    position: 'relative',
+  },
+  tabIndicator: {
+    position: 'absolute',
+    top: 4,
+    left: 0,
+    bottom: 10,
+    backgroundColor: COLORS.primary,
+    borderRadius: 999,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingVertical: 6,
-    gap: 4,
+    justifyContent: 'center',
+    paddingVertical: 8,
   },
-  tabIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.savanna,
+  tabIconRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tabIconCircleActive: {
-    backgroundColor: COLORS.primary,
+    gap: 6,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: FONT.semibold,
     color: COLORS.textSecondary,
     letterSpacing: 0.1,
   },
   tabLabelActive: {
-    color: COLORS.primary,
+    color: COLORS.white,
     fontWeight: FONT.extrabold,
   },
   tabBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -6,
     minWidth: 18,
     height: 18,
     borderRadius: 9,
@@ -562,19 +666,24 @@ const s = StyleSheet.create({
     paddingHorizontal: 5,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.white,
+    marginLeft: 2,
+  },
+  tabBadgeActive: {
+    backgroundColor: COLORS.white,
   },
   tabBadgeTxt: {
     fontSize: 10,
     fontWeight: FONT.extrabold,
     color: COLORS.white,
   },
+  tabBadgeTxtActive: {
+    color: COLORS.primary,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: ROW_HEIGHT,
     paddingHorizontal: 16,
-    paddingVertical: 12,
     backgroundColor: COLORS.white,
     gap: 12,
   },

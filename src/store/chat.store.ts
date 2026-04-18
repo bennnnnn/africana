@@ -18,6 +18,27 @@ import { track, EVENTS } from '@/lib/analytics';
 /** Parallel callers await the same in-flight work (tab layout + messages tab + focus). */
 const fetchConversationsPending = new Map<string, Promise<void>>();
 const fetchMessagesPending = new Map<string, Promise<void>>();
+const loadOlderPending = new Map<string, Promise<void>>();
+
+/**
+ * How many messages we pull per page from the server. The chat screen never
+ * needs more than this on first paint — anything older is fetched on demand
+ * when the user scrolls toward the top of the thread.
+ */
+export const MESSAGE_PAGE_SIZE = 50;
+
+/**
+ * Cap on how many messages we persist to SQLite per conversation. Keeps the
+ * cache file small for very long threads while still giving us a generous
+ * offline window.
+ */
+export const MESSAGE_CACHE_LIMIT = 200;
+
+function tailForCache(messages: Message[]): Message[] {
+  return messages.length > MESSAGE_CACHE_LIMIT
+    ? messages.slice(messages.length - MESSAGE_CACHE_LIMIT)
+    : messages;
+}
 
 /** Shown to the sender when the recipient has turned off receiving messages. */
 export const ERROR_RECIPIENT_MESSAGES_DISABLED =
@@ -66,20 +87,28 @@ function mapMessagesInsertError(err: { message?: string; code?: string; details?
 interface ChatState {
   conversations: Conversation[];
   messages: Record<string, Message[]>;
+  /** True while we still believe there are older messages on the server. */
+  hasMoreMessages: Record<string, boolean>;
+  /** True while a `loadOlderMessages` request is in flight for this conversation. */
+  loadingOlderMessages: Record<string, boolean>;
   isLoading: boolean;
   fetchConversations: (userId: string) => Promise<void>;
   fetchMessages: (conversationId: string) => Promise<void>;
+  loadOlderMessages: (conversationId: string) => Promise<void>;
   sendMessage: (conversationId: string, senderId: string, content: string, senderName?: string) => Promise<{ error: string | null }>;
   deleteMessage: (conversationId: string, messageId: string) => Promise<void>;
   deleteConversation: (conversationId: string) => Promise<void>;
   getOrCreateConversation: (userId: string, otherUserId: string) => Promise<string | null>;
   markMessagesRead: (conversationId: string, userId: string) => Promise<void>;
   addMessage: (conversationId: string, message: Message) => void;
+  applyMessageUpdate: (conversationId: string, message: Message) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   messages: {},
+  hasMoreMessages: {},
+  loadingOlderMessages: {},
   isLoading: false,
 
   fetchConversations: async (userId) => {
@@ -151,6 +180,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
           } catch (e) {
             console.warn('[chat-cache] replaceCachedConversations failed:', e);
           }
+
+          // Pre-warm the per-conversation message cache in the background so
+          // tapping into a thread paints instantly instead of waiting for the
+          // SQLite read + network round-trip to finish from a cold state.
+          // Skip threads we already have in memory (don't overwrite fresher
+          // data), and run inside requestIdleCallback-equivalent so it never
+          // competes with the conversations list paint.
+          const idsNeedingWarmup = conversationIds.filter(
+            (id) => (get().messages[id]?.length ?? 0) === 0,
+          );
+          if (idsNeedingWarmup.length > 0) {
+            void (async () => {
+              for (const id of idsNeedingWarmup) {
+                try {
+                  const cached = await getCachedMessages(id);
+                  if (cached.length === 0) continue;
+                  if ((get().messages[id]?.length ?? 0) > 0) continue;
+                  set((state) => ({
+                    messages: { ...state.messages, [id]: cached },
+                  }));
+                } catch {
+                  // best-effort; tapping in will fall back to the cold path
+                }
+              }
+            })();
+          }
         }
       } finally {
         set({ isLoading: false });
@@ -190,11 +245,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
             return cached;
           });
 
+      // Pull only the most recent page from the server. For long-running
+      // threads this used to download the entire history (could be thousands
+      // of rows) on every chat open; now it's a fixed-size, fast query and
+      // older messages page in on scroll.
       const { data, error } = await supabase
         .from('messages')
         .select('*')
         .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(MESSAGE_PAGE_SIZE);
 
       // Make sure the cache-seed task has finished before returning, so a
       // short-lived offline start still shows cached messages.
@@ -210,12 +270,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return;
       }
       if (data !== null && data !== undefined) {
-        const rows = data as Message[];
+        // Server returned newest→oldest; flip back to chronological for the UI.
+        const rows = (data as Message[]).slice().reverse();
+        const hasMore = (data as Message[]).length === MESSAGE_PAGE_SIZE;
+
+        // Preserve any optimistic messages that are newer than the page we
+        // just fetched (e.g. a temp-id message the user sent while offline).
+        const previous = get().messages[conversationId] ?? [];
+        const newestServerTs = rows.length > 0 ? rows[rows.length - 1].created_at : null;
+        const trailingOptimistic = previous.filter(
+          (m) =>
+            m.id.startsWith('temp-') &&
+            (!newestServerTs || m.created_at > newestServerTs),
+        );
+        const merged = trailingOptimistic.length > 0 ? [...rows, ...trailingOptimistic] : rows;
+
         set((state) => ({
-          messages: { ...state.messages, [conversationId]: rows },
+          messages: { ...state.messages, [conversationId]: merged },
+          hasMoreMessages: { ...state.hasMoreMessages, [conversationId]: hasMore },
         }));
         try {
-          await replaceCachedMessages(conversationId, rows);
+          await replaceCachedMessages(conversationId, tailForCache(merged));
         } catch (e) {
           console.warn('[chat-cache] fetchMessages persist failed:', e);
         }
@@ -228,6 +303,77 @@ export const useChatStore = create<ChatState>((set, get) => ({
       await p;
     } finally {
       if (fetchMessagesPending.get(conversationId) === p) fetchMessagesPending.delete(conversationId);
+    }
+  },
+
+  loadOlderMessages: async (conversationId) => {
+    if (!conversationId) return;
+    const existing = loadOlderPending.get(conversationId);
+    if (existing) {
+      await existing;
+      return;
+    }
+    if (get().hasMoreMessages[conversationId] === false) return;
+
+    const current = get().messages[conversationId] ?? [];
+    // Anchor on the oldest non-optimistic message — temp ids don't have a
+    // real server timestamp we can compare against.
+    const oldestReal = current.find((m) => !m.id.startsWith('temp-'));
+    if (!oldestReal) return;
+
+    const run = async () => {
+      set((state) => ({
+        loadingOlderMessages: { ...state.loadingOlderMessages, [conversationId]: true },
+      }));
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', conversationId)
+          .lt('created_at', oldestReal.created_at)
+          .order('created_at', { ascending: false })
+          .limit(MESSAGE_PAGE_SIZE);
+
+        if (error) {
+          console.error('[loadOlderMessages]', conversationId, error.message);
+          return;
+        }
+        const older = ((data ?? []) as Message[]).slice().reverse();
+        const hasMore = (data ?? []).length === MESSAGE_PAGE_SIZE;
+
+        if (older.length === 0) {
+          set((state) => ({
+            hasMoreMessages: { ...state.hasMoreMessages, [conversationId]: false },
+          }));
+          return;
+        }
+
+        const existingIds = new Set(current.map((m) => m.id));
+        const deduped = older.filter((m) => !existingIds.has(m.id));
+        const next = [...deduped, ...(get().messages[conversationId] ?? [])];
+
+        set((state) => ({
+          messages: { ...state.messages, [conversationId]: next },
+          hasMoreMessages: { ...state.hasMoreMessages, [conversationId]: hasMore },
+        }));
+        try {
+          await replaceCachedMessages(conversationId, tailForCache(next));
+        } catch (e) {
+          console.warn('[chat-cache] loadOlderMessages persist failed:', e);
+        }
+      } finally {
+        set((state) => ({
+          loadingOlderMessages: { ...state.loadingOlderMessages, [conversationId]: false },
+        }));
+      }
+    };
+
+    const p = run();
+    loadOlderPending.set(conversationId, p);
+    try {
+      await p;
+    } finally {
+      if (loadOlderPending.get(conversationId) === p) loadOlderPending.delete(conversationId);
     }
   },
 
@@ -308,7 +454,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           : c
       ),
     }));
-    enqueueReplaceCachedMessages(conversationId, get().messages[conversationId] ?? []);
+    enqueueReplaceCachedMessages(conversationId, tailForCache(get().messages[conversationId] ?? []));
 
     const { data, error } = await supabase
       .from('messages')
@@ -327,7 +473,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
       enqueueReplaceCachedMessages(
         conversationId,
-        (get().messages[conversationId] ?? []).filter((m) => m.id !== tempId),
+        tailForCache((get().messages[conversationId] ?? []).filter((m) => m.id !== tempId)),
       );
       const mapped = mapMessagesInsertError(error);
       if (mapped) {
@@ -348,7 +494,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       },
     }));
-    enqueueReplaceCachedMessages(conversationId, get().messages[conversationId] ?? []);
+    enqueueReplaceCachedMessages(conversationId, tailForCache(get().messages[conversationId] ?? []));
 
     // Update conversation last_message (participants can update — see migration)
     const { error: convErr } = await supabase
@@ -415,7 +561,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
     enqueueReplaceCachedMessages(
       conversationId,
-      (get().messages[conversationId] ?? []).filter((m) => m.id !== messageId),
+      tailForCache((get().messages[conversationId] ?? []).filter((m) => m.id !== messageId)),
     );
     await supabase.from('messages').delete().eq('id', messageId);
   },
@@ -437,7 +583,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       },
     }));
-    enqueueReplaceCachedMessages(conversationId, get().messages[conversationId] ?? []);
+    enqueueReplaceCachedMessages(conversationId, tailForCache(get().messages[conversationId] ?? []));
     // Persist the zeroed unread count so a cold start doesn't revive the badge
     // from a stale cached snapshot before the live fetch lands.
     try {
@@ -464,6 +610,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       };
     });
+  },
+
+  // Patches an existing cached message in place. Used by the realtime UPDATE
+  // listener so that read-receipts (read_at) and edits flip without a full
+  // re-fetch — that's why "Seen" used to only appear after closing/reopening
+  // the conversation.
+  applyMessageUpdate: (conversationId, message) => {
+    set((state) => {
+      const list = state.messages[conversationId];
+      if (!list || list.length === 0) return state;
+      let changed = false;
+      const next = list.map((m) => {
+        if (m.id !== message.id) return m;
+        if (m.read_at === message.read_at && m.content === message.content) return m;
+        changed = true;
+        return { ...m, ...message };
+      });
+      if (!changed) return state;
+      return {
+        messages: {
+          ...state.messages,
+          [conversationId]: next,
+        },
+      };
+    });
+    enqueueReplaceCachedMessages(
+      conversationId,
+      tailForCache(get().messages[conversationId] ?? []),
+    );
   },
 }));
 

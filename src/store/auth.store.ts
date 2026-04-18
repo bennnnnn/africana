@@ -68,9 +68,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       void supabase.from('profiles').update({ interested_in }).eq('id', userId);
     }
 
+    // Email is no longer stored on public.profiles (it would leak via the
+    // permissive SELECT policy). Pull it from the active session instead.
+    const sessionEmail = get().session?.user?.email ?? null;
+
     set({
       user: {
         ...data,
+        email: sessionEmail,
         interested_in,
         age,
         profile_photos: data.profile_photos ?? [],

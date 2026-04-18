@@ -11,6 +11,7 @@ import { COLORS } from '@/constants';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useActivityStore, selectLikesTabBadge } from '@/store/activity.store';
 import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
+import haptics from '@/lib/haptics';
 
 function TabIcon({
   name,
@@ -182,6 +183,12 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      screenListeners={{
+        // Same gentle thump as the segmented tabs in Likes — fires on every
+        // bottom-bar press, including re-tap of the active tab. Cheap and
+        // makes the whole app feel a touch more responsive.
+        tabPress: () => haptics.tapLight(),
+      }}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: COLORS.primary,

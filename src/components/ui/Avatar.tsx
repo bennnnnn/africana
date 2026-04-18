@@ -29,7 +29,9 @@ export function Avatar({ uri, name = '?', size = 48, onlineStatus, showStatus = 
           backgroundColor: COLORS.savanna,
         }}
         contentFit="cover"
-        transition={200}
+        transition={120}
+        cachePolicy="memory-disk"
+        recyclingKey={avatarUri}
       />
       {showStatus && onlineStatus && (
         <View

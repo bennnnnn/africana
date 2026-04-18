@@ -27,7 +27,12 @@ export type OriginLocationFields = {
 
 export interface User extends OriginLocationFields {
   id: string;
-  email: string;
+  /**
+   * Email is sourced from auth.users (session.user.email), not stored on
+   * public.profiles. Optional here because fetchProfile() enriches it from
+   * the active session — code paths that read it before sign-in won't have it.
+   */
+  email?: string | null;
   full_name: string;
   username: string;
   bio: string | null;

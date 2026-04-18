@@ -1,10 +1,16 @@
 import React, { useEffect, useRef } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, InteractionManager } from 'react-native';
 import { registerForPushNotifications } from '@/lib/notifications';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+// Native keyboard inset provider. This is the only reliable way to handle
+// keyboard insets on Android edge-to-edge across OEMs (Samsung, MIUI,
+// ColorOS, etc.) — it reads insets from `WindowInsetsCompat` natively
+// instead of guessing them from JS-side keyboard events. Bundled in Expo
+// Go SDK 54+, so no dev build required.
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -37,12 +43,49 @@ async function setOnlineStatus(userId: string, status: 'online' | 'offline') {
     .eq('id', userId);
 }
 
+/** Refresh just `last_seen` so other clients can tell we're still here. */
+async function pingLastSeen(userId: string) {
+  await supabase
+    .from('profiles')
+    .update({ last_seen: new Date().toISOString() })
+    .eq('id', userId);
+}
+
+/**
+ * Heartbeat interval. The freshness window in `src/lib/utils.ts` is set to
+ * 3 minutes, so 60 s gives us two missed pings of grace before another
+ * client decides we're offline.
+ */
+const ONLINE_HEARTBEAT_MS = 60 * 1000;
+
 export default function RootLayout() {
   const { setSession, fetchProfile, fetchSettings, setInitialized } = useAuthStore();
   const router = useRouter();
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const notifResponseSub = useRef<any>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [fontsLoaded] = useFonts({ DMSerifDisplay_400Regular });
+
+  /**
+   * Keep the per-minute "I'm still here" heartbeat alive while the app is in
+   * the foreground. Without this, presence relies entirely on the boot-time
+   * UPDATE — and that's exactly why other users were showing as online even
+   * when they were clearly offline (force-quit, crash, network drop, OS
+   * termination, etc. all skip the AppState→background transition).
+   */
+  const startHeartbeat = (userId: string) => {
+    if (heartbeatRef.current) return;
+    heartbeatRef.current = setInterval(() => {
+      void pingLastSeen(userId).catch(() => {});
+    }, ONLINE_HEARTBEAT_MS);
+  };
+
+  const stopHeartbeat = () => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+  };
 
   useEffect(() => {
     // Rehydrate the profile-seed cache from disk so opening a profile after a
@@ -66,12 +109,19 @@ export default function RootLayout() {
         try {
           setSession(session);
           if (session?.user?.id) {
+            // Critical-path: profile + settings must land before we route the
+            // user. Everything else (presence, push, analytics) is deferred
+            // until after the first frame so the splash hides on time.
             await fetchProfile(session.user.id);
             await fetchSettings(session.user.id);
-            await setOnlineStatus(session.user.id, 'online');
+            const uid = session.user.id;
             useAuthStore.getState().patchUser({ online_status: 'online' });
-            registerForPushNotifications(session.user.id);
-            identify(session.user.id);
+            InteractionManager.runAfterInteractions(() => {
+              void setOnlineStatus(uid, 'online').catch(() => {});
+              startHeartbeat(uid);
+              registerForPushNotifications(uid);
+              identify(uid);
+            });
           }
         } catch (e) {
           console.error('Auth bootstrap error', e);
@@ -107,7 +157,9 @@ export default function RootLayout() {
           if (nextState === 'active' && prev !== 'active') {
             void setOnlineStatus(session.user.id, 'online').catch((e) => console.error('setOnlineStatus', e));
             useAuthStore.getState().patchUser({ online_status: 'online' });
+            startHeartbeat(session.user.id);
           } else if (nextState === 'background' || nextState === 'inactive') {
+            stopHeartbeat();
             void setOnlineStatus(session.user.id, 'offline').catch((e) => console.error('setOnlineStatus', e));
             useAuthStore.getState().patchUser({ online_status: 'offline' });
           }
@@ -118,14 +170,21 @@ export default function RootLayout() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       if (session?.user?.id) {
-        void fetchProfile(session.user.id).catch((e) => console.error('fetchProfile (auth change)', e));
-        void fetchSettings(session.user.id).catch((e) => console.error('fetchSettings (auth change)', e));
-        registerForPushNotifications(session.user.id);
-        identify(session.user.id);
-        if (event === 'SIGNED_IN') track(EVENTS.AUTH_LOGIN);
+        const uid = session.user.id;
+        void fetchProfile(uid).catch((e) => console.error('fetchProfile (auth change)', e));
+        void fetchSettings(uid).catch((e) => console.error('fetchSettings (auth change)', e));
+        InteractionManager.runAfterInteractions(() => {
+          registerForPushNotifications(uid);
+          identify(uid);
+        });
+        if (event === 'SIGNED_IN') {
+          track(EVENTS.AUTH_LOGIN);
+          startHeartbeat(uid);
+        }
       } else if (event === 'SIGNED_OUT') {
         track(EVENTS.AUTH_SIGNOUT);
         resetAnalytics();
+        stopHeartbeat();
         void clearProfileSeedCache().catch(() => {});
         // Only redirect on explicit sign-out, not on initial load
         router.replace('/(auth)/welcome');
@@ -174,6 +233,7 @@ export default function RootLayout() {
       linkSub.remove();
       appStateSub.remove();
       notifResponseSub.current?.remove();
+      stopHeartbeat();
     };
   }, []);
 
@@ -185,6 +245,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <KeyboardProvider>
       <SafeAreaProvider>
         <ThemeProvider>
           <DialogProvider>
@@ -205,6 +266,7 @@ export default function RootLayout() {
           </DialogProvider>
         </ThemeProvider>
       </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

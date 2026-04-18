@@ -1,10 +1,9 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback, memo } from 'react';
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
   TextInput,
   StyleSheet,
@@ -16,18 +15,122 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ScreenTitle } from '@/components/ui/ScreenTitle';
 import { SkeletonRow } from '@/components/ui/Skeleton';
+import { Conversation } from '@/types';
 import { COLORS, RADIUS, FONT } from '@/constants';
 import haptics from '@/lib/haptics';
+import { isUserEffectivelyOnline } from '@/lib/utils';
 import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
 
-dayjs.extend(relativeTime);
+const ROW_HEIGHT = 76;
+const TYPING_TTL_MS = 3500;
+/** Cap how many conversations we open realtime channels on for typing. */
+const MAX_TYPING_SUBSCRIPTIONS = 30;
+
+/**
+ * Compact time labels for the conversation list.
+ *  < 60 s   → "now"
+ *  < 60 m   → "5m"
+ *  < 24 h   → "3h"
+ *  yesterday → "Yesterday"
+ *  < 7 days → weekday "Tue"
+ *  else     → "Mar 21"
+ */
+function formatConversationTime(iso: string): string {
+  const then = dayjs(iso);
+  if (!then.isValid()) return '';
+  const now = dayjs();
+  const diffSec = now.diff(then, 'second');
+  if (diffSec < 60) return 'now';
+  const diffMin = now.diff(then, 'minute');
+  if (diffMin < 60) return `${diffMin}m`;
+  if (now.isSame(then, 'day')) return `${now.diff(then, 'hour')}h`;
+  if (now.subtract(1, 'day').isSame(then, 'day')) return 'Yesterday';
+  if (now.diff(then, 'day') < 7) return then.format('ddd');
+  if (now.isSame(then, 'year')) return then.format('MMM D');
+  return then.format('MMM D, YY');
+}
+
+/**
+ * Hoisted + memoized to avoid re-rendering every row when typing state, the
+ * search query, or any conversation's last_message changes for an unrelated
+ * row. Without this, a single incoming message would re-render the entire
+ * inbox.
+ */
+const ConversationRow = memo(function ConversationRow({
+  item,
+  isTyping,
+  onPress,
+  onLongPress,
+}: {
+  item: Conversation;
+  isTyping: boolean;
+  onPress: (item: Conversation) => void;
+  onLongPress: (item: Conversation) => void;
+}) {
+  const other = item.other_user;
+  const hasUnread = (item.unread_count ?? 0) > 0;
+  const timeLabel = item.last_message_at ? formatConversationTime(item.last_message_at) : '';
+  return (
+    <TouchableOpacity
+      onPress={() => onPress(item)}
+      onLongPress={() => onLongPress(item)}
+      delayLongPress={500}
+      style={[s.row, hasUnread && s.rowUnread]}
+      activeOpacity={0.65}
+    >
+      <Avatar
+        uri={other?.avatar_url}
+        name={other?.full_name ?? '?'}
+        size={52}
+        onlineStatus={
+          isUserEffectivelyOnline(other?.online_status, other?.last_seen)
+            ? 'online'
+            : 'offline'
+        }
+        showStatus
+      />
+
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <View style={s.cardTop}>
+          <Text style={[s.cardName, hasUnread && s.cardNameUnread]} numberOfLines={1}>
+            {other?.full_name ?? 'Unknown'}
+          </Text>
+          {timeLabel ? (
+            <Text style={[s.cardTime, hasUnread && s.cardTimeUnread]}>{timeLabel}</Text>
+          ) : null}
+        </View>
+        <View style={s.cardBottom}>
+          {isTyping ? (
+            <Text style={s.cardTyping} numberOfLines={1}>
+              Typing…
+            </Text>
+          ) : (
+            <Text
+              style={[s.cardPreview, hasUnread && s.cardPreviewUnread]}
+              numberOfLines={1}
+            >
+              {item.last_message ?? 'Start a conversation'}
+            </Text>
+          )}
+          {hasUnread ? (
+            <View style={s.badge}>
+              <Text style={s.badgeText}>
+                {(item.unread_count ?? 0) > 99 ? '99+' : item.unread_count}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
@@ -38,6 +141,15 @@ export default function MessagesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  // ── Live typing indicator: subscribe to each visible conversation's
+  // dedicated `chat-typing:${convId}` broadcast channel. We deliberately do
+  // NOT subscribe to `chat-live:${convId}` here because that topic carries
+  // postgres_changes for the chat screen — supabase-js dedupes channels by
+  // topic and would refuse to add postgres_changes callbacks if the inbox
+  // subscribed first. Cap to MAX_TYPING_SUBSCRIPTIONS for bounded fan-out.
+  const [typingMap, setTypingMap] = useState<Record<string, true>>({});
+  const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Re-fetch when app returns from background — catches messages missed while suspended
   useEffect(() => {
@@ -58,59 +170,151 @@ export default function MessagesScreen() {
     }, [fetchConversations, user?.id]),
   );
 
-  const handleRefresh = async () => {
+  /** Stable signature of the visible conversation IDs — only changes when a
+   *  conversation is added, removed, or reordered, NOT when last_message updates.
+   *  Prevents resubscribing the typing channels on every incoming message. */
+  const subscribedConvIds = useMemo(() => {
+    return conversations.slice(0, MAX_TYPING_SUBSCRIPTIONS).map((c) => c.id);
+  }, [conversations]);
+  const subscribedConvIdsKey = useMemo(() => subscribedConvIds.join(','), [subscribedConvIds]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user || subscribedConvIds.length === 0) return;
+
+      const channels = subscribedConvIds.map((convId) =>
+        supabase
+          .channel(`chat-typing:${convId}`)
+          .on('broadcast', { event: 'typing' }, (payload) => {
+            const senderId = (payload.payload as { userId?: string } | undefined)?.userId;
+            if (!senderId || senderId === user.id) return;
+            setTypingMap((prev) => (prev[convId] ? prev : { ...prev, [convId]: true }));
+            const existing = typingTimersRef.current.get(convId);
+            if (existing) clearTimeout(existing);
+            const t = setTimeout(() => {
+              setTypingMap((prev) => {
+                if (!prev[convId]) return prev;
+                const { [convId]: _omit, ...rest } = prev;
+                return rest;
+              });
+              typingTimersRef.current.delete(convId);
+            }, TYPING_TTL_MS);
+            typingTimersRef.current.set(convId, t);
+          })
+          .subscribe(),
+      );
+
+      return () => {
+        typingTimersRef.current.forEach((t) => clearTimeout(t));
+        typingTimersRef.current.clear();
+        for (const ch of channels) supabase.removeChannel(ch);
+        setTypingMap({});
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id, subscribedConvIdsKey]),
+  );
+
+  const handleRefresh = useCallback(async () => {
     if (!user) return;
     setRefreshing(true);
     await fetchConversations(user.id);
     setRefreshing(false);
-  };
+  }, [user, fetchConversations]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return conversations;
     const q = search.toLowerCase();
-    return conversations.filter((c) => c.other_user?.full_name?.toLowerCase().includes(q));
+    return conversations.filter((c) => {
+      const nameHit = c.other_user?.full_name?.toLowerCase().includes(q);
+      const previewHit = c.last_message?.toLowerCase().includes(q);
+      return nameHit || previewHit;
+    });
   }, [conversations, search]);
 
-  const ListHeader = (
-    <View style={s.searchWrap}>
-      <Ionicons name="search-outline" size={15} color={COLORS.textMuted} />
-      <TextInput
-        value={search}
-        onChangeText={setSearch}
-        placeholder="Search conversations..."
-        placeholderTextColor={COLORS.textMuted}
-        style={s.searchInput}
-      />
-      {search.length > 0 && (
-        <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="close-circle" size={15} color={COLORS.textMuted} />
-        </TouchableOpacity>
-      )}
-    </View>
+  const handleRowPress = useCallback((item: Conversation) => {
+    const other = item.other_user;
+    router.push({
+      pathname: '/(chat)/[id]',
+      params: {
+        id: item.id,
+        ...(other?.id ? { otherUserId: other.id } : {}),
+      },
+    });
+  }, []);
+
+  const handleRowLongPress = useCallback(
+    (item: Conversation) => {
+      haptics.tapMedium();
+      const otherName = item.other_user?.full_name ?? 'this user';
+      showDialog({
+        title: 'Delete conversation',
+        message: `Your entire chat with ${otherName} will be permanently removed. This cannot be undone.`,
+        icon: 'trash-outline',
+        actions: [
+          { label: 'Cancel', style: 'cancel' },
+          {
+            label: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              haptics.tapMedium();
+              await deleteConversation(item.id);
+              showToast({ message: 'Conversation deleted', icon: 'trash-outline' });
+            },
+          },
+        ],
+      });
+    },
+    [showDialog, showToast, deleteConversation],
+  );
+
+  const ListHeader = useMemo(
+    () => (
+      <View style={s.searchWrap}>
+        <Ionicons name="search-outline" size={15} color={COLORS.textMuted} />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search by name or message…"
+          placeholderTextColor={COLORS.textMuted}
+          style={s.searchInput}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        {search.length > 0 ? (
+          <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close-circle" size={15} color={COLORS.textMuted} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    ),
+    [search],
   );
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.white }}>
-      {/* Header */}
       <View style={s.header}>
         <ScreenTitle>Messages</ScreenTitle>
       </View>
 
       <FlatList
         data={filtered}
-        keyExtractor={(item) => item.id}
+        keyExtractor={keyExtractor}
+        getItemLayout={getItemLayout}
         initialNumToRender={12}
         maxToRenderPerBatch={10}
         windowSize={10}
+        removeClippedSubviews
         updateCellsBatchingPeriod={50}
         contentContainerStyle={{ paddingBottom: tabBarHeight + 16, backgroundColor: COLORS.white }}
         style={{ backgroundColor: COLORS.white }}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={conversations.length > 0 ? ListHeader : null}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
         }
-        ItemSeparatorComponent={() => <View style={s.sep} />}
+        ItemSeparatorComponent={ItemSeparator}
         ListEmptyComponent={
           isLoading ? (
             <View style={{ paddingTop: 8 }}>
@@ -124,89 +328,32 @@ export default function MessagesScreen() {
               title={search ? 'No results found' : 'No messages yet'}
               description={
                 search
-                  ? 'Try a different name.'
+                  ? 'Try a different name or word.'
                   : 'Browse Discover to find someone interesting and start a conversation.'
               }
             />
           )
         }
-        renderItem={({ item }) => {
-          const other = item.other_user;
-          const hasUnread = (item.unread_count ?? 0) > 0;
-
-          return (
-            <TouchableOpacity
-              onPress={() =>
-                router.push({
-                  pathname: '/(chat)/[id]',
-                  params: {
-                    id: item.id,
-                    ...(other?.id ? { otherUserId: other.id } : {}),
-                  },
-                })
-              }
-              onLongPress={() => {
-                const otherName = other?.full_name ?? 'this user';
-                showDialog({
-                  title: 'Delete conversation',
-                  message: `Your entire chat with ${otherName} will be permanently removed. This cannot be undone.`,
-                  icon: 'trash-outline',
-                  actions: [
-                    { label: 'Cancel', style: 'cancel' },
-                    {
-                      label: 'Delete',
-                      style: 'destructive',
-                      onPress: async () => {
-                        haptics.tapMedium();
-                        await deleteConversation(item.id);
-                        showToast({ message: 'Conversation deleted', icon: 'trash-outline' });
-                      },
-                    },
-                  ],
-                });
-              }}
-              delayLongPress={500}
-              style={s.row}
-              activeOpacity={0.65}
-            >
-              <Avatar
-                uri={other?.avatar_url}
-                name={other?.full_name ?? '?'}
-                size={52}
-                onlineStatus={other?.online_status}
-                showStatus
-              />
-
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <View style={s.cardTop}>
-                  <Text style={[s.cardName, hasUnread && s.cardNameUnread]} numberOfLines={1}>
-                    {other?.full_name ?? 'Unknown'}
-                  </Text>
-                  {item.last_message_at && (
-                    <Text style={s.cardTime}>{dayjs(item.last_message_at).fromNow()}</Text>
-                  )}
-                </View>
-                <View style={s.cardBottom}>
-                  <Text
-                    style={[s.cardPreview, hasUnread && s.cardPreviewUnread]}
-                    numberOfLines={1}
-                  >
-                    {item.last_message ?? 'Start a conversation'}
-                  </Text>
-                  {hasUnread && (
-                    <View style={s.badge}>
-                      <Text style={s.badgeText}>{item.unread_count}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        }}
+        renderItem={({ item }) => (
+          <ConversationRow
+            item={item}
+            isTyping={!!typingMap[item.id]}
+            onPress={handleRowPress}
+            onLongPress={handleRowLongPress}
+          />
+        )}
       />
     </SafeAreaView>
   );
 }
+
+const keyExtractor = (item: Conversation) => item.id;
+const getItemLayout = (_: ArrayLike<Conversation> | null | undefined, index: number) => ({
+  length: ROW_HEIGHT,
+  offset: ROW_HEIGHT * index,
+  index,
+});
+const ItemSeparator = () => <View style={s.sep} />;
 
 const s = StyleSheet.create({
   header: {
@@ -243,8 +390,11 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.white,
-    paddingVertical: 12,
+    height: ROW_HEIGHT,
     paddingHorizontal: 16,
+  },
+  rowUnread: {
+    backgroundColor: COLORS.primarySurface,
   },
   sep: {
     height: StyleSheet.hairlineWidth,
@@ -259,6 +409,7 @@ const s = StyleSheet.create({
   cardName:        { fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.text, flex: 1 },
   cardNameUnread:  { fontWeight: FONT.extrabold, color: COLORS.text },
   cardTime:        { fontSize: FONT.xs, color: COLORS.textMuted, marginLeft: 8 },
+  cardTimeUnread:  { color: COLORS.primary, fontWeight: FONT.bold },
   cardBottom: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -267,6 +418,13 @@ const s = StyleSheet.create({
   },
   cardPreview:        { fontSize: FONT.sm, color: COLORS.textSecondary, flex: 1 },
   cardPreviewUnread:  { color: COLORS.text, fontWeight: FONT.medium },
+  cardTyping: {
+    fontSize: FONT.sm,
+    color: COLORS.primary,
+    fontWeight: FONT.semibold,
+    fontStyle: 'italic',
+    flex: 1,
+  },
 
   // ── Unread badge ────────────────────────────────────────────────────────────
   badge: {

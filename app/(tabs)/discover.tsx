@@ -14,6 +14,8 @@ import { UserCard } from '@/components/discover/UserCard';
 import { FilterSheet } from '@/components/discover/FilterSheet';
 import { ScreenTitle } from '@/components/ui/ScreenTitle';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import { Image } from 'expo-image';
+import haptics from '@/lib/haptics';
 import { PostOnboardingProfileBanner } from '@/components/profile/PostOnboardingProfileBanner';
 import { COLORS, RADIUS, FONT, RELIGION_OPTIONS } from '@/constants';
 import { FilterOptions } from '@/types';
@@ -89,6 +91,17 @@ export default function DiscoverScreen() {
     }, [fetchLikedUserIds, user?.id]),
   );
 
+  // Prime the image cache for the first screenful as soon as the page lands
+  // so the grid never shows the cross-fade-from-blank flash.
+  useEffect(() => {
+    if (users.length === 0) return;
+    const urls = users
+      .slice(0, 8)
+      .map((u) => u.profile_photos?.[0] || u.avatar_url)
+      .filter((url): url is string => !!url);
+    if (urls.length > 0) void Image.prefetch(urls);
+  }, [users.length > 0 ? users[0]?.id : null]);
+
   const postOnboardReminders = useMemo(() => {
     if (!postOnboardHints || !user) return [];
     const r: string[] = [];
@@ -154,6 +167,7 @@ export default function DiscoverScreen() {
   const activeFilterCount = activeFilterChips.length;
 
   const handleApplyFilters = useCallback((next: FilterOptions) => {
+    haptics.tapLight();
     setFilters(next);
     if (user) fetchUsers(user.id, user.interested_in, true, agePref);
   }, [setFilters, fetchUsers, user, agePref]);
@@ -165,11 +179,37 @@ export default function DiscoverScreen() {
 
   const handleChipClear = useCallback(
     (clear: () => void) => {
+      haptics.tapLight();
       clear();
       if (user) fetchUsers(user.id, user.interested_in, true, agePref);
     },
     [user, fetchUsers, agePref],
   );
+
+  // Warm the image cache for the next ~6 cards just out of view. By the time
+  // the user scrolls them in, the photo is already decoded and renders with
+  // no fade-in. `Image.prefetch` is idempotent so re-calling for already-
+  // cached URIs is essentially free.
+  const prefetchedRef = useRef<Set<string>>(new Set());
+  const usersRef = useRef(users);
+  usersRef.current = users;
+  const handleViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
+      if (viewableItems.length === 0) return;
+      const lastVisibleIdx = viewableItems[viewableItems.length - 1]?.index ?? 0;
+      const lookahead = usersRef.current.slice(lastVisibleIdx + 1, lastVisibleIdx + 7);
+      const urls = lookahead
+        .map((u) => u.profile_photos?.[0] || u.avatar_url)
+        .filter((url): url is string => !!url && !prefetchedRef.current.has(url));
+      if (urls.length === 0) return;
+      urls.forEach((url) => prefetchedRef.current.add(url));
+      void Image.prefetch(urls);
+    },
+  ).current;
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 30,
+    minimumViewTime: 80,
+  }).current;
 
   const filterChipsHeight = activeFilterCount > 0 ? 44 : 0;
   const totalHeaderHeight = insets.top + HEADER_HEIGHT + filterChipsHeight;
@@ -209,6 +249,8 @@ export default function DiscoverScreen() {
         )}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.3}
+        onViewableItemsChanged={handleViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

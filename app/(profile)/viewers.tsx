@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { memo, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -26,6 +27,78 @@ interface ViewerRow {
   viewed_at: string;
   viewer: User;
 }
+
+const ROW_HEIGHT = 83; // 54 avatar + 14*2 padding + 1 border
+
+const ViewerRowItem = memo(function ViewerRowItem({
+  item,
+  cardBg,
+  surfaceBg,
+  textColor,
+  textSecondary,
+  textMuted,
+  borderColor,
+  primaryColor,
+  onOpen,
+}: {
+  item: ViewerRow;
+  cardBg: string;
+  surfaceBg: string;
+  textColor: string;
+  textSecondary: string;
+  textMuted: string;
+  borderColor: string;
+  primaryColor: string;
+  onOpen: (v: User) => void;
+}) {
+  const v = item.viewer;
+  const avatar = v.avatar_url || (v.profile_photos ?? [])[0] || `${DEFAULT_AVATAR}${encodeURIComponent((v.full_name ?? '?').charAt(0))}`;
+  const location = [v.city, v.country].filter(Boolean).join(', ');
+  return (
+    <TouchableOpacity
+      onPress={() => onOpen(v)}
+      activeOpacity={0.8}
+      style={{
+        flexDirection: 'row', alignItems: 'center', gap: 14,
+        paddingHorizontal: 20, paddingVertical: 14,
+        borderBottomWidth: 1, borderBottomColor: borderColor,
+        backgroundColor: cardBg,
+      }}
+    >
+      <View style={{ position: 'relative' }}>
+        <Image
+          source={{ uri: avatar }}
+          style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: surfaceBg }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={120}
+          recyclingKey={v.id}
+        />
+        {isUserEffectivelyOnline(v.online_status, v.last_seen) && (
+          <View style={{
+            position: 'absolute', bottom: 1, right: 1,
+            width: 12, height: 12, borderRadius: 6,
+            backgroundColor: '#22C55E',
+            borderWidth: 2, borderColor: cardBg,
+          }} />
+        )}
+      </View>
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: textColor }}>{v.full_name}</Text>
+          {(v.verified || v.verification_status === 'approved') && (
+            <Ionicons name="checkmark-circle" size={15} color={primaryColor} />
+          )}
+        </View>
+        {location ? (
+          <Text style={{ fontSize: 12, color: textSecondary, marginTop: 1 }}>{location}</Text>
+        ) : null}
+      </View>
+      <Text style={{ fontSize: 12, color: textMuted }}>{timeAgo(item.viewed_at)}</Text>
+      <Ionicons name="chevron-forward" size={16} color={textMuted} />
+    </TouchableOpacity>
+  );
+});
 
 function timeAgo(iso: string): string {
   const diff = Math.max(0, Date.now() - new Date(iso).getTime());
@@ -83,6 +156,34 @@ export default function ViewersScreen() {
 
   const viewerBrowseIds = useMemo(() => viewers.map((r) => r.viewer.id), [viewers]);
 
+  const handleOpen = useCallback((v: User) => {
+    setProfileSeed(v);
+    useProfileBrowseStore.getState().setOrderedUserIds(viewerBrowseIds);
+    router.push(`/(profile)/${v.id}`);
+  }, [viewerBrowseIds]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: ViewerRow }) => (
+      <ViewerRowItem
+        item={item}
+        cardBg={colors.card}
+        surfaceBg={colors.surface}
+        textColor={colors.text}
+        textSecondary={colors.textSecondary}
+        textMuted={colors.textMuted}
+        borderColor={colors.border}
+        primaryColor={colors.primary}
+        onOpen={handleOpen}
+      />
+    ),
+    [handleOpen, colors],
+  );
+  const keyExtractor = useCallback((item: ViewerRow) => item.id, []);
+  const getItemLayout = useCallback(
+    (_: any, index: number) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }),
+    [],
+  );
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }}>
       {/* Header */}
@@ -110,7 +211,13 @@ export default function ViewersScreen() {
       ) : (
         <FlatList
           data={viewers}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          getItemLayout={getItemLayout}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={9}
+          removeClippedSubviews={Platform.OS === 'android'}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           contentContainerStyle={viewers.length === 0 ? { flex: 1 } : { paddingBottom: 40 }}
           ListEmptyComponent={
@@ -122,56 +229,6 @@ export default function ViewersScreen() {
               </Text>
             </View>
           }
-          renderItem={({ item }) => {
-            const v = item.viewer;
-            const avatar = v.avatar_url || (v.profile_photos ?? [])[0] || `${DEFAULT_AVATAR}${encodeURIComponent((v.full_name ?? '?').charAt(0))}`;
-            const location = [v.city, v.country].filter(Boolean).join(', ');
-            return (
-              <TouchableOpacity
-                onPress={() => {
-                  setProfileSeed(v);
-                  useProfileBrowseStore.getState().setOrderedUserIds(viewerBrowseIds);
-                  router.push(`/(profile)/${v.id}`);
-                }}
-                activeOpacity={0.8}
-                style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 14,
-                  paddingHorizontal: 20, paddingVertical: 14,
-                  borderBottomWidth: 1, borderBottomColor: colors.border,
-                  backgroundColor: colors.card,
-                }}
-              >
-                <View style={{ position: 'relative' }}>
-                  <Image
-                    source={{ uri: avatar }}
-                    style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: colors.surface }}
-                    contentFit="cover"
-                  />
-                  {isUserEffectivelyOnline(v.online_status, v.last_seen) && (
-                    <View style={{
-                      position: 'absolute', bottom: 1, right: 1,
-                      width: 12, height: 12, borderRadius: 6,
-                      backgroundColor: '#22C55E',
-                      borderWidth: 2, borderColor: colors.card,
-                    }} />
-                  )}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{v.full_name}</Text>
-                    {(v.verified || v.verification_status === 'approved') && (
-                      <Ionicons name="checkmark-circle" size={15} color={colors.primary} />
-                    )}
-                  </View>
-                  {location ? (
-                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 1 }}>{location}</Text>
-                  ) : null}
-                </View>
-                <Text style={{ fontSize: 12, color: colors.textMuted }}>{timeAgo(item.viewed_at)}</Text>
-                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-              </TouchableOpacity>
-            );
-          }}
         />
       )}
     </SafeAreaView>

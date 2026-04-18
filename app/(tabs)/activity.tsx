@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { memo, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -46,6 +47,45 @@ function avatarFor(p: any): string {
     || p?.profile_photos?.[0]
     || `${DEFAULT_AVATAR}${encodeURIComponent((p?.full_name ?? '?').charAt(0))}`;
 }
+
+const ROW_HEIGHT = 88; // 52 avatar + 14*2 padding + 8 marginBottom
+
+const ActivityRow = memo(function ActivityRow({
+  item,
+  onPress,
+}: {
+  item: ActivityItem;
+  onPress: (item: ActivityItem) => void;
+}) {
+  const cfg = TYPE_CONFIG[item.type];
+  return (
+    <TouchableOpacity style={s.card} onPress={() => onPress(item)} activeOpacity={0.85}>
+      <View style={{ position: 'relative' }}>
+        <Image
+          source={{ uri: item.avatar }}
+          style={s.avatar}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={120}
+          recyclingKey={item.userId}
+        />
+        <View style={[s.typeBadge, { backgroundColor: cfg.color }]}>
+          <Ionicons name={cfg.icon} size={11} color="#FFF" />
+        </View>
+      </View>
+
+      <View style={{ flex: 1, marginLeft: 14 }}>
+        <Text style={s.name} numberOfLines={1}>{item.name}</Text>
+        <Text style={[s.action, { color: cfg.color }]}>{cfg.label}</Text>
+        {item.preview ? (
+          <Text style={s.preview} numberOfLines={1}>{item.preview}</Text>
+        ) : null}
+      </View>
+
+      <Text style={s.time}>{dayjs(item.createdAt).fromNow(true)}</Text>
+    </TouchableOpacity>
+  );
+});
 
 export default function ActivityScreen() {
   const { user } = useAuthStore();
@@ -202,6 +242,30 @@ export default function ActivityScreen() {
     return out;
   }, [items]);
 
+  const handlePress = useCallback((item: ActivityItem) => {
+    if (item.navTarget.startsWith('/(profile)/')) {
+      useProfileBrowseStore.getState().setOrderedUserIds(activityProfileBrowseIds);
+      router.push(item.navTarget as any);
+      return;
+    }
+    if (item.type === 'message' && item.navTarget.startsWith('/(chat)/')) {
+      const chatId = item.navTarget.slice('/(chat)/'.length);
+      router.push({ pathname: '/(chat)/[id]', params: { id: chatId, otherUserId: item.userId } });
+      return;
+    }
+    router.push(item.navTarget as any);
+  }, [activityProfileBrowseIds]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: ActivityItem }) => <ActivityRow item={item} onPress={handlePress} />,
+    [handlePress],
+  );
+  const keyExtractor = useCallback((item: ActivityItem) => item.id, []);
+  const getItemLayout = useCallback(
+    (_: any, index: number) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }),
+    [],
+  );
+
   if (loading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -221,7 +285,13 @@ export default function ActivityScreen() {
 
       <FlatList
         data={items}
-        keyExtractor={(item) => item.id}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        getItemLayout={getItemLayout}
+        initialNumToRender={10}
+        maxToRenderPerBatch={8}
+        windowSize={9}
+        removeClippedSubviews={Platform.OS === 'android'}
         contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -236,45 +306,6 @@ export default function ActivityScreen() {
             </Text>
           </View>
         }
-        renderItem={({ item }) => {
-          const cfg = TYPE_CONFIG[item.type];
-          return (
-            <TouchableOpacity
-              style={s.card}
-              onPress={() => {
-                if (item.navTarget.startsWith('/(profile)/')) {
-                  useProfileBrowseStore.getState().setOrderedUserIds(activityProfileBrowseIds);
-                  router.push(item.navTarget as any);
-                  return;
-                }
-                if (item.type === 'message' && item.navTarget.startsWith('/(chat)/')) {
-                  const chatId = item.navTarget.slice('/(chat)/'.length);
-                  router.push({ pathname: '/(chat)/[id]', params: { id: chatId, otherUserId: item.userId } });
-                  return;
-                }
-                router.push(item.navTarget as any);
-              }}
-              activeOpacity={0.85}
-            >
-              <View style={{ position: 'relative' }}>
-                <Image source={{ uri: item.avatar }} style={s.avatar} contentFit="cover" />
-                <View style={[s.typeBadge, { backgroundColor: cfg.color }]}>
-                  <Ionicons name={cfg.icon} size={11} color="#FFF" />
-                </View>
-              </View>
-
-              <View style={{ flex: 1, marginLeft: 14 }}>
-                <Text style={s.name} numberOfLines={1}>{item.name}</Text>
-                <Text style={[s.action, { color: cfg.color }]}>{cfg.label}</Text>
-                {item.preview ? (
-                  <Text style={s.preview} numberOfLines={1}>{item.preview}</Text>
-                ) : null}
-              </View>
-
-              <Text style={s.time}>{dayjs(item.createdAt).fromNow(true)}</Text>
-            </TouchableOpacity>
-          );
-        }}
       />
     </SafeAreaView>
   );

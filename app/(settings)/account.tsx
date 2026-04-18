@@ -39,14 +39,12 @@ export default function AccountSettingsScreen() {
       if (result.reason === 'share_cancelled') {
         return;
       }
-      showDialog({
-        title: 'Could not export data',
+      showToast({
         message:
           result.reason === 'unauthenticated'
-            ? 'You are signed out. Please sign back in and try again.'
-            : 'Something went wrong preparing your data. Please try again in a moment.',
+            ? 'Signed out. Please sign back in and try again.'
+            : 'Could not export data. Please try again in a moment.',
         icon: 'alert-circle-outline',
-        actions: [{ label: 'OK', style: 'primary' }],
       });
     } finally {
       setExporting(false);

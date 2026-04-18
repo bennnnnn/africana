@@ -16,6 +16,7 @@ import { COLORS, RADIUS, FONT } from '@/constants';
 import { HeroPlaceholder } from '@/components/ui/HeroPlaceholder';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
+import { isUserEffectivelyOnline } from '@/lib/utils';
 
 interface UserCardProps {
   user: User;
@@ -36,8 +37,12 @@ function UserCardInner({ user, beforeNavigate }: UserCardProps) {
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  // Don't trust the `online_status` column on its own — pair it with a fresh
+  // `last_seen` so abandoned/crashed sessions don't keep pulsing forever.
+  const isOnline = isUserEffectivelyOnline(user.online_status, user.last_seen);
+
   useEffect(() => {
-    if (user.online_status !== 'online') return;
+    if (!isOnline) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.9, duration: 900, useNativeDriver: true }),
@@ -46,7 +51,7 @@ function UserCardInner({ user, beforeNavigate }: UserCardProps) {
     );
     loop.start();
     return () => loop.stop();
-  }, [user.online_status]);
+  }, [isOnline]);
 
   // "NEW" badge — show for profiles created within the last 10 days.
   const isNew = useMemo(() => {
@@ -79,7 +84,9 @@ function UserCardInner({ user, beforeNavigate }: UserCardProps) {
           source={{ uri: photoUrl! }}
           style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}
           contentFit="cover"
-          transition={300}
+          transition={200}
+          cachePolicy="memory-disk"
+          recyclingKey={user.id}
         />
       ) : (
         <HeroPlaceholder
@@ -98,7 +105,7 @@ function UserCardInner({ user, beforeNavigate }: UserCardProps) {
       )}
 
       {/* ── Online pulse dot — top-right ── */}
-      {user.online_status === 'online' && (
+      {isOnline && (
         <View style={s.onlineDotWrap}>
           <Animated.View style={[
             s.onlinePulse,

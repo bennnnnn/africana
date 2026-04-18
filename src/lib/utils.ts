@@ -1,4 +1,25 @@
-export const ONLINE_FRESHNESS_MINUTES = 10;
+/**
+ * How recent `profiles.last_seen` must be before we consider someone actually
+ * online. The client heartbeats `last_seen` every 60 s while the app is
+ * foregrounded (see `app/_layout.tsx`), so 3 minutes gives ~2 missed
+ * heartbeats of grace before we mark the user as offline. This is what makes
+ * the presence indicator self-healing — if the app force-quits, crashes,
+ * loses network, or the OS kills it without the AppState→background event
+ * firing, the user naturally falls off the online list within a few minutes
+ * instead of being stuck "online" indefinitely.
+ */
+export const ONLINE_FRESHNESS_MINUTES = 3;
+
+/**
+ * Returns the ISO cutoff used by server-side queries that want to filter
+ * "currently online" rows. Pair with `online_status = 'online'` for the
+ * fastest path, but the freshness check is the source of truth.
+ */
+export function getOnlineFreshnessCutoffISO(
+  freshnessMinutes = ONLINE_FRESHNESS_MINUTES,
+): string {
+  return new Date(Date.now() - freshnessMinutes * 60 * 1000).toISOString();
+}
 export const DEFAULT_MIN_AGE_PREFERENCE = 18;
 export const DEFAULT_MAX_AGE_PREFERENCE = 100;
 

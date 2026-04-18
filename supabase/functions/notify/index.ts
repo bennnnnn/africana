@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
     const payload: NotifyPayload = await req.json();
     const { type, recipientId, senderName, extra } = payload;
 
-    // Fetch recipient's push token, email, and notification preferences
+    // Fetch recipient's push token, notification preferences, and display name
     const { data: settings } = await supabase
       .from('user_settings')
       .select(
@@ -90,11 +90,20 @@ Deno.serve(async (req) => {
       .eq('user_id', recipientId)
       .single();
 
-    const { data: profile } = await supabase
+    const { data: profileRow } = await supabase
       .from('profiles')
-      .select('email, full_name')
+      .select('full_name')
       .eq('id', recipientId)
       .single();
+
+    // Email lives on auth.users — fetch via the admin API rather than
+    // duplicating it on profiles (which would need to be readable via the
+    // public profile SELECT policy and would leak addresses to other users).
+    const { data: authUser } = await supabase.auth.admin.getUserById(recipientId);
+    const profile = {
+      full_name: profileRow?.full_name ?? null,
+      email: authUser?.user?.email ?? null,
+    };
 
     if (type === 'message' && settings?.receive_messages === false) {
       return new Response(JSON.stringify({ ok: false, reason: 'recipient_not_accepting_messages' }), {

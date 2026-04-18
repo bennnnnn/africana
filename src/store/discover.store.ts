@@ -5,6 +5,7 @@ import { notifyUser } from '@/lib/notifications';
 import { appDialog } from '@/lib/app-dialog';
 import { maybeWarnLikeQuota } from '@/lib/rate-limit-warn';
 import { track, EVENTS } from '@/lib/analytics';
+import { getOnlineFreshnessCutoffISO, isUserEffectivelyOnline } from '@/lib/utils';
 const interestedInToGender = (v: InterestedIn | undefined): string | null => {
   if (v === 'men') return 'male';
   if (v === 'women') return 'female';
@@ -29,7 +30,14 @@ function applyDiscoverSheetFilters(
   if (filters.state) query = query.eq('state', filters.state);
   if (filters.city) query = query.eq('city', filters.city);
   if (filters.religion) query = query.eq('religion', filters.religion);
-  if (filters.online_only) query = query.eq('online_status', 'online');
+  if (filters.online_only) {
+    // Pair the column filter with a freshness cutoff on `last_seen` so the
+    // "Online only" toggle doesn't surface accounts that crashed/force-quit
+    // ages ago and got stuck on `online_status='online'`.
+    query = query
+      .eq('online_status', 'online')
+      .gte('last_seen', getOnlineFreshnessCutoffISO());
+  }
 
   query = query.not('birthdate', 'is', null);
 
@@ -203,8 +211,15 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
               bday.getFullYear() -
               (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
             : 0;
+          // Effective status pairs the column with a fresh `last_seen` so a
+          // crashed/force-quit account doesn't sit at the top of the grid
+          // claiming to be online for hours.
           const effectiveOnlineStatus =
-            u.online_visible === false ? 'offline' : u.online_status;
+            u.online_visible === false
+              ? 'offline'
+              : isUserEffectivelyOnline(u.online_status, u.last_seen)
+                ? 'online'
+                : 'offline';
           return {
             ...u,
             age,
@@ -250,7 +265,11 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
                       (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
                     : 0;
                   const effectiveOnlineStatus =
-                    u.online_visible === false ? 'offline' : u.online_status;
+                    u.online_visible === false
+                      ? 'offline'
+                      : isUserEffectivelyOnline(u.online_status, u.last_seen)
+                        ? 'online'
+                        : 'offline';
                   return {
                     ...u,
                     age,
@@ -312,11 +331,18 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           const updated = payload.new as { id?: string; online_status?: string; last_seen?: string };
           if (!updated?.id) return;
           set((state) => ({
-            users: state.users.map((u) =>
-              u.id === updated.id
-                ? { ...u, online_status: (updated.online_status ?? u.online_status) as any, last_seen: updated.last_seen ?? u.last_seen }
-                : u
-            ),
+            users: state.users.map((u) => {
+              if (u.id !== updated.id) return u;
+              const nextLastSeen = updated.last_seen ?? u.last_seen;
+              const rawStatus = (updated.online_status ?? u.online_status) as any;
+              // Re-apply the freshness check on every update so a heartbeat
+              // that arrives moments before the peer goes offline doesn't
+              // leave them stuck "online" in the local cache.
+              const effective = isUserEffectivelyOnline(rawStatus, nextLastSeen)
+                ? 'online'
+                : 'offline';
+              return { ...u, online_status: effective as any, last_seen: nextLastSeen };
+            }),
           }));
         },
       )
