@@ -217,9 +217,14 @@ export default function MessagesScreen() {
   const handleRefresh = useCallback(async () => {
     if (!user) return;
     setRefreshing(true);
-    await fetchConversations(user.id);
-    setRefreshing(false);
-  }, [user, fetchConversations]);
+    try {
+      await fetchConversations(user.id);
+    } catch {
+      showToast({ icon: 'alert-circle-outline', message: 'Could not refresh. Please try again.' });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [user, fetchConversations, showToast]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return conversations;

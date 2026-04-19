@@ -92,11 +92,13 @@ export default function ActivityScreen() {
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
     const userId = user.id;
     const results: ActivityItem[] = [];
+    setLoadError(null);
 
     try {
       // ── 1. Likes received — simple query, no join ────────────────────────────
@@ -182,14 +184,25 @@ export default function ActivityScreen() {
         .order('last_message_at', { ascending: false })
         .limit(10);
 
-      for (const conv of convs ?? []) {
-        const otherId = (conv.participant_ids as string[]).find((id) => id !== userId);
-        if (!otherId) continue;
-        const { data: profile } = await supabase
+      // Batch-fetch all conversation participants in one query
+      const convList = convs ?? [];
+      const otherIds = convList
+        .map((conv) => (conv.participant_ids as string[]).find((id) => id !== userId))
+        .filter((id): id is string => !!id);
+
+      let convProfiles: Record<string, any> = {};
+      if (otherIds.length > 0) {
+        const { data: profiles } = await supabase
           .from('profiles')
           .select('id, full_name, avatar_url, profile_photos')
-          .eq('id', otherId)
-          .single();
+          .in('id', otherIds);
+        (profiles ?? []).forEach((p: any) => { convProfiles[p.id] = p; });
+      }
+
+      for (const conv of convList) {
+        const otherId = (conv.participant_ids as string[]).find((id) => id !== userId);
+        if (!otherId) continue;
+        const profile = convProfiles[otherId];
         if (!profile) continue;
         results.push({
           id: `msg-${conv.id}`,
@@ -203,7 +216,8 @@ export default function ActivityScreen() {
         });
       }
     } catch (err) {
-      console.warn('Activity load error:', err);
+      setLoadError(err instanceof Error ? err.message : 'Could not load activity. Pull down to retry.');
+      return;
     }
 
     // Sort by time desc, deduplicate by userId+type
@@ -282,6 +296,12 @@ export default function ActivityScreen() {
           {items.length > 0 ? `${items.length} recent actions` : 'Your activity will appear here'}
         </Text>
       </View>
+      {loadError ? (
+        <View style={{ margin: 12, padding: 14, backgroundColor: '#FEF2F2', borderRadius: 12, borderWidth: 1, borderColor: '#FECACA', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Ionicons name="alert-circle-outline" size={18} color="#991B1B" />
+          <Text style={{ flex: 1, fontSize: 13, color: '#991B1B' }}>{loadError}</Text>
+        </View>
+      ) : null}
 
       <FlatList
         data={items}

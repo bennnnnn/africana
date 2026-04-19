@@ -121,12 +121,17 @@ export async function uploadToAvatarsBucket(
   return uploadLocalImageToBucket('avatars', path, localUri, false, mimeType);
 }
 
-/** Verification selfie → `profile-photos` bucket (same RLS pattern: first path segment = user id). */
+/**
+ * Verification selfie → `avatars` bucket.
+ * Uses avatars (no allowed_mime_types restriction) to avoid the mime-type
+ * RLS rejection that profile-photos enforces. Path is timestamped so each
+ * submission is a new object — no upsert needed.
+ */
 export async function uploadVerificationSelfie(
   userId: string,
   localUri: string,
   mimeType?: string | null,
 ): Promise<{ publicUrl: string } | { error: string }> {
   const path = `${userId}/verification-${Date.now()}.jpg`;
-  return uploadLocalImageToBucket('profile-photos', path, localUri, true, mimeType);
+  return uploadLocalImageToBucket('avatars', path, localUri, false, mimeType);
 }

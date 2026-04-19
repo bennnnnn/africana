@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -95,7 +94,7 @@ export default function VerifyScreen() {
       await updateProfile({
         verification_status: 'pending',
         verification_photo: publicUrl,
-      } as any);
+      });
 
       track(EVENTS.VERIFICATION_COMPLETE);
 
@@ -122,25 +121,25 @@ export default function VerifyScreen() {
       <ScrollView contentContainerStyle={{ padding: 24 }}>
         {/* Status badge */}
         {status === 'pending' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.border }}>
-            <Ionicons name="time-outline" size={22} color="#111111" />
-            <Text style={{ flex: 1, fontSize: 14, color: '#111111', fontWeight: '600' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFBEB', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#FDE68A' }}>
+            <Ionicons name="time-outline" size={22} color="#92400E" />
+            <Text style={{ flex: 1, fontSize: 14, color: '#92400E', fontWeight: '600' }}>
               Verification pending — we're reviewing your submission. This usually takes 24–48 hours.
             </Text>
           </View>
         )}
         {status === 'approved' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.border }}>
-            <Ionicons name="checkmark-circle" size={22} color="#111111" />
-            <Text style={{ flex: 1, fontSize: 14, color: '#111111', fontWeight: '600' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F0FDF4', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#BBF7D0' }}>
+            <Ionicons name="checkmark-circle" size={22} color="#166534" />
+            <Text style={{ flex: 1, fontSize: 14, color: '#166534', fontWeight: '600' }}>
               Your profile is verified! A blue badge appears on your profile for all members to see.
             </Text>
           </View>
         )}
         {status === 'rejected' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.border }}>
-            <Ionicons name="close-circle" size={22} color="#111111" />
-            <Text style={{ flex: 1, fontSize: 14, color: '#111111', fontWeight: '600' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FEF2F2', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#FECACA' }}>
+            <Ionicons name="close-circle" size={22} color="#991B1B" />
+            <Text style={{ flex: 1, fontSize: 14, color: '#991B1B', fontWeight: '600' }}>
               Your previous submission was rejected. Please try again with a clear, well-lit photo of your face.
             </Text>
           </View>
@@ -176,7 +175,7 @@ export default function VerifyScreen() {
           </View>
         ))}
 
-        {status !== 'approved' && (
+        {status !== 'approved' && status !== 'pending' && (
           <>
             {/* Selfie preview */}
             {selfieUri ? (
@@ -199,17 +198,18 @@ export default function VerifyScreen() {
             )}
 
             <Button
-              title={uploading ? 'Uploading…' : (status === 'pending' ? 'Resubmit' : 'Submit for Verification')}
+              title={uploading ? 'Uploading…' : 'Submit for Verification'}
               onPress={handleSubmit}
               disabled={!selfieUri || uploading}
+              loading={uploading}
               fullWidth
               size="lg"
               style={{ backgroundColor: '#111111', borderWidth: 1, borderColor: '#111111' }}
               textStyle={{ color: '#FFFFFF' }}
             />
-            {uploading && <ActivityIndicator style={{ marginTop: 12 }} color="#111111" />}
           </>
         )}
+
 
         <View style={{ height: 40 }} />
       </ScrollView>

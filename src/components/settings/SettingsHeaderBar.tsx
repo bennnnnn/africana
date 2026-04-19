@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { COLORS, FONT } from '@/constants';
@@ -28,7 +28,7 @@ export function SettingsHeaderBar({
         accessibilityLabel={backAccessibilityLabel}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       >
-        <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+        <Ionicons name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'} size={24} color={COLORS.text} />
       </TouchableOpacity>
       {titleAlign === 'center' ? (
         <>

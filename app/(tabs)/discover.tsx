@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, Dimensions,
+  View, Text, TouchableOpacity, Dimensions, Platform,
   ActivityIndicator, RefreshControl, Animated, StyleSheet, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -77,12 +77,11 @@ export default function DiscoverScreen() {
   useEffect(() => {
     if (!user) return;
     fetchUsers(user.id, user.interested_in, true, agePref);
-    fetchLikedUserIds(user.id);
     subscribeToOnlineStatus();
     return () => {
       unsubscribeFromOnlineStatus();
     };
-  }, [user?.id, user?.interested_in, agePref, fetchUsers, fetchLikedUserIds, subscribeToOnlineStatus, unsubscribeFromOnlineStatus]);
+  }, [user?.id, user?.interested_in, agePref, fetchUsers, subscribeToOnlineStatus, unsubscribeFromOnlineStatus]);
 
   useFocusEffect(
     useCallback(() => {
@@ -242,11 +241,12 @@ export default function DiscoverScreen() {
         alwaysBounceVertical
         overScrollMode="always"
         decelerationRate="normal"
-        scrollEventThrottle={1}
+        scrollEventThrottle={16}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: true },
         )}
+        removeClippedSubviews={Platform.OS === 'android'}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.3}
         onViewableItemsChanged={handleViewableItemsChanged}

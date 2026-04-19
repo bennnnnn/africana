@@ -17,7 +17,6 @@ export default function PremiumTrustSettingsScreen() {
         <Text style={settingsStyles.screenIntro}>
           Unlock more visibility and features, or submit a selfie for a verified badge.
         </Text>
-        <>
           <SettingRow
             icon="sparkles-outline"
             iconColor={COLORS.primary}
@@ -33,7 +32,6 @@ export default function PremiumTrustSettingsScreen() {
             onPress={() => router.push('/(settings)/verify')}
             isLast
           />
-        </>
       </ScrollView>
     </SafeAreaView>
   );

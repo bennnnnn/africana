@@ -1,4 +1,5 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -155,17 +156,28 @@ export default function OnlineScreen() {
     if (data) setOnlineUsers(data);
   };
 
+  const initialLoadDone = useRef(false);
+
   useEffect(() => {
-    fetchOnlineUsers().finally(() => setIsLoading(false));
-
-    const refreshTimer = setInterval(() => {
-      void fetchOnlineUsers();
-    }, 30 * 1000);
-
-    return () => {
-      clearInterval(refreshTimer);
-    };
+    fetchOnlineUsers().finally(() => {
+      setIsLoading(false);
+      initialLoadDone.current = true;
+    });
   }, [user]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Skip the very first focus — already handled by the mount effect above
+      if (!initialLoadDone.current) return;
+      void fetchOnlineUsers();
+
+      const refreshTimer = setInterval(() => {
+        void fetchOnlineUsers();
+      }, 30 * 1000);
+
+      return () => clearInterval(refreshTimer);
+    }, [user]),
+  );
 
   const visibleOnlineUsers = useMemo(
     () => onlineUsers.filter((u) => isUserEffectivelyOnline(u.online_status, u.last_seen)),

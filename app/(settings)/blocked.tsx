@@ -138,7 +138,7 @@ export default function BlockedUsersScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: BlockedUser }) => <BlockedRow item={item} onUnblock={unblock} />,
-    [],
+    [unblock],
   );
   const keyExtractor = useCallback((item: BlockedUser) => item.id, []);
   const getItemLayout = useCallback(
@@ -146,7 +146,7 @@ export default function BlockedUsersScreen() {
     [],
   );
 
-  const unblock = (blockId: string, name: string) => {
+  const unblock = useCallback((blockId: string, name: string) => {
     appDialog({
       title: 'Unblock',
       message: `Unblock ${name}? They will be able to see your profile and contact you again.`,
@@ -171,7 +171,7 @@ export default function BlockedUsersScreen() {
         },
       ],
     });
-  };
+  }, []);
 
   if (!user) {
     return (

@@ -49,7 +49,7 @@ export default function AccountSettingsScreen() {
     } finally {
       setExporting(false);
     }
-  }, [exporting, showDialog, showToast]);
+  }, [exporting, showToast]);
 
   const handleSignOut = useCallback(() => {
     showDialog({
@@ -119,7 +119,6 @@ export default function AccountSettingsScreen() {
             label="Delete account"
             description="Remove your profile and data for good"
             onPress={() => router.push('/(settings)/delete-account')}
-            showArrow={false}
             danger
             isLast
           />

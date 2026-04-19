@@ -129,6 +129,7 @@ export default function MyProfileScreen() {
   const [editLocation, setEditLocation]       = useState<Partial<LocationValue>>({});
   const [editOriginLocation, setEditOriginLocation] = useState<Partial<LocationValue>>({});
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [heroPage, setHeroPage] = useState(0);
 
   // Cultural data for ethnicity + languages
   const [cultureEthnicityOpts, setCultureEthnicityOpts] = useState<string[]>([]);
@@ -177,6 +178,7 @@ export default function MyProfileScreen() {
   useEffect(() => {
     if (!user || heroPhotos.length === 0 || width <= 0) return;
     const idx = Math.min(mainPhotoIndex, heroPhotos.length - 1);
+    setHeroPage(idx);
     requestAnimationFrame(() => {
       heroPhotoScrollRef.current?.scrollTo({ x: idx * width, y: 0, animated: false });
     });
@@ -329,7 +331,10 @@ export default function MyProfileScreen() {
         appDialog({ title, message, icon: 'happy-outline' });
       }
       const toUpload = picked.filter((a) => approved.includes(a.uri));
-      if (toUpload.length === 0) return;
+      if (toUpload.length === 0) {
+        setPhotoUploading(false);
+        return;
+      }
 
       const uploaded: string[] = [];
       for (const asset of toUpload) {
@@ -452,6 +457,25 @@ export default function MyProfileScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
+      {/* Header — fixed, does not scroll */}
+      <View style={s.header}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <ScreenTitle>My Profile</ScreenTitle>
+          {completionPct < 100 && (
+            <TouchableOpacity
+              onPress={() => scrollToSection(sectionForMissingKey(nextMissing?.key))}
+              style={s.completionPill}
+              activeOpacity={0.75}
+            >
+              <Text style={s.completionPillTxt}>{completionPct}%</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity onPress={() => router.push('/(settings)/main')} style={s.iconBtn}>
+          <Ionicons name="settings-outline" size={20} color={COLORS.textStrong} />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
@@ -460,25 +484,6 @@ export default function MyProfileScreen() {
         nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
       >
-
-        {/* Header */}
-        <View style={s.header}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <ScreenTitle>My Profile</ScreenTitle>
-            {completionPct < 100 && (
-              <TouchableOpacity
-                onPress={() => scrollToSection(sectionForMissingKey(nextMissing?.key))}
-                style={s.completionPill}
-                activeOpacity={0.75}
-              >
-                <Text style={s.completionPillTxt}>{completionPct}%</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity onPress={() => router.push('/(settings)/main')} style={s.iconBtn}>
-            <Ionicons name="settings-outline" size={20} color={COLORS.textStrong} />
-          </TouchableOpacity>
-        </View>
 
         {/* Hero — swipe horizontally (ScrollView avoids FlatList-inside-ScrollView crash) */}
         {/* Neutral warm bg (not pure black) prevents the "dark flash" while the first
@@ -492,6 +497,11 @@ export default function MyProfileScreen() {
               nestedScrollEnabled
               keyboardShouldPersistTaps="handled"
               showsHorizontalScrollIndicator={false}
+              scrollEventThrottle={200}
+              onScroll={(e) => {
+                const p = Math.round(e.nativeEvent.contentOffset.x / width);
+                setHeroPage(p);
+              }}
               style={{ width, height: HERO_HEIGHT }}
             >
               {heroPhotos.map((uri, i) => (
@@ -519,6 +529,14 @@ export default function MyProfileScreen() {
           <LinearGradient colors={['transparent', 'rgba(0,0,0,0.28)']}
             pointerEvents="none"
             style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '22%' }} />
+          {/* Swipe dots — only when more than one photo */}
+          {heroPhotos.length > 1 && (
+            <View style={s.dotRow} pointerEvents="none">
+              {heroPhotos.map((_, i) => (
+                <View key={i} style={[s.dot, i === heroPage && s.dotActive]} />
+              ))}
+            </View>
+          )}
           <View style={[s.onlineBadge, { backgroundColor: isOnline ? COLORS.online : 'rgba(0,0,0,0.45)' }]}>
             <View style={s.onlineDot} /><Text style={s.onlineText}>{isOnline ? 'Online' : 'Offline'}</Text>
           </View>
@@ -541,7 +559,7 @@ export default function MyProfileScreen() {
         {/* Photo strip — tap a thumbnail to set it as main; horizontal scroll when many photos */}
         {photos.length > 1 && (
           <View>
-            <Text style={{ fontSize: 11, color: COLORS.textMuted, textAlign: 'center', paddingTop: 10, paddingBottom: 4 }}>
+            <Text style={{ fontSize: 12, fontWeight: FONT.medium, color: COLORS.textSecondary, textAlign: 'center', paddingTop: 10, paddingBottom: 4 }}>
               Tap a photo to set it as your main picture
             </Text>
             <ScrollView
@@ -1069,14 +1087,13 @@ const s = StyleSheet.create({
   onlineBadge: { position: 'absolute', top: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.xl },
   onlineDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.white },
   onlineText: { fontSize: 12, color: COLORS.white, fontWeight: FONT.semibold },
-  cameraBtn: { position: 'absolute', bottom: 60, right: 14, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)' },
+  cameraBtn: { position: 'absolute', bottom: 100, right: 14, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)' },
+  dotRow: { position: 'absolute', bottom: 80, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.45)' },
+  dotActive: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.white },
   heroInfo: { position: 'absolute', bottom: 16, left: 16, right: 60 },
   heroName: { fontSize: 30, fontFamily: FONT.displayFamily, color: COLORS.white, textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6, letterSpacing: 0.3 },
   heroLocation: { fontSize: FONT.sm, color: 'rgba(255,255,255,0.85)' },
-  statsBar: { flexDirection: 'row', backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border, marginBottom: 8 },
-  statItem: { flex: 1, alignItems: 'center', paddingVertical: 14, gap: 3 },
-  statValue: { fontSize: FONT.lg, fontWeight: FONT.bold, color: COLORS.textStrong },
-  statLabel: { fontSize: FONT.xs, color: COLORS.textSecondary },
   completionInline: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: COLORS.primarySurface, borderWidth: 1, borderColor: COLORS.primaryBorder },
   completionInlineTxt: { flex: 1, fontSize: 12.5, color: COLORS.text, lineHeight: 17 },
   completionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary },

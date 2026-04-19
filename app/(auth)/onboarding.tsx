@@ -265,11 +265,18 @@ export default function OnboardingScreen() {
       const newUris = result.assets.map((a) => a.uri);
 
       const { approved, rejected } = await validateFacesInPhotos(newUris);
+      if (approved.length === 0) {
+        appDialog({
+          title: 'No faces detected',
+          message: 'None of the selected photos clearly show a face. Please choose photos where your face is visible and well-lit.',
+          icon: 'happy-outline',
+        });
+        return;
+      }
       if (rejected.length > 0) {
         const { title, message } = faceRejectionMessage(rejected.length, approved.length);
         appDialog({ title, message, icon: 'happy-outline' });
       }
-      if (approved.length === 0) return;
 
       setPhotoUris((prev) => [...prev, ...approved].slice(0, MAX_PROFILE_PHOTOS));
     } catch (e) {
@@ -338,8 +345,16 @@ export default function OnboardingScreen() {
     saveInFlightRef.current = true;
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) await supabase.auth.refreshSession();
+      let { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        const { data } = await supabase.auth.refreshSession();
+        session = data.session;
+      }
+      if (!session) {
+        appDialog({ title: 'Session expired', message: 'Please log in again to complete your profile.' });
+        router.replace('/(auth)/login');
+        return;
+      }
 
       let uploadedUrls: string[] = [];
       if (photoUris.length > 0) {

@@ -17,7 +17,6 @@ export default function SettingsScreen() {
         <Text style={settingsStyles.screenIntro}>
           Manage privacy, alerts, premium options, and your account — each section opens its own screen.
         </Text>
-        <>
           <SettingsHubRow
             icon="lock-closed-outline"
             iconColor={COLORS.earth}
@@ -61,7 +60,6 @@ export default function SettingsScreen() {
             onPress={() => router.push('/(settings)/account')}
             isLast
           />
-        </>
         <View style={{ height: 32 }} />
       </ScrollView>
     </SafeAreaView>

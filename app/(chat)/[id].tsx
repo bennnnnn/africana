@@ -960,7 +960,7 @@ export default function ChatScreen() {
         inverted
         keyExtractor={(item) => item.type === 'message' ? (item.message.listKey ?? item.message.id) : item.id}
         extraData={reactionEmojiArrays}
-        removeClippedSubviews={false}
+        removeClippedSubviews={Platform.OS === 'android'}
         initialNumToRender={20}
         maxToRenderPerBatch={12}
         windowSize={12}

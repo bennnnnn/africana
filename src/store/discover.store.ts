@@ -90,6 +90,12 @@ const fetchLikedUserIdsPending = new Map<string, Promise<void>>();
 let _realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 let _subscribed = false;
 
+// Cached per-user blocks + likes so pagination doesn't re-fetch them every page.
+// Invalidated on reset (filter change / pull-to-refresh) or user switch.
+let _cachedBlockedIds: string[] = [];
+let _cachedLikedIds: Set<string> = new Set();
+let _cachedForUserId: string | null = null;
+
 export const useDiscoverStore = create<DiscoverState>((set, get) => ({
   users: [],
   isLoading: false,
@@ -125,25 +131,34 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     try {
       const today = new Date();
 
-      // ── Fetch blocks + liked IDs in parallel ───────────────────────────────
-      const [blocksRes, likedRes] = await Promise.all([
-        supabase
-          .from('blocks')
-          .select('blocked_id, blocker_id')
-          .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`),
-        supabase
-          .from('likes')
-          .select('to_user_id')
-          .eq('from_user_id', userId),
-      ]);
+      // ── Blocks + liked IDs: fetch fresh on reset or user switch, reuse cache on pagination ──
+      let blockedIds: string[];
+      let likedIds: Set<string>;
 
-      const blockedIds: string[] = (blocksRes.data ?? []).map((b) =>
-        b.blocker_id === userId ? b.blocked_id : b.blocker_id
-      );
-      const likedIds = new Set<string>((likedRes.data ?? []).map((l) => l.to_user_id));
-
-      // Keep store in sync
-      set({ likedUserIds: likedIds });
+      if (reset || _cachedForUserId !== userId) {
+        const [blocksRes, likedRes] = await Promise.all([
+          supabase
+            .from('blocks')
+            .select('blocked_id, blocker_id')
+            .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`),
+          supabase
+            .from('likes')
+            .select('to_user_id')
+            .eq('from_user_id', userId),
+        ]);
+        blockedIds = (blocksRes.data ?? []).map((b) =>
+          b.blocker_id === userId ? b.blocked_id : b.blocker_id
+        );
+        likedIds = new Set<string>((likedRes.data ?? []).map((l) => l.to_user_id));
+        _cachedBlockedIds = blockedIds;
+        _cachedLikedIds = likedIds;
+        _cachedForUserId = userId;
+        set({ likedUserIds: likedIds });
+      } else {
+        // Pagination: reuse cached values — no extra round-trips
+        blockedIds = _cachedBlockedIds;
+        likedIds = _cachedLikedIds;
+      }
 
       // ── Build main query ───────────────────────────────────────────────────
       // Photo gate: require avatar_url so every card in Discover has at least
@@ -179,12 +194,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       const effMax = Math.min(fMax, pMax);
 
       if (effMin > effMax) {
-        set((state) => ({
-          users: reset || currentPage === 0 ? [] : state.users,
-          page: currentPage === 0 ? 0 : currentPage,
-          hasMore: false,
-          fetchError: null,
-        }));
+        set({ users: [], page: 0, hasMore: false, fetchError: null });
         return;
       }
 
@@ -368,6 +378,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         s.delete(toUserId);
         return { likedUserIds: s };
       });
+      _cachedLikedIds.delete(toUserId);
       track(EVENTS.LIKE_REMOVED);
       return false;
     }
@@ -405,6 +416,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       s.add(toUserId);
       return { likedUserIds: s };
     });
+    _cachedLikedIds.add(toUserId);
 
     const { data: senderProfile } = await supabase
       .from('profiles').select('full_name').eq('id', fromUserId).single();

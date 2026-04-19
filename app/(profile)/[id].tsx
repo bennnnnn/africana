@@ -57,7 +57,7 @@ import { track, EVENTS } from '@/lib/analytics';
 import { hasExistingReport } from '@/lib/social-actions';
 import { recordProfileShareEvent, SHARE_REWARD_TOAST } from '@/lib/share-reward';
 import { getProfileSeed } from '@/lib/profile-seed-cache';
-import { isUserEffectivelyOnline } from '@/lib/utils';
+import { isUserEffectivelyOnline, formatLastSeen } from '@/lib/utils';
 import { SPRING, SNAP_IN } from '@/lib/motion';
 
 const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female' };
@@ -304,26 +304,6 @@ function ReadOnlyRow({ icon, label, value, isLast }: {
   );
 }
 
-function formatLastSeen(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '';
-  const diff = Math.max(0, Date.now() - t);
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (mins < 1) return 'just now';
-  if (mins < 60) return 'this hour';
-  if (hours < 2) return 'an hour ago';
-  if (hours < 24) return `${hours} hours ago`;
-  if (days < 2) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
-  if (days < 14) return 'a week ago';
-  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
-  if (days < 60) return 'a month ago';
-  if (days < 365) return `${Math.floor(days / 30)} months ago`;
-  return 'long time ago';
-}
 
 export default function ProfileViewScreen() {
   const {
@@ -487,6 +467,7 @@ export default function ProfileViewScreen() {
   const [photoIndex, setPhotoIndex] = useState(0);
   const [matchUser, setMatchUser] = useState<User | null>(null);
   const [isFavourite, setIsFavourite] = useState(false);
+  const likeInFlightRef = useRef(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [reportPromptVisible, setReportPromptVisible] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -587,9 +568,10 @@ export default function ProfileViewScreen() {
   useEffect(() => {
     if (!profile || !currentUser?.id || currentUser.id === profile.id) return;
 
+    // ignoreDuplicates:true → ON CONFLICT DO NOTHING (no UPDATE policy needed on the table)
     void supabase.from('profile_views').upsert(
       { viewer_id: currentUser.id, viewed_id: profile.id, viewed_at: new Date().toISOString() },
-      { onConflict: 'viewer_id,viewed_id' },
+      { onConflict: 'viewer_id,viewed_id', ignoreDuplicates: true },
     );
     track(EVENTS.PROFILE_VIEWED);
     // Only notify once per app session — the DB upsert deduplicates the row but not the push
@@ -1015,7 +997,7 @@ export default function ProfileViewScreen() {
   const activityLabel = isActiveOnline
     ? 'Online'
     : useLastActiveLabel
-      ? formatLastSeen(profile.last_seen)
+      ? (formatLastSeen(profile.last_seen) ?? 'Offline')
       : 'Offline';
 
   const photoModalDotBottom =
@@ -1046,22 +1028,25 @@ export default function ProfileViewScreen() {
     !isOwnProfile && !!currentUser && !!session && !isProfileCompleteForDiscover(currentUser);
 
   const handleLike = async () => {
-    if (!currentUser) return;
-    const wasLiked = likedUserIds.has(profile.id);
-    if (!wasLiked) haptics.tapLight();
-    const isMatch = await toggleLike(currentUser.id, profile.id);
-    if (isMatch && !wasLiked) {
-      haptics.success();
-      setMatchUser(profile);
-      // Match modal handles its own UI; no toast needed here.
-    } else {
-      const toastCfg = {
-        icon: (wasLiked ? 'heart-outline' : 'heart') as keyof typeof Ionicons.glyphMap,
-        message: wasLiked ? 'Unliked' : 'Liked!',
-      };
-      // Photo viewer is a Modal — root toast renders behind it. Show inside.
-      if (photoViewerVisible) showViewerToast(toastCfg);
-      else showToast(toastCfg);
+    if (!currentUser || likeInFlightRef.current) return;
+    likeInFlightRef.current = true;
+    try {
+      const wasLiked = likedUserIds.has(profile.id);
+      if (!wasLiked) haptics.tapLight();
+      const isMatch = await toggleLike(currentUser.id, profile.id);
+      if (isMatch && !wasLiked) {
+        haptics.success();
+        setMatchUser(profile);
+      } else {
+        const toastCfg = {
+          icon: (wasLiked ? 'heart-outline' : 'heart') as keyof typeof Ionicons.glyphMap,
+          message: wasLiked ? 'Unliked' : 'Liked!',
+        };
+        if (photoViewerVisible) showViewerToast(toastCfg);
+        else showToast(toastCfg);
+      }
+    } finally {
+      likeInFlightRef.current = false;
     }
   };
 
@@ -1074,8 +1059,16 @@ export default function ProfileViewScreen() {
       // chat reopens the photo viewer.
       closePhotoViewer();
     }
-    const convId = await getOrCreateConversation(currentUser.id, profile.id);
-    if (!convId) return;
+    let convId: string | null = null;
+    try {
+      convId = await getOrCreateConversation(currentUser.id, profile.id);
+    } catch {
+      // fall through to null check below
+    }
+    if (!convId) {
+      showToast({ icon: 'alert-circle-outline', message: 'Could not open conversation. Please try again.' });
+      return;
+    }
     const peerId = profile.id;
     const navigate = () => {
       router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: peerId } });
@@ -1093,20 +1086,30 @@ export default function ProfileViewScreen() {
   const handleFavourite = async () => {
     if (!currentUser) return;
     if (isFavourite) {
-      await supabase
+      setIsFavourite(false);
+      const { error } = await supabase
         .from('favourites')
         .delete()
         .eq('user_id', currentUser.id)
         .eq('favourited_id', profile.id);
-      setIsFavourite(false);
+      if (error) {
+        setIsFavourite(true);
+        showToast({ icon: 'alert-circle-outline', message: 'Could not update favourites. Please try again.' });
+        return;
+      }
       const toastCfg = { icon: 'star-outline' as keyof typeof Ionicons.glyphMap, message: 'Removed from favourites' };
       if (photoViewerVisible) showViewerToast(toastCfg);
       else showToast(toastCfg);
     } else {
-      await supabase
+      setIsFavourite(true);
+      const { error } = await supabase
         .from('favourites')
         .insert({ user_id: currentUser.id, favourited_id: profile.id });
-      setIsFavourite(true);
+      if (error) {
+        setIsFavourite(false);
+        showToast({ icon: 'alert-circle-outline', message: 'Could not update favourites. Please try again.' });
+        return;
+      }
       const toastCfg = { icon: 'star' as keyof typeof Ionicons.glyphMap, message: 'Added to favourites' };
       if (photoViewerVisible) showViewerToast(toastCfg);
       else showToast(toastCfg);
@@ -1170,12 +1173,16 @@ export default function ProfileViewScreen() {
   };
 
   const confirmBlockUser = async () => {
-    if (!currentUser) return;
-    await supabase.from('blocks').insert({
+    if (!currentUser || !profile) return;
+    const { error } = await supabase.from('blocks').insert({
       blocker_id: currentUser.id,
       blocked_id: profile.id,
     });
-    showToast({ icon: 'ban-outline', message: `${profile.full_name} blocked` });
+    if (error) {
+      showToast({ icon: 'alert-circle-outline', message: 'Could not block user. Please try again.' });
+      return;
+    }
+    showToast({ icon: 'ban-outline', message: `${profile.full_name ?? 'User'} blocked` });
     setTimeout(() => router.back(), 1300);
   };
 
@@ -1452,48 +1459,31 @@ export default function ProfileViewScreen() {
         {/* Identity — overlaps hero */}
         <View>
         <View style={pr.identityCard}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text
-                  style={pr.displayName}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.9}
-                  allowFontScaling={false}
-                >
-                  {profile.full_name}
-                  {profile.age ? <Text style={pr.displayAge}>, {profile.age}</Text> : null}
-                </Text>
-                {isVerified ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.successSurface }}>
-                    <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: COLORS.success }}>Verified</Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-            <View
-              style={[
-                pr.onlineBadge,
-                {
-                  backgroundColor: isActiveOnline ? `${COLORS.online}16` : COLORS.savanna,
-                  maxWidth: '55%',
-                  flexShrink: 1,
-                },
-              ]}
-            >
+          {/* Online status — own row, pushed to the right edge */}
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <View style={[pr.onlineBadge, { backgroundColor: isActiveOnline ? `${COLORS.online}16` : COLORS.savanna }]}>
               <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: isActiveOnline ? COLORS.online : COLORS.textMuted }} />
               <Text
-                style={{ fontSize: 11, fontWeight: '700', color: isActiveOnline ? COLORS.online : COLORS.textSecondary, flexShrink: 1 }}
+                style={{ fontSize: 12, fontWeight: '600', color: isActiveOnline ? COLORS.online : COLORS.textSecondary }}
                 numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.6}
-                allowFontScaling={false}
               >
                 {activityLabel}
               </Text>
             </View>
+          </View>
+
+          {/* Name + age + verified badge */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Text style={pr.displayName}>
+              {profile.full_name}
+              {profile.age ? <Text style={pr.displayAge}>, {profile.age}</Text> : null}
+            </Text>
+            {isVerified ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.successSurface }}>
+                <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+                <Text style={{ fontSize: 11, fontWeight: '800', color: COLORS.success }}>Verified</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Quick Facts — dense at-a-glance summary, lives inside the identity card */}
@@ -2170,8 +2160,8 @@ const pr = StyleSheet.create({
     paddingBottom: 20,
     ...SHADOWS.md,
   },
-  displayName: { fontSize: FONT.xxl + 4, fontFamily: FONT.displayFamily, color: COLORS.textStrong, flex: 1, letterSpacing: 0.2 },
-  displayAge: { fontWeight: FONT.bold, color: COLORS.textSecondary },
+  displayName: { fontSize: FONT.xxl + 4, fontWeight: FONT.extrabold, color: COLORS.textStrong, letterSpacing: 0.2 },
+  displayAge: { fontSize: FONT.xl, fontWeight: FONT.normal, color: COLORS.textSecondary },
   locationIconWrap: {
     width: 28,
     height: 28,
@@ -2442,7 +2432,7 @@ const pr = StyleSheet.create({
     marginBottom: 12,
     textTransform: 'uppercase',
   },
-  onlineBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.full },
+  onlineBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full },
   fieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
