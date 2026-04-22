@@ -12,6 +12,8 @@ import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useActivityStore, selectLikesTabBadge } from '@/store/activity.store';
 import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
 import haptics from '@/lib/haptics';
+import { isViewingConversation } from '@/lib/active-chat';
+import { sendLocalNotification } from '@/lib/notifications';
 
 function TabIcon({
   name,
@@ -101,9 +103,39 @@ export default function TabLayout() {
     channelRef.current = supabase
       .channel(`tab-conversations:${user.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        const message = payload.new as { sender_id?: string };
+        const message = payload.new as {
+          sender_id?: string;
+          conversation_id?: string;
+          content?: string;
+        };
         if (message.sender_id === user.id) return;
         scheduleConvRefresh();
+        // Foreground ping. We deliberately fire this on every incoming
+        // message that ISN'T already on screen — even when the OS push from
+        // the `notify` Edge Function is also delivering one — because:
+        //
+        //   1. Realtime arrives in <1s; OS push is regularly 2–10s late.
+        //   2. Many EAS builds have FCM/APNs misconfigured, in which case
+        //      this is the ONLY audible cue the user gets.
+        //
+        // The duplicate sound risk (push + local) is preferred over silence.
+        // If the user is actively viewing this conversation, we skip both
+        // sound and haptic because the message is appearing inline anyway.
+        if (isViewingConversation(message.conversation_id)) return;
+        haptics.tapMedium();
+        // Pull the sender name from the chat store directly via getState() so
+        // we don't have to add `conversations` to the effect deps (which would
+        // tear down + rebuild this realtime channel on every list mutation).
+        const senderName =
+          useChatStore.getState().conversations.find((c) => c.id === message.conversation_id)
+            ?.other_user?.full_name ?? 'Someone';
+        const preview = (message.content ?? '').trim();
+        void sendLocalNotification(
+          `💬 ${senderName}`,
+          preview ? (preview.length > 100 ? `${preview.slice(0, 97)}…` : preview) : 'sent you a message',
+          'message',
+          message.conversation_id ? { conversationId: message.conversation_id } : undefined,
+        );
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, (payload) => {
         const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];

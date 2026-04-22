@@ -102,6 +102,7 @@ interface ChatState {
   markMessagesRead: (conversationId: string, userId: string) => Promise<void>;
   addMessage: (conversationId: string, message: Message) => void;
   applyMessageUpdate: (conversationId: string, message: Message) => void;
+  removeMessage: (conversationId: string, messageId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -628,6 +629,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return { ...m, ...message };
       });
       if (!changed) return state;
+      return {
+        messages: {
+          ...state.messages,
+          [conversationId]: next,
+        },
+      };
+    });
+    enqueueReplaceCachedMessages(
+      conversationId,
+      tailForCache(get().messages[conversationId] ?? []),
+    );
+  },
+
+  // Drops a message from local state. Used by the realtime DELETE listener so
+  // a peer's "delete for everyone" reflects without requiring a manual refresh.
+  // Idempotent: a no-op if the message isn't currently cached (e.g. already
+  // pruned by the local optimistic delete on the sender's side).
+  removeMessage: (conversationId, messageId) => {
+    set((state) => {
+      const list = state.messages[conversationId];
+      if (!list || list.length === 0) return state;
+      const next = list.filter((m) => m.id !== messageId);
+      if (next.length === list.length) return state;
       return {
         messages: {
           ...state.messages,

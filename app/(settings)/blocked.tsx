@@ -136,16 +136,6 @@ export default function BlockedUsersScreen() {
     fetchBlockedUsers().finally(() => setIsLoading(false));
   }, [user, fetchBlockedUsers]);
 
-  const renderItem = useCallback(
-    ({ item }: { item: BlockedUser }) => <BlockedRow item={item} onUnblock={unblock} />,
-    [unblock],
-  );
-  const keyExtractor = useCallback((item: BlockedUser) => item.id, []);
-  const getItemLayout = useCallback(
-    (_: any, index: number) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }),
-    [],
-  );
-
   const unblock = useCallback((blockId: string, name: string) => {
     appDialog({
       title: 'Unblock',
@@ -172,6 +162,16 @@ export default function BlockedUsersScreen() {
       ],
     });
   }, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: BlockedUser }) => <BlockedRow item={item} onUnblock={unblock} />,
+    [unblock],
+  );
+  const keyExtractor = useCallback((item: BlockedUser) => item.id, []);
+  const getItemLayout = useCallback(
+    (_: any, index: number) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }),
+    [],
+  );
 
   if (!user) {
     return (

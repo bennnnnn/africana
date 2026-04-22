@@ -31,7 +31,7 @@ export default function PrivacySettingsScreen() {
       <SettingsHeaderBar title="Privacy" titleAlign="leading" />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={settingsStyles.scrollContent}>
         <Text style={settingsStyles.screenIntro}>
-          Control who can reach you, whether you appear online, and who sees you in Discover.
+          Control who can reach you and who sees you in Discover.
         </Text>
         <>
           <SettingRow
@@ -41,14 +41,6 @@ export default function PrivacySettingsScreen() {
             description="Turn off to pause incoming and outgoing messages"
             value={settings?.receive_messages ?? true}
             onToggle={(v) => applySettings({ receive_messages: v })}
-          />
-          <SettingRow
-            icon="radio-outline"
-            iconColor={COLORS.online}
-            label="Online status"
-            description="Show as online when you’re using the app"
-            value={settings?.show_online_status ?? true}
-            onToggle={(v) => applySettings({ show_online_status: v })}
           />
           <SettingRow
             icon="eye-outline"

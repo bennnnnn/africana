@@ -81,20 +81,26 @@ Deno.serve(async (req) => {
     const payload: NotifyPayload = await req.json();
     const { type, recipientId, senderName, extra } = payload;
 
-    // Fetch recipient's push token, notification preferences, and display name
+    // Fetch recipient's push token, notification preferences, and display name.
+    //
+    // NOTE: maybeSingle() — not single(). A user who has never opened the
+    // notification settings sheet may not have a `user_settings` row yet, in
+    // which case `single()` returns 406 and the whole notify call 500s.
+    // `maybeSingle()` returns `null` and we fall through with sensible
+    // defaults (notifications on by default).
     const { data: settings } = await supabase
       .from('user_settings')
       .select(
         'push_token, receive_messages, notify_messages, notify_likes, notify_matches, notify_views, email_notifications',
       )
       .eq('user_id', recipientId)
-      .single();
+      .maybeSingle();
 
     const { data: profileRow } = await supabase
       .from('profiles')
       .select('full_name')
       .eq('id', recipientId)
-      .single();
+      .maybeSingle();
 
     // Email lives on auth.users — fetch via the admin API rather than
     // duplicating it on profiles (which would need to be readable via the

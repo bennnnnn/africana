@@ -387,7 +387,11 @@ export default function ProfileViewScreen() {
   const insets = useSafeAreaInsets();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
-  const heroHeight = winWidth * 1.1;
+  // Match the Discover card aspect ratio (1 : 1.45) so a photo that was
+  // fully visible on the discover grid isn't suddenly bottom-cropped when
+  // the user opens the full profile. Previously we used 1.1 (closer to
+  // square) which lost the lower third of any portrait photo.
+  const heroHeight = winWidth * 1.45;
   const collapseStart = Math.max(heroHeight - 140, 80);
   const collapseEnd = Math.max(heroHeight - 70, 120);
   useEffect(() => {
@@ -1378,34 +1382,6 @@ export default function ProfileViewScreen() {
             }} />
           </Animated.View>
 
-          {/* Photo dots */}
-          {photos.length > 1 && (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                bottom: 28,
-                left: 0,
-                right: 0,
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 5,
-              }}
-            >
-              {photos.map((_, i) => (
-                <View
-                  key={i}
-                  style={{
-                    width: i === photoIndex ? 20 : 7,
-                    height: 7,
-                    borderRadius: 3.5,
-                    backgroundColor: i === photoIndex ? '#FFF' : 'rgba(255,255,255,0.5)',
-                  }}
-                />
-              ))}
-            </View>
-          )}
-
           {/* Back + overflow menu (share / report / block) — keeps hero uncluttered.
               Fades out as the collapsed header takes over so we never double-stack
               back buttons on top of each other. */}
@@ -1431,15 +1407,6 @@ export default function ProfileViewScreen() {
                 <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
                 <Ionicons name="arrow-back" size={22} color="#FFF" />
               </TouchableOpacity>
-
-              {photos.length > 2 ? (
-                <View style={pr.photoCounterPill}>
-                  <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-                  <Text style={pr.photoCounterText}>
-                    {Math.min(photoIndex + 1, photos.length)} / {photos.length}
-                  </Text>
-                </View>
-              ) : null}
 
               <TouchableOpacity
                 onPress={() => setProfileHeroMenuVisible(true)}
@@ -2150,7 +2117,7 @@ export default function ProfileViewScreen() {
 
 const pr = StyleSheet.create({
   identityCard: {
-    marginTop: -12,
+    marginTop: 0,
     marginHorizontal: 16,
     marginBottom: 4,
     backgroundColor: COLORS.white,
@@ -2161,7 +2128,7 @@ const pr = StyleSheet.create({
     ...SHADOWS.md,
   },
   displayName: { fontSize: FONT.xxl + 4, fontWeight: FONT.extrabold, color: COLORS.textStrong, letterSpacing: 0.2 },
-  displayAge: { fontSize: FONT.xl, fontWeight: FONT.normal, color: COLORS.textSecondary },
+  displayAge: { fontSize: FONT.xl, fontWeight: FONT.regular, color: COLORS.textSecondary },
   locationIconWrap: {
     width: 28,
     height: 28,
@@ -2190,23 +2157,6 @@ const pr = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.18)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.25)',
-  },
-  photoCounterPill: {
-    paddingHorizontal: 12,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.18)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  photoCounterText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.3,
   },
   collapsedHeader: {
     position: 'absolute',

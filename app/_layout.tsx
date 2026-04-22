@@ -119,7 +119,9 @@ export default function RootLayout() {
             InteractionManager.runAfterInteractions(() => {
               void setOnlineStatus(uid, 'online').catch(() => {});
               startHeartbeat(uid);
-              registerForPushNotifications(uid);
+              void registerForPushNotifications(uid).then((r) => {
+                if (!r.ok) console.warn('[push] register on bootstrap:', r.reason, r.detail ?? '');
+              });
               identify(uid);
             });
           }
@@ -174,7 +176,9 @@ export default function RootLayout() {
         void fetchProfile(uid).catch((e) => console.error('fetchProfile (auth change)', e));
         void fetchSettings(uid).catch((e) => console.error('fetchSettings (auth change)', e));
         InteractionManager.runAfterInteractions(() => {
-          registerForPushNotifications(uid);
+          void registerForPushNotifications(uid).then((r) => {
+            if (!r.ok) console.warn('[push] register on auth change:', r.reason, r.detail ?? '');
+          });
           identify(uid);
         });
         if (event === 'SIGNED_IN') {
@@ -205,7 +209,9 @@ export default function RootLayout() {
             setSession(session);
             await fetchProfile(session.user.id);
             await fetchSettings(session.user.id);
-            registerForPushNotifications(session.user.id);
+            void registerForPushNotifications(session.user.id).then((r) => {
+              if (!r.ok) console.warn('[push] register on deep link:', r.reason, r.detail ?? '');
+            });
             const { user } = useAuthStore.getState();
             if (isProfileCompleteForDiscover(user)) {
               router.replace('/(tabs)/discover');

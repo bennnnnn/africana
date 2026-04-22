@@ -15,7 +15,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '@/lib/supabase';
+import { acquireTypingChannel } from '@/lib/typing-channel';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { Avatar } from '@/components/ui/Avatar';
@@ -182,32 +182,35 @@ export default function MessagesScreen() {
     useCallback(() => {
       if (!user || subscribedConvIds.length === 0) return;
 
-      const channels = subscribedConvIds.map((convId) =>
-        supabase
-          .channel(`chat-typing:${convId}`)
-          .on('broadcast', { event: 'typing' }, (payload) => {
-            const senderId = (payload.payload as { userId?: string } | undefined)?.userId;
-            if (!senderId || senderId === user.id) return;
-            setTypingMap((prev) => (prev[convId] ? prev : { ...prev, [convId]: true }));
-            const existing = typingTimersRef.current.get(convId);
-            if (existing) clearTimeout(existing);
-            const t = setTimeout(() => {
-              setTypingMap((prev) => {
-                if (!prev[convId]) return prev;
-                const { [convId]: _omit, ...rest } = prev;
-                return rest;
-              });
-              typingTimersRef.current.delete(convId);
-            }, TYPING_TTL_MS);
-            typingTimersRef.current.set(convId, t);
-          })
-          .subscribe(),
+      // Use the shared, ref-counted typing-channel helper so that opening a
+      // chat (which also subscribes to the SAME `chat-typing:${convId}`
+      // topic) doesn't get its underlying channel torn down when this tab's
+      // useFocusEffect cleanup fires. Previous implementation called
+      // `supabase.removeChannel(...)` directly, which killed the shared
+      // object — exactly why "typing" stopped showing up after navigating
+      // from inbox into a chat.
+      const releases = subscribedConvIds.map((convId) =>
+        acquireTypingChannel(convId, ({ userId }) => {
+          if (!userId || userId === user.id) return;
+          setTypingMap((prev) => (prev[convId] ? prev : { ...prev, [convId]: true }));
+          const existing = typingTimersRef.current.get(convId);
+          if (existing) clearTimeout(existing);
+          const t = setTimeout(() => {
+            setTypingMap((prev) => {
+              if (!prev[convId]) return prev;
+              const { [convId]: _omit, ...rest } = prev;
+              return rest;
+            });
+            typingTimersRef.current.delete(convId);
+          }, TYPING_TTL_MS);
+          typingTimersRef.current.set(convId, t);
+        }).release,
       );
 
       return () => {
         typingTimersRef.current.forEach((t) => clearTimeout(t));
         typingTimersRef.current.clear();
-        for (const ch of channels) supabase.removeChannel(ch);
+        for (const release of releases) release();
         setTypingMap({});
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps

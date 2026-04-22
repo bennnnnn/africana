@@ -88,7 +88,7 @@ async function fetchUsersForTab(
     nextList = (data ?? [])
       .map((row: any) => row as User)
       .filter(Boolean)
-      .filter((u) => !blockedSet.has(u.id));
+      .filter((u: User) => !blockedSet.has(u.id));
   }
 
   return nextList;
@@ -352,10 +352,17 @@ export default function LikesScreen() {
       countDebounce = setTimeout(() => {
         void fetchActivityCountsRef.current();
       }, 280);
+      // Invalidate every tab's "fetched at" timestamp so the next time the
+      // user switches segments, `loadTab` will refetch instead of early
+      // returning within the LIST_STALE_MS staleness window. Without this
+      // the user had to pull-to-refresh to see new activity arriving while
+      // they were on a different segment — exactly the bug they reported.
+      for (const t of TAB_ORDER) tabFetchedAtRef.current[t] = 0;
       if (reloadDebounce) clearTimeout(reloadDebounce);
       reloadDebounce = setTimeout(() => {
-        // Only refresh the list the user is currently looking at. Other tabs
-        // will refetch lazily (or after LIST_STALE_MS expires).
+        // Eagerly refresh the list the user is currently looking at; the
+        // other segments are already marked stale above and will refetch
+        // on switch.
         void loadTabRef.current(activeTabRef.current, true);
       }, 200);
     };

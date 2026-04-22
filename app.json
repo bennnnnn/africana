@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.africana.dating"
+      "bundleIdentifier": "com.africana.dating",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +28,12 @@
       "package": "com.africana.dating",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "bundler": "metro",
@@ -59,6 +67,16 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "56908a4f-a73b-4237-b925-7b3e00446e53"
+      }
+    },
+    "owner": "abebech",
+    "updates": {
+      "url": "https://u.expo.dev/56908a4f-a73b-4237-b925-7b3e00446e53"
     }
   }
 }

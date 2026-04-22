@@ -377,7 +377,11 @@ export default function OnboardingScreen() {
 
       const { error } = await supabase.from('profiles').upsert({
         id:             params.userId,
-        email:          params.email,
+        // NOTE: do NOT include `email` here. `public.profiles` has no `email`
+        // column — email lives in `auth.users.email` and is enriched onto
+        // the User object client-side via the session in `fetchProfile`.
+        // PostgREST will reject the whole upsert with "Could not find the
+        // 'email' column" if this is sent.
         full_name:      fullName.trim(),
         username:       params.email,
         birthdate:      birthdate.toISOString().split('T')[0],

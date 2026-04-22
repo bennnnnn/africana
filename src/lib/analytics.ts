@@ -16,7 +16,16 @@
 
 import PostHog from 'posthog-react-native';
 
-const API_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY;
+/**
+ * Treat the PostHog key as missing if it's empty OR matches the
+ * placeholder shape (`phc_xxxxxxx...`) we ship in `.env.example`.
+ * Without this, a developer who forgets to swap the placeholder ends up
+ * initializing PostHog with a bogus key — the SDK happily accepts it and
+ * silently drops every flush, which looks like "analytics works" until
+ * you check the dashboard.
+ */
+const RAW_API_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY;
+const API_KEY = RAW_API_KEY && !/^phc_x+$/i.test(RAW_API_KEY) ? RAW_API_KEY : undefined;
 const HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
 
 let client: PostHog | null = null;
@@ -28,6 +37,16 @@ type QueuedCall =
   | { kind: 'reset' };
 const queue: QueuedCall[] = [];
 
+/**
+ * PostHog's public types use a strict `JsonType` union for event props, but
+ * our public surface accepts the more ergonomic `Record<string, unknown>`.
+ * Anything we send is already JSON-serializable in practice (counts, ids,
+ * booleans), so we cast at the boundary — the runtime will JSON.stringify
+ * regardless and bad payloads are silently dropped by the catch.
+ */
+type PostHogProps = Parameters<PostHog['capture']>[1];
+const asPhProps = (p?: Record<string, unknown>) => p as unknown as PostHogProps;
+
 function flushQueue() {
   if (!client) return;
   while (queue.length) {
@@ -35,10 +54,10 @@ function flushQueue() {
     try {
       switch (call.kind) {
         case 'track':
-          client.capture(call.event, call.props);
+          client.capture(call.event, asPhProps(call.props));
           break;
         case 'identify':
-          client.identify(call.distinctId, call.props);
+          client.identify(call.distinctId, asPhProps(call.props));
           break;
         case 'reset':
           client.reset();
@@ -94,7 +113,7 @@ export function track(event: string, props?: Record<string, unknown>): void {
     queue.push({ kind: 'track', event, props });
     return;
   }
-  try { client.capture(event, props); } catch { /* swallow */ }
+  try { client.capture(event, asPhProps(props)); } catch { /* swallow */ }
 }
 
 /** Associate subsequent events with a user id. Call on sign-in. */
@@ -104,7 +123,7 @@ export function identify(distinctId: string, props?: Record<string, unknown>): v
     queue.push({ kind: 'identify', distinctId, props });
     return;
   }
-  try { client.identify(distinctId, props); } catch { /* swallow */ }
+  try { client.identify(distinctId, asPhProps(props)); } catch { /* swallow */ }
 }
 
 /** Forget the current user. Call on sign-out. */

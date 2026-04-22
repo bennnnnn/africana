@@ -33,6 +33,8 @@ import { COLORS, RADIUS, FONT, SHADOWS, DEFAULT_AVATAR } from '@/constants';
 import { getHiddenMessageIds, persistHiddenMessageIds } from '@/lib/hidden-messages';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { isUserEffectivelyOnline, formatLastSeen } from '@/lib/utils';
+import { acquireTypingChannel } from '@/lib/typing-channel';
+import { setActiveConversation } from '@/lib/active-chat';
 import { SPRING, SNAP_OUT } from '@/lib/motion';
 import haptics from '@/lib/haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -136,9 +138,11 @@ export default function ChatScreen() {
   }
   const { user, settings } = useAuthStore();
   const outgoingMessagingDisabled = settings?.receive_messages === false;
-  const { messages, fetchMessages, sendMessage, deleteMessage, markMessagesRead, addMessage, applyMessageUpdate } = useChatStore();
-  const hasMoreOlder = useChatStore((s) => !!s.hasMoreMessages[conversationId]);
-  const isLoadingOlder = useChatStore((s) => !!s.loadingOlderMessages[conversationId]);
+  const { messages, fetchMessages, sendMessage, deleteMessage, markMessagesRead, addMessage, applyMessageUpdate, removeMessage } = useChatStore();
+  // `conversationId` is `string | undefined` until the route param resolves;
+  // guard the lookups so we don't index a dictionary with `undefined`.
+  const hasMoreOlder = useChatStore((s) => (conversationId ? !!s.hasMoreMessages[conversationId] : false));
+  const isLoadingOlder = useChatStore((s) => (conversationId ? !!s.loadingOlderMessages[conversationId] : false));
   const loadOlderMessages = useChatStore((s) => s.loadOlderMessages);
   const { likedUserIds, toggleLike, fetchLikedUserIds } = useDiscoverStore();
   const { showDialog, showToast } = useDialog();
@@ -594,11 +598,33 @@ export default function ChatScreen() {
         const updated = payload.new as Message;
         applyMessageUpdate(conversationId, updated);
       })
-      // Reactions live on a separate table. We can't filter by
-      // conversation_id (the FK is on message_id), so we listen to ALL
-      // reaction changes and discard any whose message_id we don't have
-      // in this conversation. RLS guarantees we only RECEIVE rows for
-      // conversations we participate in, so this is a tiny stream.
+      // DELETE events for "delete for everyone" — without this, the peer
+      // had to pull-to-refresh to notice their copy of a deleted message
+      // had vanished. The `messages` table needs `replica identity full`
+      // for `payload.old.conversation_id` to be populated and for the
+      // server-side filter above to actually route the event here (see
+      // migration 20260424200000_messages_replica_identity_full.sql).
+      .on('postgres_changes', {
+        event: 'DELETE', schema: 'public', table: 'messages',
+        filter: `conversation_id=eq.${conversationId}`,
+      }, (payload) => {
+        const deleted = payload.old as { id?: string } | undefined;
+        if (deleted?.id) removeMessage(conversationId, deleted.id);
+      })
+      .subscribe();
+
+    // ── Reactions on a DEDICATED channel.
+    //
+    // Why split: a single Realtime channel is rejected wholesale if any of
+    // its registered tables isn't in `supabase_realtime`. When this listener
+    // sat on the same channel as the message INSERT/UPDATE listeners above,
+    // a missing publication entry for `message_reactions` silently disabled
+    // delivery of new messages too — the user's "messages don't show up
+    // until I re-open the chat" bug. Keeping listeners on isolated channels
+    // prevents one broken filter from taking down another.
+    const reactionsTopic = `chat-reactions:${conversationId}:${Math.random().toString(36).slice(2, 10)}`;
+    const reactionsChannel = supabase
+      .channel(reactionsTopic)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'message_reactions',
       }, (payload) => {
@@ -620,31 +646,26 @@ export default function ChatScreen() {
       })
       .subscribe();
 
-    const typingChannel = supabase
-      .channel(`chat-typing:${conversationId}`, {
-        // ack: false  → no per-send round-trip; lower latency for typing
-        // self:false  → don't echo our own broadcast back to ourselves
-        config: { broadcast: { self: false, ack: false } },
-      })
-      .on('broadcast', { event: 'typing' }, (payload) => {
-        const senderId = (payload.payload as { userId?: string } | undefined)?.userId;
-        if (!senderId || senderId === user.id) return;
+    // ── Typing channel via shared, ref-counted helper.
+    //
+    // Both this screen and the Messages tab want to listen to the SAME
+    // `chat-typing:${convId}` topic so a peer's keystroke fans out to both
+    // surfaces. supabase-js dedupes channels by topic, so naively calling
+    // `removeChannel` from either screen tore down the shared underlying
+    // channel — which is why typing stopped working the moment the user
+    // navigated from the inbox into a chat. The helper holds a refcount and
+    // only removes the channel when the LAST listener releases it.
+    const { channel: typingChannel, release: releaseTyping } = acquireTypingChannel(
+      conversationId,
+      ({ userId }) => {
+        if (!userId || userId === user.id) return;
         setPeerTyping(true);
         if (peerTypingTimerRef.current) clearTimeout(peerTypingTimerRef.current);
         peerTypingTimerRef.current = setTimeout(() => setPeerTyping(false), 3000);
-      })
-      .subscribe((status, err) => {
-        // NOTE: this callback only fires on state TRANSITIONS. If supabase-js
-        // dedupes our channel against a topic the Messages tab already joined,
-        // we may never see 'SUBSCRIBED' here. We rely on a synchronous
-        // state === 'joined' check at send time as the real gate. Logging here
-        // is purely for debugging.
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          if (err) console.warn('[Chat] typing channel', status, err.message);
-        }
-      });
-
+      },
+    );
     typingChannelRef.current = typingChannel;
+
 
     // Reset reactions when switching conversations so we don't briefly show
     // stale state from the previous chat. The fetch below repopulates.
@@ -680,7 +701,12 @@ export default function ChatScreen() {
       typingChannelRef.current = null;
       setPeerTyping(false);
       supabase.removeChannel(messagesChannel);
-      supabase.removeChannel(typingChannel);
+      supabase.removeChannel(reactionsChannel);
+      // IMPORTANT: never call `supabase.removeChannel(typingChannel)` directly
+      // — the typing channel is shared with the Messages tab. Use the
+      // ref-counted release instead so it only tears down when nobody else
+      // is listening.
+      releaseTyping();
     };
   }, [conversationId, user?.id]);
 
@@ -702,6 +728,13 @@ export default function ChatScreen() {
     useCallback(() => {
       if (!conversationId || !user) return;
       void fetchMessages(conversationId);
+      // Mark this conversation as "currently visible" so the inbox-level
+      // realtime listener doesn't fire a foreground ping/sound while the
+      // user is reading it.
+      setActiveConversation(conversationId);
+      return () => {
+        setActiveConversation(null);
+      };
     }, [conversationId, fetchMessages, user?.id]),
   );
 
