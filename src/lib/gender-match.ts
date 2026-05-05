@@ -1,31 +1,36 @@
 import type { Gender, InterestedIn } from '@/types';
 
-/** Heterosexual matching: men see women, women see men. */
+/** Default interested-in for a gender (opposite of how dating apps pair). */
 export function oppositeInterestedIn(gender: Gender): InterestedIn {
-  return gender === 'male' ? 'women' : 'men';
+  if (gender === 'male') return 'women';
+  return 'men';
 }
 
-/** True when the user has chosen a valid discover preference (men or women). */
+/** True when the user has chosen a valid discover preference. */
 export function isInterestedInProvided(interested: InterestedIn | string | null | undefined): boolean {
   return interested === 'men' || interested === 'women';
 }
 
-/** Map DB value to `men` | `women`. Legacy `everyone` / null coerces from gender when possible. */
+/** Map DB value to `men` | `women`. Coerces legacy `everyone` / null from gender. */
 export function normalizeInterestedInFromDb(
   gender: Gender | null | undefined,
   raw: string | null | undefined,
 ): InterestedIn {
   if (raw === 'men' || raw === 'women') return raw;
+  if (raw === 'everyone') {
+    if (gender === 'male') return 'women';
+    if (gender === 'female') return 'men';
+    return 'men';
+  }
   if (gender === 'male' || gender === 'female') return oppositeInterestedIn(gender);
   return 'men';
 }
 
-/** Hetero-only check — do not use for “profile complete”; use {@link isInterestedInProvided} instead. */
+/** Check whether a gender/interested-in pair is internally consistent. */
 export function isInterestedInAlignedWithGender(
   gender: Gender | null | undefined,
   interested: InterestedIn | string | null | undefined,
 ): boolean {
-  if (gender !== 'male' && gender !== 'female') return false;
-  if (interested !== 'men' && interested !== 'women') return false;
+  if (!gender || !isInterestedInProvided(interested as InterestedIn)) return false;
   return interested === oppositeInterestedIn(gender);
 }

@@ -16,6 +16,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
 import { COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
 import { appDialog } from '@/lib/app-dialog';
+import { UI_LABELS } from '@/constants/copy';
 import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
 
 const { width } = Dimensions.get('window');
@@ -67,7 +68,7 @@ export default function PhotosScreen() {
       }
 
       if (uploaded.length === 0) {
-        appDialog({ title: 'Upload failed', message: 'Could not upload photos.', icon: 'cloud-offline-outline' });
+        appDialog({ title: 'Upload failed', message: "Couldn't upload photos. Try again.", icon: 'cloud-offline-outline' });
         return;
       }
 
@@ -78,7 +79,7 @@ export default function PhotosScreen() {
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Something went wrong.';
-      appDialog({ title: 'Could not save photos', message: msg, icon: 'alert-circle-outline' });
+      appDialog({ title: 'Save failed', message: msg, icon: 'alert-circle-outline' });
     } finally {
       setUploading(false);
       setUploadProgress('');
@@ -91,9 +92,9 @@ export default function PhotosScreen() {
       message: 'Remove this photo from your profile?',
       icon: 'trash-outline',
       actions: [
-        { label: 'Cancel', style: 'cancel' },
+        { label: UI_LABELS.cancel, style: 'cancel' },
         {
-          label: 'Remove',
+          label: UI_LABELS.delete,
           style: 'destructive',
           onPress: async () => {
             const updatedPhotos = photos.filter((p) => p !== photoUrl);
@@ -104,7 +105,7 @@ export default function PhotosScreen() {
               });
             } catch (e: unknown) {
               const msg = e instanceof Error ? e.message : 'Something went wrong.';
-              appDialog({ title: 'Could not remove photo', message: msg, icon: 'alert-circle-outline' });
+              appDialog({ title: 'Remove failed', message: msg, icon: 'alert-circle-outline' });
             }
           },
         },

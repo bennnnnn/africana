@@ -54,6 +54,9 @@ export const COLORS = {
   warningSurface: '#FFF4DE',
   warningBorder:  '#F6D48A',
 
+  /** Settings hub / in-app info accent (e.g. notifications icon) */
+  notificationsAccent: '#3B82F6',
+
   /** Unfilled profile fields — soft coral to invite action */
   emptyField:        '#EF6A56',
   emptyFieldSurface: '#FFEDE8',

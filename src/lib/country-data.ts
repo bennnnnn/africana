@@ -1021,3 +1021,22 @@ export const AFRICAN_COUNTRY_CODES = new Set(
 // Look up a country by code
 export const getCountry = (code: string) => ALL_COUNTRIES.find((c) => c.code === code);
 export const getCountryByName = (name: string) => ALL_COUNTRIES.find((c) => c.name === name);
+
+/**
+ * Resolve a profile `country` / `origin_country` value whether the row stores
+ * the canonical English display name, a different casing, or a 2-letter ISO code.
+ */
+export function resolveCountryFromStored(stored: string | null | undefined): CountryData | undefined {
+  const t = stored?.trim();
+  if (!t) return undefined;
+  const exact = ALL_COUNTRIES.find((c) => c.name === t);
+  if (exact) return exact;
+  const lower = t.toLowerCase();
+  const ci = ALL_COUNTRIES.find((c) => c.name.toLowerCase() === lower);
+  if (ci) return ci;
+  if (t.length === 2) {
+    const byCode = ALL_COUNTRIES.find((c) => c.code.toUpperCase() === t.toUpperCase());
+    if (byCode) return byCode;
+  }
+  return undefined;
+}

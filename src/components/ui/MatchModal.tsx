@@ -16,6 +16,8 @@ import { COLORS, RADIUS, FONT, SHADOWS, DEFAULT_AVATAR } from '@/constants';
 import { User } from '@/types';
 import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
+import { useDialog } from '@/components/ui/DialogProvider';
+import { UI_TOAST } from '@/constants/copy';
 
 const { width } = Dimensions.get('window');
 
@@ -27,7 +29,8 @@ interface MatchModalProps {
 
 export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
   const { user } = useAuthStore();
-  const { getOrCreateConversation } = useChatStore();
+  const { showToast } = useDialog();
+  const getOrCreateConversation = useChatStore((s) => s.getOrCreateConversation);
 
   const scaleAnim   = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -62,10 +65,18 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
   const handleMessage = async () => {
     if (!user || !matchedUser) return;
     onClose();
-    const convId = await getOrCreateConversation(user.id, matchedUser.id);
-    if (convId) {
-      router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: matchedUser.id } });
+    const result = await getOrCreateConversation(user.id, matchedUser.id);
+    if (!result.ok) {
+      showToast({
+        icon: 'alert-circle-outline',
+        message: result.reason === 'blocked' ? UI_TOAST.openChatBlocked : UI_TOAST.openChatFailed,
+      });
+      return;
     }
+    router.push({
+      pathname: '/(chat)/[id]',
+      params: { id: result.conversationId, otherUserId: matchedUser.id },
+    });
   };
 
   if (!matchedUser) return null;

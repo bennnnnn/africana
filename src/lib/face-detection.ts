@@ -103,21 +103,19 @@ export function faceRejectionMessage(
 ): { title: string; message: string } {
   if (rejectedCount === 1 && approvedCount === 0) {
     return {
-      title: "We couldn't find a face",
-      message:
-        "That photo doesn't clearly show a human face. Please pick one where your face is visible.",
+      title: 'Face not found',
+      message: 'Use a photo where your face is clearly visible.',
     };
   }
   if (rejectedCount > 1 && approvedCount === 0) {
     return {
-      title: "We couldn't find any faces",
-      message:
-        "None of your photos clearly show a human face. Please pick ones where your face is visible.",
+      title: 'Faces not found',
+      message: 'Use photos where faces are clearly visible.',
     };
   }
   // Some approved, some rejected
   return {
     title: `Skipped ${rejectedCount} photo${rejectedCount === 1 ? '' : 's'}`,
-    message: `${rejectedCount} of your photos didn't clearly show a human face and were skipped. ${approvedCount} uploaded.`,
+    message: `${rejectedCount} photos were skipped because no face was found. ${approvedCount} uploaded.`,
   };
 }

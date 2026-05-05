@@ -1,5 +1,5 @@
 import { File } from 'expo-file-system';
-import { readAsStringAsync } from 'expo-file-system/src/legacy/FileSystem';
+import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '@/lib/supabase';
 
@@ -59,7 +59,7 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
  */
 export async function localImageUriToArrayBuffer(uri: string): Promise<ArrayBuffer> {
   try {
-    const base64 = await readAsStringAsync(uri, { encoding: 'base64' });
+    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
     if (base64?.length > 0) {
       const buf = base64ToArrayBuffer(base64);
       if (buf.byteLength > 0) return buf;

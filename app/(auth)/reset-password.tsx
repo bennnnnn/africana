@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { createSessionFromUrl } from '@/lib/google-auth';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { COLORS } from '@/constants';
@@ -21,8 +22,38 @@ export default function ResetPasswordScreen() {
   const [confirm, setConfirm]       = useState('');
   const [loading, setLoading]       = useState(false);
   const [done, setDone]             = useState(false);
+  const [restoringSession, setRestoringSession] = useState(Boolean(params.url));
+
+  useEffect(() => {
+    let active = true;
+
+    if (!params.url) {
+      setRestoringSession(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    createSessionFromUrl(params.url)
+      .catch(() => {
+        if (!active) return;
+        appDialog({
+          title: 'Reset link expired',
+          message: 'Request a new password reset link and try again.',
+          icon: 'alert-circle-outline',
+        });
+      })
+      .finally(() => {
+        if (active) setRestoringSession(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [params.url]);
 
   const handleReset = async () => {
+    if (restoringSession) return;
     if (password.length < 6) {
       appDialog({ title: 'Weak password', message: 'Password must be at least 6 characters.', icon: 'key-outline' });
       return;
@@ -90,6 +121,11 @@ export default function ResetPasswordScreen() {
             <Text style={{ fontSize: 15, color: COLORS.textSecondary, marginBottom: 32, lineHeight: 22 }}>
               Choose a strong password for your account.
             </Text>
+            {restoringSession ? (
+              <Text style={{ fontSize: 14, color: COLORS.textSecondary, marginBottom: 16 }}>
+                Preparing your secure reset link...
+              </Text>
+            ) : null}
 
             <Input
               label="New Password"
@@ -112,7 +148,7 @@ export default function ResetPasswordScreen() {
             <Button
               title="Update Password"
               onPress={handleReset}
-              loading={loading}
+              loading={loading || restoringSession}
               fullWidth
               size="lg"
             />

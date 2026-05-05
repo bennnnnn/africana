@@ -14,10 +14,12 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { User } from '@/types';
 import { COLORS, DEFAULT_AVATAR, FONT } from '@/constants';
+import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { appDialog } from '@/lib/app-dialog';
+import { UI_LABELS } from '@/constants/copy';
 
 interface BlockedUser extends User {
   block_id: string;
@@ -77,7 +79,7 @@ const BlockedRow = memo(function BlockedRow({
 });
 
 export default function BlockedUsersScreen() {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -94,7 +96,7 @@ export default function BlockedUsersScreen() {
       .order('created_at', { ascending: false });
 
     if (blocksError) {
-      setLoadError(blocksError.message || 'Could not load blocked users');
+      setLoadError(blocksError.message || "Couldn't load blocked users.");
       setBlockedUsers([]);
       return;
     }
@@ -107,11 +109,11 @@ export default function BlockedUsersScreen() {
     const blockedIds = blocks.map((b) => b.blocked_id);
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILE_LIST_SELECT as '*')
       .in('id', blockedIds);
 
     if (profilesError) {
-      setLoadError(profilesError.message || 'Could not load profiles');
+      setLoadError(profilesError.message || "Couldn't load profiles.");
       setBlockedUsers([]);
       return;
     }
@@ -139,10 +141,10 @@ export default function BlockedUsersScreen() {
   const unblock = useCallback((blockId: string, name: string) => {
     appDialog({
       title: 'Unblock',
-      message: `Unblock ${name}? They will be able to see your profile and contact you again.`,
+      message: `Unblock ${name}? They will be able to see your profile and message you again.`,
       icon: 'person-remove-outline',
       actions: [
-        { label: 'Cancel', style: 'cancel' },
+        { label: UI_LABELS.cancel, style: 'cancel' },
         {
           label: 'Unblock',
           style: 'primary',
@@ -150,8 +152,8 @@ export default function BlockedUsersScreen() {
             const { error } = await supabase.from('blocks').delete().eq('id', blockId);
             if (error) {
               appDialog({
-                title: 'Could not unblock',
-                message: error.message || 'Please try again.',
+                title: 'Unblock failed',
+                message: error.message || "Couldn't unblock this user. Try again.",
                 icon: 'alert-circle-outline',
               });
               return;

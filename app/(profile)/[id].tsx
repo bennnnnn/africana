@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import {
   View,
   Text,
@@ -41,6 +42,9 @@ import haptics from '@/lib/haptics';
 import { User } from '@/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, DEFAULT_AVATAR, FONT, INTERESTED_IN_OPTIONS, RELIGION_OPTIONS, EDUCATION_OPTIONS, MARITAL_STATUS_OPTIONS, LOOKING_FOR_OPTIONS, WANT_CHILDREN_YES_NO, OCCUPATION_OPTIONS, PHYSICAL_CONDITION_OPTIONS, RADIUS, SHADOWS } from '@/constants';
+import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
+import { likesPathSegmentForNotifyType } from '@/constants/likes-routes';
+import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import { Button } from '@/components/ui/Button';
 import { MatchModal } from '@/components/ui/MatchModal';
 import {
@@ -54,17 +58,15 @@ import { ReportUserModal } from '@/components/ui/ReportUserModal';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { SkeletonProfile } from '@/components/ui/Skeleton';
 import { track, EVENTS } from '@/lib/analytics';
-import { hasExistingReport } from '@/lib/social-actions';
+import { addFavourite, hasExistingReport, isBlockedRelationship } from '@/lib/social-actions';
 import { recordProfileShareEvent, SHARE_REWARD_TOAST } from '@/lib/share-reward';
 import { getProfileSeed } from '@/lib/profile-seed-cache';
-import { isUserEffectivelyOnline, formatLastSeen } from '@/lib/utils';
+import { isUserEffectivelyOnline, isUuidString } from '@/lib/utils';
 import { SPRING, SNAP_IN } from '@/lib/motion';
 
 const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female' };
 const profileGalleryCache = new Map<string, string[]>();
 const prefetchedPhotoUris = new Set<string>();
-/** Profiles we've already fired a view notification for this app session — prevents spam on repeated visits. */
-const notifiedProfileViews = new Set<string>();
 
 const FLOAT_ACTION_SIZE = 56;
 const floatingActionCircle = {
@@ -78,8 +80,8 @@ const floatingActionCircle = {
 };
 
 function normalizeParam(value: string | string[] | undefined): string | undefined {
-  if (typeof value === 'string' && value.length > 0) return value;
-  if (Array.isArray(value) && typeof value[0] === 'string' && value[0].length > 0) return value[0];
+  if (typeof value === 'string' && value.length > 0) return value.trim();
+  if (Array.isArray(value) && typeof value[0] === 'string' && value[0].length > 0) return value[0].trim();
   return undefined;
 }
 
@@ -311,19 +313,21 @@ export default function ProfileViewScreen() {
     viewer: rawViewer,
     photo: rawPhoto,
   } = useLocalSearchParams<{ id: string | string[]; viewer?: string | string[]; photo?: string | string[] }>();
-  const id = normalizeParam(rawId);
+  const idCandidate = normalizeParam(rawId);
+  const id = idCandidate && isUuidString(idCandidate) ? idCandidate.trim() : undefined;
   const viewerParam = normalizeParam(rawViewer);
   const photoParam = normalizeParam(rawPhoto);
   const routeWantsPhotoViewer = viewerParam === '1';
   const routePhotoIndex = Math.max(0, Number.parseInt(photoParam ?? '0', 10) || 0);
-  const { user: currentUser, session } = useAuthStore();
+  const { user: currentUser, session } = useAuthStore(
+    useShallow((s) => ({ user: s.user, session: s.session })),
+  );
   const profileScrollRef = useRef<ScrollView>(null);
   const pullPanRef = useRef(null);
   const [strengthBannerDismissed, setStrengthBannerDismissed] = useState(false);
 
   // Scroll-driven action button animation
   const btnScaleAnim   = useRef(new Animated.Value(1)).current;
-  const btnOpacityAnim = useRef(new Animated.Value(1)).current;
   const lastScrollY    = useRef(0);
   // Drives the Telegram-style collapsed header: big hero photo shrinks to a
   // circular avatar + name row pinned to the top as you scroll up.
@@ -363,13 +367,10 @@ export default function ProfileViewScreen() {
 
     if (y < 30) {
       Animated.spring(btnScaleAnim,   { toValue: 1,    ...springCfg }).start();
-      Animated.spring(btnOpacityAnim, { toValue: 1,    ...springCfg }).start();
     } else if (y > prev + 5) {
       Animated.spring(btnScaleAnim,   { toValue: 0.72, ...springCfg }).start();
-      Animated.spring(btnOpacityAnim, { toValue: 0.75, ...springCfg }).start();
     } else if (y < prev - 5) {
       Animated.spring(btnScaleAnim,   { toValue: 1,    ...springCfg }).start();
-      Animated.spring(btnOpacityAnim, { toValue: 1,    ...springCfg }).start();
     }
 
     // Track whether the scroll view is at its top or bottom edge. The pan
@@ -379,19 +380,25 @@ export default function ProfileViewScreen() {
       contentSize.height - (contentOffset.y + layoutMeasurement.height);
     scrollAtBottomRef.current = distanceFromBottom < 1;
     scrollAtTopRef.current = contentOffset.y <= 1;
-  }, [btnScaleAnim, btnOpacityAnim, scrollY]);
+  }, [btnScaleAnim, scrollY]);
 
-  const { getOrCreateConversation } = useChatStore();
-  const { likedUserIds, toggleLike, fetchLikedUserIds } = useDiscoverStore();
+  const getOrCreateConversation = useChatStore((s) => s.getOrCreateConversation);
+  const { likedUserIds, toggleLike, fetchLikedUserIds } = useDiscoverStore(
+    useShallow((s) => ({
+      likedUserIds: s.likedUserIds,
+      toggleLike: s.toggleLike,
+      fetchLikedUserIds: s.fetchLikedUserIds,
+    })),
+  );
   const { showDialog, showToast } = useDialog();
   const insets = useSafeAreaInsets();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
-  // Match the Discover card aspect ratio (1 : 1.45) so a photo that was
-  // fully visible on the discover grid isn't suddenly bottom-cropped when
-  // the user opens the full profile. Previously we used 1.1 (closer to
-  // square) which lost the lower third of any portrait photo.
-  const heroHeight = winWidth * 1.45;
+  // Keep the in-profile hero as a smaller preview so more of the profile fits
+  // on screen. The fullscreen viewer remains the place for an immersive view.
+  // We also cap the height against the viewport so tall photos don't dominate
+  // the whole screen on smaller devices.
+  const heroHeight = Math.min(winWidth * 1.18, winHeight * 0.56);
   const collapseStart = Math.max(heroHeight - 140, 80);
   const collapseEnd = Math.max(heroHeight - 70, 120);
   useEffect(() => {
@@ -471,6 +478,8 @@ export default function ProfileViewScreen() {
   const [photoIndex, setPhotoIndex] = useState(0);
   const [matchUser, setMatchUser] = useState<User | null>(null);
   const [isFavourite, setIsFavourite] = useState(false);
+  /** Symmetric block with the profile being viewed (for actions other than messaging). */
+  const [relationshipBlocked, setRelationshipBlocked] = useState(false);
   const likeInFlightRef = useRef(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [reportPromptVisible, setReportPromptVisible] = useState(false);
@@ -499,6 +508,20 @@ export default function ProfileViewScreen() {
   }, [id]);
 
   useEffect(() => {
+    if (!currentUser || !id || currentUser.id === id) {
+      setRelationshipBlocked(false);
+      return;
+    }
+    let cancelled = false;
+    void isBlockedRelationship(currentUser.id, id).then((blocked) => {
+      if (!cancelled) setRelationshipBlocked(blocked);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, id]);
+
+  useEffect(() => {
     setPhotoViewerVisible(routeWantsPhotoViewer);
     if (routeWantsPhotoViewer) {
       setViewerPhotoIndex(routePhotoIndex);
@@ -507,7 +530,13 @@ export default function ProfileViewScreen() {
 
   const fetchProfile = useCallback(
     async (opts?: { background?: boolean }) => {
-      if (!id) return;
+      if (!id) {
+        setIsLoading(false);
+        setRefreshing(false);
+        setLoadError(null);
+        setProfile(null);
+        return;
+      }
       const bg = opts?.background === true;
       // If we already have any profile data for this id (from the seed cache or
       // a previous fetch), treat the fetch as a silent refresh — don't blank the
@@ -525,7 +554,11 @@ export default function ProfileViewScreen() {
         setLoadError(null);
       }
 
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(PROFILE_LIST_SELECT as '*')
+        .eq('id', id)
+        .maybeSingle();
 
       if (!silent) setIsLoading(false);
       setRefreshing(false);
@@ -572,23 +605,29 @@ export default function ProfileViewScreen() {
   useEffect(() => {
     if (!profile || !currentUser?.id || currentUser.id === profile.id) return;
 
-    // ignoreDuplicates:true → ON CONFLICT DO NOTHING (no UPDATE policy needed on the table)
-    void supabase.from('profile_views').upsert(
-      { viewer_id: currentUser.id, viewed_id: profile.id, viewed_at: new Date().toISOString() },
-      { onConflict: 'viewer_id,viewed_id', ignoreDuplicates: true },
-    );
-    track(EVENTS.PROFILE_VIEWED);
-    // Only notify once per app session — the DB upsert deduplicates the row but not the push
-    if (!notifiedProfileViews.has(profile.id)) {
-      notifiedProfileViews.add(profile.id);
-      notifyUser({
-        type: 'view',
-        recipientId: profile.id,
-        senderId: currentUser.id,
-        senderName: currentUser.full_name ?? 'Someone',
-        extra: { userId: currentUser.id },
+    // ignoreDuplicates:true → ON CONFLICT DO NOTHING. The .select() returns the
+    // inserted row only on a true new insert — empty on conflict. This means we
+    // notify exactly once per unique (viewer, viewed) pair, surviving app restarts
+    // and clearing the need for the module-scoped Set entirely.
+    void supabase
+      .from('profile_views')
+      .upsert(
+        { viewer_id: currentUser.id, viewed_id: profile.id, viewed_at: new Date().toISOString() },
+        { onConflict: 'viewer_id,viewed_id', ignoreDuplicates: true },
+      )
+      .select('id')
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          notifyUser({
+            type: 'view',
+            recipientId: profile.id,
+            senderId: currentUser.id,
+            senderName: currentUser.full_name ?? 'Someone',
+            extra: { userId: currentUser.id, likesSegment: likesPathSegmentForNotifyType('view') },
+          });
+        }
       });
-    }
+    track(EVENTS.PROFILE_VIEWED);
   }, [profile?.id, currentUser?.id]);
 
   // Hydrate likes once if Discover (or elsewhere) has not already loaded them.
@@ -686,6 +725,16 @@ export default function ProfileViewScreen() {
       ? safePhotos
       : [profile.avatar_url || `${DEFAULT_AVATAR}${encodeURIComponent(profile.full_name.charAt(0))}`])
     : [];
+
+  const scrollToHeroPhoto = useCallback((index: number, animated = true) => {
+    if (winWidth <= 0 || photos.length === 0) return;
+    const nextIndex = Math.max(0, Math.min(index, photos.length - 1));
+    setPhotoIndex(nextIndex);
+    heroPhotoListRef.current?.scrollToOffset({
+      offset: nextIndex * winWidth,
+      animated,
+    });
+  }, [photos.length, winWidth]);
 
   const replaceProfileRoute = useCallback((
     nextUserId: string,
@@ -936,6 +985,21 @@ export default function ProfileViewScreen() {
     [profile, currentUser, likedUserIds, triggerHeartBurst],
   );
 
+  if (!id) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Ionicons name="alert-circle-outline" size={48} color={COLORS.textMuted} />
+        <Text style={{ marginTop: 16, fontSize: 18, fontWeight: '800', color: COLORS.textStrong, textAlign: 'center' }}>
+          Invalid profile link
+        </Text>
+        <Text style={{ marginTop: 8, fontSize: 14, color: COLORS.textSecondary, textAlign: 'center' }}>
+          This link is missing a valid profile id (for example a bad notification or share URL).
+        </Text>
+        <Button title="Go back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/discover'))} style={{ marginTop: 24 }} />
+      </SafeAreaView>
+    );
+  }
+
   if (isLoading) {
     return <SkeletonProfile />;
   }
@@ -998,11 +1062,24 @@ export default function ProfileViewScreen() {
     !isOwnProfile &&
     profile.online_visible !== false &&
     !!profile.last_seen;
+  const shortLastSeenLabel = useMemo(() => {
+    if (!useLastActiveLabel || !profile.last_seen) return null;
+    const seenAt = new Date(profile.last_seen).getTime();
+    if (Number.isNaN(seenAt)) return null;
+    const diffMs = Date.now() - seenAt;
+    const diffMin = Math.floor(diffMs / 60_000);
+    if (diffMin < 1) return 'Seen just now';
+    if (diffMin < 60) return `Seen ${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `Seen ${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    if (diffDay === 1) return 'Seen 1 day ago';
+    if (diffDay < 7) return `Seen ${diffDay} days ago`;
+    return 'Seen a while ago';
+  }, [profile.last_seen, useLastActiveLabel]);
   const activityLabel = isActiveOnline
     ? 'Online'
-    : useLastActiveLabel
-      ? (formatLastSeen(profile.last_seen) ?? 'Offline')
-      : 'Offline';
+    : shortLastSeenLabel ?? 'Offline';
 
   const photoModalDotBottom =
     !isOwnProfile && currentUser
@@ -1018,7 +1095,6 @@ export default function ProfileViewScreen() {
   const commonLanguages = !isOwnProfile
     ? (profile.languages ?? []).filter((l) => viewerLanguages.has(normalizeText(l)))
     : [];
-  const profileFirstName = profile.full_name?.trim().split(/\s+/)[0] ?? 'Their';
 
   const viewerStrength = getProfileStrength(currentUser);
   const showStrengthNudge =
@@ -1036,6 +1112,10 @@ export default function ProfileViewScreen() {
     likeInFlightRef.current = true;
     try {
       const wasLiked = likedUserIds.has(profile.id);
+      if (!wasLiked && relationshipBlocked) {
+        showToast({ message: UI_TOAST.interactionBlocked, icon: 'ban-outline' });
+        return;
+      }
       if (!wasLiked) haptics.tapLight();
       const isMatch = await toggleLike(currentUser.id, profile.id);
       if (isMatch && !wasLiked) {
@@ -1044,7 +1124,7 @@ export default function ProfileViewScreen() {
       } else {
         const toastCfg = {
           icon: (wasLiked ? 'heart-outline' : 'heart') as keyof typeof Ionicons.glyphMap,
-          message: wasLiked ? 'Unliked' : 'Liked!',
+          message: wasLiked ? UI_TOAST.likeRemoved : UI_TOAST.liked,
         };
         if (photoViewerVisible) showViewerToast(toastCfg);
         else showToast(toastCfg);
@@ -1056,6 +1136,10 @@ export default function ProfileViewScreen() {
 
   const handleMessage = async () => {
     if (!currentUser || recipientMessagesPaused) return;
+    if (relationshipBlocked) {
+      showToast({ icon: 'ban-outline', message: UI_TOAST.openChatBlocked });
+      return;
+    }
     const wasInViewer = photoViewerVisible;
     if (wasInViewer) {
       // Use closePhotoViewer (not raw setState) so the viewer/photo route
@@ -1063,16 +1147,21 @@ export default function ProfileViewScreen() {
       // chat reopens the photo viewer.
       closePhotoViewer();
     }
-    let convId: string | null = null;
+    let convResult: Awaited<ReturnType<typeof getOrCreateConversation>> | null = null;
     try {
-      convId = await getOrCreateConversation(currentUser.id, profile.id);
+      convResult = await getOrCreateConversation(currentUser.id, profile.id);
     } catch {
-      // fall through to null check below
+      // fall through to error handling below
     }
-    if (!convId) {
-      showToast({ icon: 'alert-circle-outline', message: 'Could not open conversation. Please try again.' });
+    if (!convResult?.ok) {
+      showToast({
+        icon: 'alert-circle-outline',
+        message:
+          convResult?.reason === 'blocked' ? UI_TOAST.openChatBlocked : UI_TOAST.openChatFailed,
+      });
       return;
     }
+    const convId = convResult.conversationId;
     const peerId = profile.id;
     const navigate = () => {
       router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: peerId } });
@@ -1098,23 +1187,27 @@ export default function ProfileViewScreen() {
         .eq('favourited_id', profile.id);
       if (error) {
         setIsFavourite(true);
-        showToast({ icon: 'alert-circle-outline', message: 'Could not update favourites. Please try again.' });
+        showToast({ icon: 'alert-circle-outline', message: UI_TOAST.favouritesUpdateFailed });
         return;
       }
-      const toastCfg = { icon: 'star-outline' as keyof typeof Ionicons.glyphMap, message: 'Removed from favourites' };
+      const toastCfg = { icon: 'star-outline' as keyof typeof Ionicons.glyphMap, message: UI_TOAST.favouriteRemoved };
       if (photoViewerVisible) showViewerToast(toastCfg);
       else showToast(toastCfg);
     } else {
       setIsFavourite(true);
-      const { error } = await supabase
-        .from('favourites')
-        .insert({ user_id: currentUser.id, favourited_id: profile.id });
-      if (error) {
+      try {
+        const result = await addFavourite(currentUser.id, profile.id);
+        if (result === 'blocked') {
+          setIsFavourite(false);
+          showToast({ icon: 'ban-outline', message: UI_TOAST.interactionBlocked });
+          return;
+        }
+      } catch {
         setIsFavourite(false);
-        showToast({ icon: 'alert-circle-outline', message: 'Could not update favourites. Please try again.' });
+        showToast({ icon: 'alert-circle-outline', message: UI_TOAST.favouritesUpdateFailed });
         return;
       }
-      const toastCfg = { icon: 'star' as keyof typeof Ionicons.glyphMap, message: 'Added to favourites' };
+      const toastCfg = { icon: 'star' as keyof typeof Ionicons.glyphMap, message: UI_TOAST.favouriteAdded };
       if (photoViewerVisible) showViewerToast(toastCfg);
       else showToast(toastCfg);
       track(EVENTS.FAVOURITE_ADDED);
@@ -1123,7 +1216,7 @@ export default function ProfileViewScreen() {
         recipientId: profile.id,
         senderId: currentUser.id,
         senderName: currentUser.full_name ?? 'Someone',
-        extra: { userId: currentUser.id },
+        extra: { userId: currentUser.id, likesSegment: likesPathSegmentForNotifyType('favourite') },
       });
     }
   };
@@ -1152,12 +1245,12 @@ export default function ProfileViewScreen() {
   const handleBlock = () => {
     if (!profile) return;
     showDialog({
-      title: 'Block user',
-      message: `Block ${profile.full_name}? They won't be able to see your profile or send you messages.`,
+      title: `Block ${profile.full_name}?`,
+      message: "They won't see your profile or message you.",
       icon: 'ban-outline',
       actions: [
-        { label: 'Cancel', style: 'cancel' },
-        { label: 'Block', style: 'destructive', onPress: () => void confirmBlockUser() },
+        { label: UI_LABELS.cancel, style: 'cancel' },
+        { label: UI_LABELS.block, style: 'destructive', onPress: () => void confirmBlockUser() },
       ],
     });
   };
@@ -1166,11 +1259,11 @@ export default function ProfileViewScreen() {
     if (!currentUser || !profile) return;
     try {
       if (await hasExistingReport(currentUser.id, profile.id)) {
-        showToast({ message: 'You\u2019ve already reported this user.', icon: 'information-circle-outline' });
+        showToast({ message: UI_TOAST.reportExists, icon: 'information-circle-outline' });
         return;
       }
     } catch {
-      showToast({ message: 'Could not check report status. Please try again.', icon: 'alert-circle-outline' });
+      showToast({ message: UI_TOAST.reportCheckFailed, icon: 'alert-circle-outline' });
       return;
     }
     setReportPromptVisible(true);
@@ -1183,10 +1276,10 @@ export default function ProfileViewScreen() {
       blocked_id: profile.id,
     });
     if (error) {
-      showToast({ icon: 'alert-circle-outline', message: 'Could not block user. Please try again.' });
+      showToast({ icon: 'alert-circle-outline', message: UI_TOAST.blockFailed });
       return;
     }
-    showToast({ icon: 'ban-outline', message: `${profile.full_name ?? 'User'} blocked` });
+    showToast({ icon: 'ban-outline', message: UI_TOAST.blocked });
     setTimeout(() => router.back(), 1300);
   };
 
@@ -1228,7 +1321,6 @@ export default function ProfileViewScreen() {
                 source={{ uri: photos[0] }}
                 style={pr.collapsedAvatar}
                 contentFit="cover"
-                contentPosition="top"
                 cachePolicy="memory-disk"
                 recyclingKey={photos[0]}
               />
@@ -1327,7 +1419,7 @@ export default function ProfileViewScreen() {
               offset: winWidth * index,
               index,
             })}
-            style={{ width: winWidth, height: winWidth * 1.1 }}
+            style={{ width: winWidth, height: heroHeight }}
             onMomentumScrollEnd={(e) => {
               if (winWidth <= 0) return;
               setPhotoIndex(Math.round(e.nativeEvent.contentOffset.x / winWidth));
@@ -1336,13 +1428,12 @@ export default function ProfileViewScreen() {
               <Pressable
                 onPress={() => handleHeroPhotoTap(i)}
                 android_disableSound
-                style={{ width: winWidth, height: winWidth * 1.1, backgroundColor: COLORS.savanna }}
+                style={{ width: winWidth, height: heroHeight, backgroundColor: COLORS.savanna }}
               >
                 <Image
                   source={{ uri: photo }}
-                  style={{ width: winWidth, height: winWidth * 1.1, backgroundColor: COLORS.savanna }}
+                  style={{ width: winWidth, height: heroHeight, backgroundColor: COLORS.savanna }}
                   contentFit="cover"
-                  contentPosition="top"
                   transition={220}
                   cachePolicy="memory-disk"
                   recyclingKey={photo}
@@ -1421,34 +1512,58 @@ export default function ProfileViewScreen() {
             </Animated.View>
           </SafeAreaView>
 
+          {photos.length > 1 ? (
+            <View style={pr.heroDotsRow}>
+              {photos.map((_, index) => {
+                const active = index === photoIndex;
+                return (
+                  <TouchableOpacity
+                    key={`hero-dot-${index}`}
+                    onPress={() => scrollToHeroPhoto(index)}
+                    accessibilityLabel={`View photo ${index + 1}`}
+                    activeOpacity={0.85}
+                    style={[pr.heroDot, active && pr.heroDotActive]}
+                  />
+                );
+              })}
+            </View>
+          ) : null}
+
         </View>
 
         {/* Identity — overlaps hero */}
         <View>
         <View style={pr.identityCard}>
-          {/* Online status — own row, pushed to the right edge */}
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 8 }}>
-            <View style={[pr.onlineBadge, { backgroundColor: isActiveOnline ? `${COLORS.online}16` : COLORS.savanna }]}>
-              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: isActiveOnline ? COLORS.online : COLORS.textMuted }} />
-              <Text
-                style={{ fontSize: 12, fontWeight: '600', color: isActiveOnline ? COLORS.online : COLORS.textSecondary }}
-                numberOfLines={1}
-              >
-                {activityLabel}
-              </Text>
+          <View style={pr.identityHeaderBlock}>
+            <View style={pr.identityTitleRow}>
+              <View style={pr.identityNameWrap}>
+                <Text style={pr.displayName} numberOfLines={1}>
+                  {profile.full_name}
+                  {profile.age ? <Text style={pr.displayAge}>, {profile.age}</Text> : null}
+                </Text>
+              </View>
+              {activityLabel ? (
+                <View style={pr.identityStatusInline}>
+                  <View style={[pr.onlineBadgeDot, { backgroundColor: isActiveOnline ? COLORS.online : COLORS.textMuted }]} />
+                  <Text
+                    style={[pr.onlineBadgeText, { color: isActiveOnline ? COLORS.online : COLORS.textMuted }]}
+                    numberOfLines={1}
+                  >
+                    {activityLabel}
+                  </Text>
+                </View>
+              ) : null}
+              {isVerified ? <Ionicons name="checkmark-circle" size={18} color={COLORS.success} style={pr.verifiedInlineIcon} /> : null}
             </View>
-          </View>
 
-          {/* Name + age + verified badge */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Text style={pr.displayName}>
-              {profile.full_name}
-              {profile.age ? <Text style={pr.displayAge}>, {profile.age}</Text> : null}
-            </Text>
-            {isVerified ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.successSurface }}>
-                <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-                <Text style={{ fontSize: 11, fontWeight: '800', color: COLORS.success }}>Verified</Text>
+            {location ? (
+              <View style={pr.identitySubRow}>
+                <View style={pr.identityLocationRow}>
+                  <Ionicons name="location-outline" size={14} color={COLORS.textSecondary} />
+                  <Text style={pr.identityLocationText} numberOfLines={1}>
+                    {location}
+                  </Text>
+                </View>
               </View>
             ) : null}
           </View>
@@ -1457,7 +1572,6 @@ export default function ProfileViewScreen() {
           {(() => {
             type QuickFact = { icon: keyof typeof Ionicons.glyphMap; label: string; value: string | null };
             const rows: QuickFact[] = [
-              { icon: 'location-outline',    label: 'Location',    value: location || null },
               {
                 icon: 'sparkles-outline',
                 label: 'Looking for',
@@ -1567,7 +1681,7 @@ export default function ProfileViewScreen() {
           style={pr.detailsToggle}
         >
           <Text style={pr.detailsToggleLabel}>
-            {detailsExpanded ? 'Close' : `Discover more about ${profileFirstName}`}
+            {detailsExpanded ? 'Show less' : 'More details'}
           </Text>
           <Ionicons
             name={detailsExpanded ? 'chevron-up' : 'chevron-down'}
@@ -1713,6 +1827,14 @@ export default function ProfileViewScreen() {
             backgroundColor: 'transparent',
           }}
         >
+          {recipientMessagesPaused ? (
+            <View style={pr.messagePausedNote}>
+              <Ionicons name="information-circle-outline" size={14} color={COLORS.textSecondary} />
+              <Text style={pr.messagePausedNoteText}>
+                {"This person isn't accepting messages right now."}
+              </Text>
+            </View>
+          ) : null}
           <Animated.View
             style={{
               flexDirection: 'row',
@@ -1721,15 +1843,16 @@ export default function ProfileViewScreen() {
               gap: 14,
               backgroundColor: 'transparent',
               transform: [{ scale: btnScaleAnim }],
-              opacity: btnOpacityAnim,
             }}
           >
             <TouchableOpacity
               onPress={handleFavourite}
+              disabled={relationshipBlocked && !isFavourite}
               activeOpacity={0.85}
               accessibilityRole="button"
               accessibilityLabel={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
-              style={floatingActionCircle}
+              accessibilityState={{ disabled: relationshipBlocked && !isFavourite }}
+              style={[floatingActionCircle, relationshipBlocked && !isFavourite && { opacity: 0.55 }]}
             >
               <Ionicons
                 name={isFavourite ? 'star' : 'star-outline'}
@@ -1740,9 +1863,11 @@ export default function ProfileViewScreen() {
             {/* Like — larger control */}
             <TouchableOpacity
               onPress={handleLike}
+              disabled={relationshipBlocked && !isLiked}
               activeOpacity={0.85}
               accessibilityRole="button"
               accessibilityLabel={isLiked ? 'Unlike' : 'Like'}
+              accessibilityState={{ disabled: relationshipBlocked && !isLiked }}
               style={[
                 floatingActionCircle,
                 {
@@ -1752,30 +1877,45 @@ export default function ProfileViewScreen() {
                   backgroundColor: COLORS.white,
                   ...SHADOWS.lg,
                 },
+                relationshipBlocked && !isLiked && { opacity: 0.55 },
               ]}
             >
               <Ionicons
                 name={isLiked ? 'heart' : 'heart-outline'}
                 size={32}
-                color={isLiked ? COLORS.textStrong : COLORS.text}
+                color={isLiked ? COLORS.primary : COLORS.text}
               />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={handleMessage}
-              disabled={recipientMessagesPaused}
+              disabled={recipientMessagesPaused || relationshipBlocked}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel={recipientMessagesPaused ? 'Messages paused' : 'Message'}
-              accessibilityState={{ disabled: recipientMessagesPaused }}
+              accessibilityLabel={
+                relationshipBlocked
+                  ? 'Messaging blocked'
+                  : recipientMessagesPaused
+                    ? 'Messages paused'
+                    : 'Message'
+              }
+              accessibilityState={{ disabled: recipientMessagesPaused || relationshipBlocked }}
               style={[
                 floatingActionCircle,
-                recipientMessagesPaused && { opacity: 0.55 },
+                (recipientMessagesPaused || relationshipBlocked) && { opacity: 0.55 },
               ]}
             >
               <Ionicons
-                name={recipientMessagesPaused ? 'lock-closed-outline' : 'chatbubble-ellipses-outline'}
+                name={
+                  relationshipBlocked
+                    ? 'ban-outline'
+                    : recipientMessagesPaused
+                      ? 'lock-closed-outline'
+                      : 'chatbubble-ellipses-outline'
+                }
                 size={26}
-                color={recipientMessagesPaused ? COLORS.textMuted : COLORS.textStrong}
+                color={
+                  relationshipBlocked || recipientMessagesPaused ? COLORS.textMuted : COLORS.textStrong
+                }
               />
             </TouchableOpacity>
           </Animated.View>
@@ -1874,10 +2014,12 @@ export default function ProfileViewScreen() {
             >
                 <TouchableOpacity
                   onPress={handleFavourite}
+                  disabled={relationshipBlocked && !isFavourite}
                   activeOpacity={0.85}
                   accessibilityRole="button"
                   accessibilityLabel={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
-                  style={floatingActionCircle}
+                  accessibilityState={{ disabled: relationshipBlocked && !isFavourite }}
+                  style={[floatingActionCircle, relationshipBlocked && !isFavourite && { opacity: 0.55 }]}
                 >
                   <Ionicons
                     name={isFavourite ? 'star' : 'star-outline'}
@@ -1887,9 +2029,11 @@ export default function ProfileViewScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleLike}
+                  disabled={relationshipBlocked && !isLiked}
                   activeOpacity={0.85}
                   accessibilityRole="button"
                   accessibilityLabel={isLiked ? 'Unlike' : 'Like'}
+                  accessibilityState={{ disabled: relationshipBlocked && !isLiked }}
                   style={[
                     floatingActionCircle,
                     {
@@ -1899,30 +2043,45 @@ export default function ProfileViewScreen() {
                       backgroundColor: COLORS.white,
                       ...SHADOWS.lg,
                     },
+                    relationshipBlocked && !isLiked && { opacity: 0.55 },
                   ]}
                 >
                   <Ionicons
                     name={isLiked ? 'heart' : 'heart-outline'}
                     size={32}
-                    color={isLiked ? COLORS.textStrong : COLORS.text}
+                    color={isLiked ? COLORS.primary : COLORS.text}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleMessage}
-                  disabled={recipientMessagesPaused}
+                  disabled={recipientMessagesPaused || relationshipBlocked}
                   activeOpacity={0.85}
                   accessibilityRole="button"
-                  accessibilityLabel={recipientMessagesPaused ? 'Messages paused' : 'Message'}
-                  accessibilityState={{ disabled: recipientMessagesPaused }}
+                  accessibilityLabel={
+                    relationshipBlocked
+                      ? 'Messaging blocked'
+                      : recipientMessagesPaused
+                        ? 'Messages paused'
+                        : 'Message'
+                  }
+                  accessibilityState={{ disabled: recipientMessagesPaused || relationshipBlocked }}
                   style={[
                     floatingActionCircle,
-                    recipientMessagesPaused && { opacity: 0.55 },
+                    (recipientMessagesPaused || relationshipBlocked) && { opacity: 0.55 },
                   ]}
                 >
                   <Ionicons
-                    name={recipientMessagesPaused ? 'lock-closed-outline' : 'chatbubble-ellipses-outline'}
+                    name={
+                      relationshipBlocked
+                        ? 'ban-outline'
+                        : recipientMessagesPaused
+                          ? 'lock-closed-outline'
+                          : 'chatbubble-ellipses-outline'
+                    }
                     size={26}
-                    color={recipientMessagesPaused ? COLORS.textMuted : COLORS.textStrong}
+                    color={
+                      relationshipBlocked || recipientMessagesPaused ? COLORS.textMuted : COLORS.textStrong
+                    }
                   />
                 </TouchableOpacity>
               </View>
@@ -2127,17 +2286,58 @@ const pr = StyleSheet.create({
     paddingBottom: 20,
     ...SHADOWS.md,
   },
-  displayName: { fontSize: FONT.xxl + 4, fontWeight: FONT.extrabold, color: COLORS.textStrong, letterSpacing: 0.2 },
-  displayAge: { fontSize: FONT.xl, fontWeight: FONT.regular, color: COLORS.textSecondary },
-  locationIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.savanna,
-    alignItems: 'center',
-    justifyContent: 'center',
+  identityHeaderBlock: {
+    gap: 6,
   },
-  locationText: { fontSize: FONT.md, color: COLORS.text, fontWeight: FONT.semibold },
+  identityTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  identityNameWrap: {
+    flex: 1,
+    minWidth: 140,
+  },
+  displayName: {
+    fontSize: FONT.xxl,
+    fontWeight: FONT.extrabold,
+    color: COLORS.textStrong,
+    lineHeight: 32,
+    letterSpacing: 0.1,
+  },
+  displayAge: {
+    fontSize: FONT.xl,
+    fontWeight: FONT.medium,
+    color: COLORS.textSecondary,
+  },
+  verifiedInlineIcon: {
+    marginTop: 2,
+  },
+  identitySubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  identityLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  identityLocationText: {
+    flexShrink: 1,
+    fontSize: FONT.sm,
+    color: COLORS.textSecondary,
+    fontWeight: FONT.semibold,
+  },
+  identityStatusInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 0,
+  },
   chipHobby: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -2303,6 +2503,26 @@ const pr = StyleSheet.create({
     paddingBottom: 8,
     ...SHADOWS.sm,
   },
+  heroDotsRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 18,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 7,
+  },
+  heroDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.48)',
+  },
+  heroDotActive: {
+    width: 22,
+    backgroundColor: '#FFF',
+  },
   quickFactsBlock: {
     marginTop: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -2382,7 +2602,33 @@ const pr = StyleSheet.create({
     marginBottom: 12,
     textTransform: 'uppercase',
   },
-  onlineBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.full },
+  onlineBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  onlineBadgeText: {
+    fontSize: 11,
+    fontWeight: FONT.regular,
+    letterSpacing: 0.1,
+  },
+  messagePausedNote: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    ...SHADOWS.sm,
+  },
+  messagePausedNoteText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: FONT.medium,
+  },
   fieldRow: {
     flexDirection: 'row',
     alignItems: 'center',

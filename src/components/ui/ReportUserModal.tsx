@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONT, RADIUS } from '@/constants';
+import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import { USER_REPORT_REASONS, type UserReportReason } from '@/lib/report-reasons';
 import { reportUser } from '@/lib/social-actions';
 import { useDialog } from '@/components/ui/DialogProvider';
@@ -50,13 +51,13 @@ export function ReportUserModal({
       const result = await reportUser(reporterId, reportedUserId, selectedReason);
       close();
       if (result === 'exists') {
-        showToast({ message: 'You already reported this user', icon: 'information-circle-outline' });
+        showToast({ message: UI_TOAST.reportExists, icon: 'information-circle-outline' });
       } else {
-        showToast({ message: 'Report submitted. Thank you.', icon: 'checkmark-circle-outline' });
+        showToast({ message: UI_TOAST.reportSent, icon: 'checkmark-circle-outline' });
       }
     } catch {
       close();
-      showToast({ message: 'Could not send report. Try again.', icon: 'alert-circle-outline' });
+      showToast({ message: UI_TOAST.reportSendFailed, icon: 'alert-circle-outline' });
     } finally {
       setSubmitting(false);
     }
@@ -75,7 +76,7 @@ export function ReportUserModal({
             Report {reportedUserName}
           </Text>
           <Text style={{ marginTop: 8, fontSize: FONT.md, lineHeight: 22, color: COLORS.textSecondary }}>
-            Select a reason. Our team will review it.
+            Choose a reason. We'll review it.
           </Text>
           <View style={{ marginTop: 18, gap: 10 }}>
             {USER_REPORT_REASONS.map((reason) => {
@@ -125,7 +126,7 @@ export function ReportUserModal({
                 backgroundColor: COLORS.savanna,
               }}
             >
-              <Text style={{ fontSize: FONT.sm, fontWeight: FONT.bold, color: COLORS.earth }}>Select a reason</Text>
+              <Text style={{ fontSize: FONT.sm, fontWeight: FONT.bold, color: COLORS.earth }}>Choose a reason</Text>
             </View>
           ) : null}
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
@@ -144,7 +145,7 @@ export function ReportUserModal({
                 backgroundColor: COLORS.white,
               }}
             >
-              <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.textStrong }}>Cancel</Text>
+              <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.textStrong }}>{UI_LABELS.cancel}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.85}

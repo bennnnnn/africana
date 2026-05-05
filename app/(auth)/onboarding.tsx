@@ -404,9 +404,9 @@ export default function OnboardingScreen() {
       if (error) {
         if (error.message.includes('security policy') || error.code === '42501') {
           appDialog({
-            title: 'One more step',
-            message: 'Go to Supabase → Authentication → Email → turn OFF "Confirm email" → Save. Then try again.',
-            icon: 'settings-outline',
+            title: 'Please sign in again',
+            message: 'Your session is no longer active. Sign in again, then finish your profile.',
+            icon: 'log-in-outline',
           });
         } else {
           appDialog({ title: 'Something went wrong', message: error.message, icon: 'alert-circle-outline' });

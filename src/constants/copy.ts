@@ -1,0 +1,35 @@
+export const UI_LABELS = {
+  ok: 'OK',
+  cancel: 'Cancel',
+  delete: 'Delete',
+  block: 'Block',
+  signOut: 'Sign out',
+} as const;
+
+export const UI_TOAST = {
+  copied: 'Copied',
+  deleted: 'Deleted',
+  chatDeleted: 'Chat deleted',
+  liked: 'Liked',
+  likeRemoved: 'Like removed',
+  favouriteAdded: 'Added to favourites',
+  favouriteRemoved: 'Removed from favourites',
+  reportSent: 'Report sent',
+  reportExists: 'You already reported this user',
+  refreshFailed: "Couldn't refresh. Try again.",
+  copyFailed: "Couldn't copy. Try again.",
+  exportReady: 'Export ready',
+  exportFailed: "Couldn't export your data. Try again.",
+  sessionExpired: 'Session expired. Sign in and try again.',
+  verificationSubmitted: 'Verification submitted',
+  verificationUploadFailed: "Couldn't upload your photo. Try again.",
+  openChatFailed: "Couldn't open chat. Try again.",
+  openChatBlocked: 'Messaging isn’t available because one of you blocked the other.',
+  interactionBlocked:
+    'There’s a block between you and this person, so new likes and stars aren’t available. You can still remove a like or star you added earlier.',
+  favouritesUpdateFailed: "Couldn't update favourites. Try again.",
+  reportCheckFailed: "Couldn't check report status. Try again.",
+  reportSendFailed: "Couldn't send report. Try again.",
+  blockFailed: "Couldn't block this user. Try again.",
+  blocked: 'Blocked',
+} as const;

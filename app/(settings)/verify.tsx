@@ -10,6 +10,7 @@ import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/store/auth.store';
 import { uploadVerificationSelfie } from '@/lib/storage-image-upload';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -18,10 +19,13 @@ import { useDialog } from '@/components/ui/DialogProvider';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { checkImageHasFace } from '@/lib/face-detection';
 import { track, EVENTS } from '@/lib/analytics';
+import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 
 export default function VerifyScreen() {
   const { colors } = useTheme();
-  const { user, updateProfile } = useAuthStore();
+  const { user, updateProfile } = useAuthStore(
+    useShallow((s) => ({ user: s.user, updateProfile: s.updateProfile })),
+  );
   const { showDialog, showToast } = useDialog();
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [selfieMime, setSelfieMime] = useState<string | null>(null);
@@ -33,9 +37,8 @@ export default function VerifyScreen() {
     const faceCheck = await checkImageHasFace(a.uri);
     if (!faceCheck.ok && faceCheck.reason === 'no_face') {
       showDialog({
-        title: "We couldn't find a face",
-        message:
-          'Your verification photo must clearly show your face. Please take a selfie in good lighting with your face centered.',
+        title: 'Face not found',
+        message: 'Use a clear, well-lit photo with your face centered.',
         icon: 'happy-outline',
       });
       return;
@@ -46,8 +49,8 @@ export default function VerifyScreen() {
 
   const pickSelfie = () => {
     showDialog({
-      title: 'Add a photo',
-      message: 'Choose how to add your verification photo.',
+      title: 'Choose photo',
+      message: 'Choose a photo for verification.',
       icon: 'camera-outline',
       actions: [
         {
@@ -78,7 +81,7 @@ export default function VerifyScreen() {
             }
           },
         },
-        { label: 'Cancel', style: 'cancel' },
+        { label: UI_LABELS.cancel, style: 'cancel' },
       ],
     });
   };
@@ -99,15 +102,16 @@ export default function VerifyScreen() {
       track(EVENTS.VERIFICATION_COMPLETE);
 
       showToast({
-        message: 'Submitted! We\u2019ll review within 24\u201348 hours.',
+        message: UI_TOAST.verificationSubmitted,
         icon: 'checkmark-circle-outline',
       });
       router.back();
     } catch (e: any) {
       showDialog({
         title: 'Upload failed',
-        message: e.message ?? 'Please try again.',
+        message: e.message ?? UI_TOAST.verificationUploadFailed,
         icon: 'alert-circle-outline',
+        actions: [{ label: UI_LABELS.ok, style: 'primary' }],
       });
     } finally {
       setUploading(false);

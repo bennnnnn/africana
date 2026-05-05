@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useFocusEffect } from '@react-navigation/native';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -59,7 +60,12 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { session, user, isInitialized } = useAuthStore();
-  const { conversations, fetchConversations } = useChatStore();
+  const { conversations, fetchConversations } = useChatStore(
+    useShallow((s) => ({
+      conversations: s.conversations,
+      fetchConversations: s.fetchConversations,
+    })),
+  );
   const [unreadMessages, setUnreadMessages] = useState(0);
   const unseenActivity = useActivityStore(selectLikesTabBadge);
   const setActivityCounts = useActivityStore((s) => s.setCounts);
@@ -93,11 +99,13 @@ export default function TabLayout() {
   useEffect(() => {
     if (!user) return;
 
+    // Initial inbox load.
     fetchConversations(user.id);
 
     const scheduleConvRefresh = () => {
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = setTimeout(() => fetchConversations(user.id), 120);
+      // Use store getState() to avoid any stale closure issues.
+      refreshTimeoutRef.current = setTimeout(() => useChatStore.getState().fetchConversations(user.id), 120);
     };
 
     channelRef.current = supabase
@@ -145,9 +153,22 @@ export default function TabLayout() {
         const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
         if (ids.includes(user.id)) scheduleConvRefresh();
       })
-      .subscribe();
+      .subscribe((status) => {
+        // In dev / Expo Go, the realtime websocket can silently time out.
+        // A light poll ensures the inbox still updates even if the channel drops.
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          scheduleConvRefresh();
+        }
+      });
+
+    // Fallback: periodic refresh so the inbox stays live even if Realtime drops.
+    // `fetchConversations` is internally deduped by `fetchConversationsPending`.
+    const poll = setInterval(() => {
+      useChatStore.getState().fetchConversations(user.id).catch(() => {});
+    }, 4000);
 
     return () => {
+      clearInterval(poll);
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };

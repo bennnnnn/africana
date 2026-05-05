@@ -53,14 +53,14 @@ export function formatLastSeen(lastSeen: string | null | undefined): string | nu
   if (Number.isNaN(seenAt)) return null;
   const diffMs = Date.now() - seenAt;
   const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1)  return 'Last seen just now';
-  if (diffMin < 60) return `Last seen ${diffMin}m ago`;
+  if (diffMin < 1)  return 'seen just now';
+  if (diffMin < 60) return `seen ${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24)  return `Last seen ${diffHr}h ago`;
+  if (diffHr < 24)  return `seen ${diffHr}h ago`;
   const diffDay = Math.floor(diffHr / 24);
-  if (diffDay === 1) return 'Last seen yesterday';
-  if (diffDay < 7)  return `Last seen ${diffDay} days ago`;
-  return 'Last seen a while ago';
+  if (diffDay === 1) return 'seen yesterday';
+  if (diffDay < 7)  return `seen ${diffDay} days ago`;
+  return 'seen a while ago';
 }
 
 export function isUserEffectivelyOnline(
@@ -108,4 +108,32 @@ export function isRecentlyCreated(createdAt: string | null | undefined, withinDa
   const created = new Date(createdAt).getTime();
   if (Number.isNaN(created)) return false;
   return Date.now() - created <= withinDays * 24 * 60 * 60 * 1000;
+}
+
+/** True when `activityAt` is newer than the tab's *_seen_at marker (server uses -infinity when null). */
+export function isLikesActivityNew(
+  activityAt: string,
+  tabSeenAt: string | null | undefined,
+  seenLoaded: boolean,
+): boolean {
+  if (!seenLoaded) return false;
+  const a = Date.parse(activityAt);
+  if (Number.isNaN(a)) return false;
+  if (tabSeenAt == null || tabSeenAt === '') return true;
+  const s = Date.parse(tabSeenAt);
+  if (Number.isNaN(s)) return true;
+  return a > s;
+}
+
+const UUID_V4ISH_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Safe for Postgres `uuid` columns and route params (rejects literal `"undefined"`). */
+export function isUuidString(value: string | null | undefined): value is string {
+  if (typeof value !== 'string') return false;
+  const t = value.trim();
+  if (!t) return false;
+  const low = t.toLowerCase();
+  if (low === 'undefined' || low === 'null' || low === '[object object]') return false;
+  return UUID_V4ISH_RE.test(t);
 }

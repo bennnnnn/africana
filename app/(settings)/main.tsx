@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import {
+  SettingsHubCard,
   SettingsHubRow,
   settingsStyles,
 } from '@/components/settings/settings-shared';
@@ -17,6 +18,7 @@ export default function SettingsScreen() {
         <Text style={settingsStyles.screenIntro}>
           Manage privacy, alerts, premium options, and your account — each section opens its own screen.
         </Text>
+        <SettingsHubCard>
           <SettingsHubRow
             icon="lock-closed-outline"
             iconColor={COLORS.earth}
@@ -26,9 +28,9 @@ export default function SettingsScreen() {
           />
           <SettingsHubRow
             icon="notifications-outline"
-            iconColor="#3B82F6"
+            iconColor={COLORS.notificationsAccent}
             label="Notifications"
-            description="Push and email for messages, likes, matches, and views"
+            description="Push alerts and optional extra emails"
             onPress={() => router.push('/(settings)/notifications')}
           />
           <SettingsHubRow
@@ -60,6 +62,7 @@ export default function SettingsScreen() {
             onPress={() => router.push('/(settings)/account')}
             isLast
           />
+        </SettingsHubCard>
         <View style={{ height: 32 }} />
       </ScrollView>
     </SafeAreaView>

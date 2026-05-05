@@ -1,23 +1,14 @@
 /**
- * Africana — Push & Email Notification Edge Function
- *
- * Deploy: npx supabase functions deploy notify
- *
- * Called from the client after:
- *  - A new message is sent
- *  - A user is liked
- *  - A mutual match is created (both users notified)
- *  - A profile is viewed
- *
- * Body: { type, recipientId, senderId, senderName, extra? }
- *
- * Email notifications use Resend (resend.com — free tier: 3 000 emails/month).
- * To enable: set RESEND_API_KEY and RESEND_FROM in Supabase Edge Function secrets.
- *   supabase secrets set RESEND_API_KEY=re_xxxx
- *   supabase secrets set RESEND_FROM=Africana <noreply@yourdomain.com>
+ * Africana — Push, activity email, and lifecycle email dispatcher
  */
-
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  type ActivityNotifyType,
+  type LifecycleCampaign,
+  getRecipientContext,
+  sendEmail,
+  sendLifecycleCampaignEmail,
+  supabaseAdmin,
+} from '../_shared/email-lifecycle.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -25,24 +16,27 @@ const CORS_HEADERS = {
 };
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
-const RESEND_API_URL = 'https://api.resend.com/emails';
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-);
-
-type NotifyType = 'message' | 'like' | 'match' | 'view' | 'favourite';
-
-interface NotifyPayload {
-  type: NotifyType;
+interface ActivityNotifyPayload {
+  kind?: 'activity';
+  type: ActivityNotifyType;
   recipientId: string;
   senderId: string;
   senderName: string;
   extra?: Record<string, string>;
 }
 
-const PUSH_TEMPLATES: Record<NotifyType, (name: string) => { title: string; body: string }> = {
+interface CampaignNotifyPayload {
+  kind: 'campaign';
+  campaign: LifecycleCampaign;
+  recipientId: string;
+  senderName?: string | null;
+  extra?: Record<string, string>;
+}
+
+type NotifyPayload = ActivityNotifyPayload | CampaignNotifyPayload;
+
+const PUSH_TEMPLATES: Record<ActivityNotifyType, (name: string) => { title: string; body: string }> = {
   message:   (name) => ({ title: '💬 New message',        body: `${name} sent you a message` }),
   like:      (name) => ({ title: '❤️ Someone liked you!', body: `${name} liked your profile` }),
   match:     (name) => ({ title: '🔥 It\'s a Match!',     body: `You and ${name} liked each other` }),
@@ -50,24 +44,13 @@ const PUSH_TEMPLATES: Record<NotifyType, (name: string) => { title: string; body
   favourite: (name) => ({ title: '⭐ You were starred',   body: `${name} added you to their favourites` }),
 };
 
-const EMAIL_SUBJECTS: Record<NotifyType, (name: string) => string> = {
+const EMAIL_SUBJECTS: Record<ActivityNotifyType, (name: string) => string> = {
   message:   (name) => `💬 ${name} sent you a message on Africana`,
   like:      (name) => `❤️ ${name} liked your Africana profile`,
   match:     (name) => `🔥 It's a Match! You and ${name} liked each other`,
   view:      (name) => `👀 ${name} viewed your Africana profile`,
   favourite: (name) => `⭐ ${name} starred your Africana profile`,
 };
-
-async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  const apiKey = Deno.env.get('RESEND_API_KEY');
-  const from   = Deno.env.get('RESEND_FROM') ?? 'Africana <noreply@africana.app>';
-  if (!apiKey) return; // Email not configured — skip silently
-  await fetch(RESEND_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ from, to, subject, html }),
-  });
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -79,7 +62,33 @@ Deno.serve(async (req) => {
 
   try {
     const payload: NotifyPayload = await req.json();
-    const { type, recipientId, senderName, extra } = payload;
+    if (payload.kind === 'campaign') {
+      const result = await sendLifecycleCampaignEmail({
+        campaign: payload.campaign,
+        recipientId: payload.recipientId,
+        senderName: payload.senderName ?? null,
+        metadata: payload.extra,
+      });
+
+      return new Response(JSON.stringify({ ok: result.ok, reason: result.reason }), {
+        status: 200,
+        headers: CORS_HEADERS,
+      });
+    }
+
+    const { type, recipientId, senderId, senderName, extra } = payload;
+
+    // Block check — never push/email a user about someone they (or the sender) has blocked.
+    const { data: blockRow } = await supabaseAdmin
+      .from('blocks')
+      .select('id')
+      .or(`and(blocker_id.eq.${recipientId},blocked_id.eq.${senderId}),and(blocker_id.eq.${senderId},blocked_id.eq.${recipientId})`)
+      .limit(1)
+      .maybeSingle();
+
+    if (blockRow) {
+      return new Response(JSON.stringify({ ok: false, reason: 'blocked' }), { status: 200, headers: CORS_HEADERS });
+    }
 
     // Fetch recipient's push token, notification preferences, and display name.
     //
@@ -88,28 +97,8 @@ Deno.serve(async (req) => {
     // which case `single()` returns 406 and the whole notify call 500s.
     // `maybeSingle()` returns `null` and we fall through with sensible
     // defaults (notifications on by default).
-    const { data: settings } = await supabase
-      .from('user_settings')
-      .select(
-        'push_token, receive_messages, notify_messages, notify_likes, notify_matches, notify_views, email_notifications',
-      )
-      .eq('user_id', recipientId)
-      .maybeSingle();
-
-    const { data: profileRow } = await supabase
-      .from('profiles')
-      .select('full_name')
-      .eq('id', recipientId)
-      .maybeSingle();
-
-    // Email lives on auth.users — fetch via the admin API rather than
-    // duplicating it on profiles (which would need to be readable via the
-    // public profile SELECT policy and would leak addresses to other users).
-    const { data: authUser } = await supabase.auth.admin.getUserById(recipientId);
-    const profile = {
-      full_name: profileRow?.full_name ?? null,
-      email: authUser?.user?.email ?? null,
-    };
+    const recipient = await getRecipientContext(recipientId);
+    const settings = recipient.settings;
 
     if (type === 'message' && settings?.receive_messages === false) {
       return new Response(JSON.stringify({ ok: false, reason: 'recipient_not_accepting_messages' }), {
@@ -129,7 +118,7 @@ Deno.serve(async (req) => {
       type === 'favourite' ? settings?.notify_likes    !== false :
       true;
     const pushEnabled = pushPrefEnabled && !!settings?.push_token;
-    const emailEnabled = settings?.email_notifications === true && !!profile?.email;
+    const emailEnabled = settings?.email_notifications === true && !!recipient.email;
 
     const template = PUSH_TEMPLATES[type](senderName);
     const results: Record<string, unknown> = {};
@@ -154,9 +143,9 @@ Deno.serve(async (req) => {
 
     // ── Email notification (re-engagement only for non-message types) ──────────
     // Only send email for likes, matches, and stars (not every message — too spammy).
-    if (emailEnabled && (type === 'like' || type === 'match' || type === 'favourite') && profile?.email) {
+    if (emailEnabled && (type === 'like' || type === 'match' || type === 'favourite') && recipient.email) {
       const subject = EMAIL_SUBJECTS[type](senderName);
-      const recipientName = profile.full_name ?? 'there';
+      const recipientName = recipient.fullName ?? 'there';
       const html = `
         <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
           <h1 style="color:#C84B31;font-size:24px;margin-bottom:8px">Africana 🌍</h1>
@@ -168,8 +157,8 @@ Deno.serve(async (req) => {
           </p>
         </div>
       `;
-      await sendEmail(profile.email, subject, html);
-      results.email = 'sent';
+      const emailSent = await sendEmail(recipient.email, subject, html);
+      results.email = emailSent ? 'sent' : 'skipped';
     }
 
     if (!pushEnabled && !emailEnabled) {

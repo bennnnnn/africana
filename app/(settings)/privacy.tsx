@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/store/auth.store';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
@@ -13,7 +14,9 @@ import { COLORS } from '@/constants';
 import type { UserSettings } from '@/types';
 
 export default function PrivacySettingsScreen() {
-  const { settings, updateSettings } = useAuthStore();
+  const { settings, updateSettings } = useAuthStore(
+    useShallow((s) => ({ settings: s.settings, updateSettings: s.updateSettings })),
+  );
   const { showToast } = useDialog();
 
   const applySettings = useCallback(

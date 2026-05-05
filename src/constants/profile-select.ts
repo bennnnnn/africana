@@ -1,0 +1,47 @@
+/**
+ * Explicit PostgREST `profiles` column list for list/grid/inbox fetches.
+ * Avoids `select('*')` payload bloat on large profile rows.
+ *
+ * Keep in sync with `User` in `@/types` and `public.profiles` migrations.
+ */
+export const PROFILE_LIST_SELECT = [
+  'id',
+  'full_name',
+  'username',
+  'bio',
+  'birthdate',
+  'gender',
+  'interested_in',
+  'looking_for',
+  'country',
+  'state',
+  'city',
+  'origin_country',
+  'origin_state',
+  'origin_city',
+  'religion',
+  'education',
+  'marital_status',
+  'height_cm',
+  'weight_kg',
+  'body_type',
+  'ethnicity',
+  'occupation',
+  'languages',
+  'hobbies',
+  'has_children',
+  'want_children',
+  'verified',
+  'verification_status',
+  'profile_photos',
+  'avatar_url',
+  'online_status',
+  'last_seen',
+  'online_visible',
+  'show_in_discover',
+  'accepts_messages',
+  'min_age_pref',
+  'max_age_pref',
+  'created_at',
+  'updated_at',
+].join(',');

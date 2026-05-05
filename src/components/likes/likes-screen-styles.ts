@@ -1,0 +1,161 @@
+import { StyleSheet } from 'react-native';
+import { COLORS, FONT } from '@/constants';
+import { LIKES_ROW_HEIGHT } from '@/constants/likes-screen';
+
+export const likesScreenStyles = StyleSheet.create({
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 6,
+    backgroundColor: COLORS.white,
+  },
+  tabsWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 0,
+    paddingTop: 4,
+    paddingBottom: 10,
+    position: 'relative',
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  tabIconRow: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  tabLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  tabLabel: {
+    fontSize: 13,
+    fontWeight: FONT.semibold,
+    color: COLORS.textSecondary,
+    letterSpacing: 0.1,
+  },
+  /** Keep weight equal to `tabLabel` so the row layout does not shift when switching tabs. */
+  tabLabelActive: {
+    color: COLORS.primary,
+  },
+  tabBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 2,
+  },
+  tabBadgeActive: {
+    backgroundColor: COLORS.white,
+  },
+  tabBadgeTxt: {
+    fontSize: 10,
+    fontWeight: FONT.extrabold,
+    color: COLORS.white,
+  },
+  tabBadgeTxtActive: {
+    color: COLORS.primary,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: LIKES_ROW_HEIGHT,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.white,
+    gap: 12,
+  },
+  rowNew: {
+    backgroundColor: COLORS.primarySurface,
+  },
+  newPill: {
+    alignSelf: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+  },
+  newPillText: {
+    fontSize: 10,
+    fontWeight: FONT.extrabold,
+    color: COLORS.white,
+    letterSpacing: 0.4,
+  },
+  sep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: COLORS.border,
+    marginLeft: 76,
+  },
+  avatarWrap: { position: 'relative' },
+  avatar: { width: 48, height: 48, borderRadius: 24 },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 1,
+    right: 1,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  rowName: { fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.text },
+  rowLoc: { fontSize: 12, color: COLORS.textSecondary, flex: 1 },
+  msgBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primarySurface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerLoading: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  loadMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 4,
+  },
+  loadMoreText: {
+    fontSize: FONT.md,
+    fontWeight: FONT.semibold,
+    color: COLORS.primary,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  errorText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  retryText: {
+    color: COLORS.white,
+    fontWeight: FONT.bold,
+    fontSize: 14,
+  },
+});

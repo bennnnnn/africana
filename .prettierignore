@@ -1,0 +1,6 @@
+node_modules
+dist
+.expo
+*.generated.ts
+src/lib/africa-city-data
+src/lib/cultural-data/generated

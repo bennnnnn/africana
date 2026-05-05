@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
+import { UI_LABELS } from '@/constants/copy';
 
 export type DialogActionStyle = 'default' | 'primary' | 'secondary' | 'destructive' | 'cancel';
 
@@ -30,12 +31,12 @@ export function registerAppDialog(fn: ((config: DialogConfig) => void) | null) {
  * provider is not mounted (e.g. tests).
  */
 export function appDialog(config: DialogConfig) {
-  const merged: DialogConfig = { actions: [{ label: 'OK', style: 'primary' }], ...config };
+  const merged: DialogConfig = { actions: [{ label: UI_LABELS.ok, style: 'primary' }], ...config };
   if (showDialogImpl) {
     showDialogImpl(merged);
     return;
   }
-  const actions = merged.actions ?? [{ label: 'OK' }];
+  const actions = merged.actions ?? [{ label: UI_LABELS.ok }];
   Alert.alert(
     merged.title,
     merged.message ?? '',

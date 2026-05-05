@@ -24,6 +24,17 @@ dayjs.extend(relativeTime);
 
 type ActivityType = 'like' | 'match' | 'view' | 'message';
 
+interface ActivityFeedRpcRow {
+  id: string;
+  type: string;
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  preview: string | null;
+  createdAt: string;
+  navTarget: string;
+}
+
 interface ActivityItem {
   id: string;
   type: ActivityType;
@@ -96,147 +107,84 @@ export default function ActivityScreen() {
 
   const load = useCallback(async () => {
     if (!user) return;
-    const userId = user.id;
-    const results: ActivityItem[] = [];
     setLoadError(null);
 
     try {
-      // ── 1. Likes received — simple query, no join ────────────────────────────
-      const { data: likes } = await supabase
-        .from('likes')
-        .select('id, created_at, from_user_id')
-        .eq('to_user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(20);
+      const { data, error } = await supabase.rpc('get_activity_feed');
+      if (error) throw error;
 
-      // ── 2. IDs of people I liked (to detect matches) ─────────────────────────
-      const { data: myLikes } = await supabase
-        .from('likes')
-        .select('to_user_id')
-        .eq('from_user_id', userId);
-      const myLikedIds = new Set((myLikes ?? []).map((l: any) => l.to_user_id));
-
-      // ── 3. Fetch profiles for like senders ───────────────────────────────────
-      const likerIds = [...new Set((likes ?? []).map((l: any) => l.from_user_id))];
-      let likerProfiles: Record<string, any> = {};
-      if (likerIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, profile_photos')
-          .in('id', likerIds);
-        (profiles ?? []).forEach((p: any) => { likerProfiles[p.id] = p; });
+      let rows: ActivityFeedRpcRow[] = [];
+      const parsed = data as unknown;
+      if (Array.isArray(parsed)) {
+        rows = parsed as ActivityFeedRpcRow[];
+      } else if (typeof parsed === 'string') {
+        try {
+          const arr = JSON.parse(parsed) as unknown;
+          if (Array.isArray(arr)) rows = arr as ActivityFeedRpcRow[];
+        } catch {
+          /* ignore */
+        }
       }
 
-      for (const like of likes ?? []) {
-        const p = likerProfiles[like.from_user_id];
-        if (!p) continue;
-        const isMatch = myLikedIds.has(like.from_user_id);
+      const isActivityType = (t: string): t is ActivityType =>
+        t === 'like' || t === 'match' || t === 'view' || t === 'message';
+
+      const results: ActivityItem[] = [];
+      for (const r of rows) {
+        if (!isActivityType(r.type)) continue;
+        const avatar = avatarFor({
+          full_name: r.name,
+          avatar_url: r.avatarUrl,
+          profile_photos: [],
+        });
         results.push({
-          id: `like-${like.id}`,
-          type: isMatch ? 'match' : 'like',
-          userId: p.id,
-          name: p.full_name,
-          avatar: avatarFor(p),
-          createdAt: like.created_at,
-          navTarget: `/(profile)/${p.id}`,
+          id: r.id,
+          type: r.type,
+          userId: r.userId,
+          name: r.name,
+          avatar,
+          preview: r.preview ?? undefined,
+          createdAt: r.createdAt,
+          navTarget: r.navTarget,
         });
       }
 
-      // ── 4. Profile views — simple query, no join ─────────────────────────────
-      const { data: views } = await supabase
-        .from('profile_views')
-        .select('id, viewed_at, viewer_id')
-        .eq('viewed_id', userId)
-        .order('viewed_at', { ascending: false })
-        .limit(20);
-
-      const viewerIds = [...new Set((views ?? []).map((v: any) => v.viewer_id))];
-      let viewerProfiles: Record<string, any> = {};
-      if (viewerIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, profile_photos')
-          .in('id', viewerIds);
-        (profiles ?? []).forEach((p: any) => { viewerProfiles[p.id] = p; });
-      }
-
-      const matchedIds = new Set(results.filter((r) => r.type === 'match').map((r) => r.userId));
-      for (const view of views ?? []) {
-        const p = viewerProfiles[view.viewer_id];
-        if (!p || matchedIds.has(p.id)) continue;
-        results.push({
-          id: `view-${view.id}`,
-          type: 'view',
-          userId: p.id,
-          name: p.full_name,
-          avatar: avatarFor(p),
-          createdAt: view.viewed_at,
-          navTarget: `/(profile)/${p.id}`,
-        });
-      }
-
-      // ── 5. Recent conversations ──────────────────────────────────────────────
-      const { data: convs } = await supabase
-        .from('conversations')
-        .select('id, last_message, last_message_at, participant_ids')
-        .contains('participant_ids', [userId])
-        .not('last_message', 'is', null)
-        .order('last_message_at', { ascending: false })
-        .limit(10);
-
-      // Batch-fetch all conversation participants in one query
-      const convList = convs ?? [];
-      const otherIds = convList
-        .map((conv) => (conv.participant_ids as string[]).find((id) => id !== userId))
-        .filter((id): id is string => !!id);
-
-      let convProfiles: Record<string, any> = {};
-      if (otherIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, profile_photos')
-          .in('id', otherIds);
-        (profiles ?? []).forEach((p: any) => { convProfiles[p.id] = p; });
-      }
-
-      for (const conv of convList) {
-        const otherId = (conv.participant_ids as string[]).find((id) => id !== userId);
-        if (!otherId) continue;
-        const profile = convProfiles[otherId];
-        if (!profile) continue;
-        results.push({
-          id: `msg-${conv.id}`,
-          type: 'message',
-          userId: profile.id,
-          name: profile.full_name,
-          avatar: avatarFor(profile),
-          preview: conv.last_message ?? '',
-          createdAt: conv.last_message_at ?? new Date().toISOString(),
-          navTarget: `/(chat)/${conv.id}`,
-        });
-      }
+      setItems(results);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load activity. Pull down to retry.');
-      return;
     }
-
-    // Sort by time desc, deduplicate by userId+type
-    const seen = new Set<string>();
-    const unique = results
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .filter((item) => {
-        const key = `${item.type}-${item.userId}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-    setItems(unique);
   }, [user]);
 
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, [load]);
+
+  // Auto-refresh when new likes or profile views arrive
+  useEffect(() => {
+    if (!user) return;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleReload = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => void load(), 1500);
+    };
+
+    const channel = supabase
+      .channel(`activity-realtime-${user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'likes',
+        filter: `to_user_id=eq.${user.id}`,
+      }, scheduleReload)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'profile_views',
+        filter: `viewed_id=eq.${user.id}`,
+      }, scheduleReload)
+      .subscribe();
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id, load]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

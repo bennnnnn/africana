@@ -4,7 +4,7 @@
  * Counts are fetched via the `activity_unseen_counts` Postgres RPC (see
  * migration `..._activity_counts.sql`) and kept in sync via realtime
  * subscriptions that both the tab bar badge (`app/(tabs)/_layout.tsx`) and
- * the Likes screen (`app/(tabs)/likes.tsx`) read from.
+ * the Likes hub (`app/(tabs)/likes/*`) read from.
  *
  * The Likes screen intentionally does NOT expose an outgoing "sent" tab —
  * users care about incoming attention, not a stream of their own outgoing

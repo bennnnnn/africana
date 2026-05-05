@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Dimensions,
   StyleSheet,
   Animated,
 } from 'react-native';
@@ -17,28 +16,29 @@ import { HeroPlaceholder } from '@/components/ui/HeroPlaceholder';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { isUserEffectivelyOnline } from '@/lib/utils';
+import haptics from '@/lib/haptics';
 
 interface UserCardProps {
   user: User;
+  /** Explicit pixel width of the card (required for FlashList compatibility). */
+  cardWidth: number;
+  /** Explicit pixel height of the card (required for FlashList compatibility). */
+  cardHeight: number;
   /** Runs before navigating to profile (e.g. set fullscreen browse order). */
   beforeNavigate?: () => void;
+  /** Called on long-press to show quick preview modal. */
+  onLongPress?: (user: User) => void;
 }
-
-const { width } = Dimensions.get('window');
-const CARD_WIDTH  = (width - 48) / 2;
-const CARD_HEIGHT = CARD_WIDTH * 1.45;
 
 const NEW_MEMBER_WINDOW_MS = 10 * 24 * 60 * 60 * 1000; // 10 days
 
-function UserCardInner({ user, beforeNavigate }: UserCardProps) {
-  const photoUrl     = user.profile_photos?.[0] || user.avatar_url || null;
-  const hasPhoto     = !!photoUrl;
+function UserCardInner({ user, cardWidth, cardHeight, beforeNavigate, onLongPress }: UserCardProps) {
+  const photoUrl = user.profile_photos?.[0] || user.avatar_url || null;
+  const hasPhoto = !!photoUrl;
   const shortLocation = user.city || user.state || user.country || '';
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // Don't trust the `online_status` column on its own — pair it with a fresh
-  // `last_seen` so abandoned/crashed sessions don't keep pulsing forever.
   const isOnline = isUserEffectivelyOnline(user.online_status, user.last_seen);
 
   useEffect(() => {
@@ -53,7 +53,6 @@ function UserCardInner({ user, beforeNavigate }: UserCardProps) {
     return () => loop.stop();
   }, [isOnline]);
 
-  // "NEW" badge — show for profiles created within the last 10 days.
   const isNew = useMemo(() => {
     if (!user.created_at) return false;
     const created = new Date(user.created_at).getTime();
@@ -69,32 +68,37 @@ function UserCardInner({ user, beforeNavigate }: UserCardProps) {
       accessibilityLabel={profileLabel}
       onPress={() => {
         setProfileSeed(user);
-        // Warm the first few photos so the profile hero is instant.
         const photos = (user.profile_photos ?? []).filter(Boolean).slice(0, 3);
         if (photos.length > 0) void Image.prefetch(photos);
         beforeNavigate?.();
         router.push(`/(profile)/${user.id}`);
       }}
+      onLongPress={() => {
+        haptics.tapMedium();
+        onLongPress?.(user);
+      }}
+      delayLongPress={350}
       activeOpacity={0.92}
-      style={s.card}
+      style={[s.card, { width: cardWidth, height: cardHeight }]}
     >
-      {/* ── Photo or rich gradient placeholder ── */}
+      {/* ── Photo or placeholder — fills the card ── */}
       {hasPhoto ? (
         <Image
           source={{ uri: photoUrl! }}
-          style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}
+          style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={200}
           cachePolicy="memory-disk"
-          recyclingKey={user.id}
         />
       ) : (
-        <HeroPlaceholder
-          name={user.full_name}
-          width={CARD_WIDTH}
-          height={CARD_HEIGHT}
-          hint={null}
-        />
+        <View style={StyleSheet.absoluteFill}>
+          <HeroPlaceholder
+            name={user.full_name}
+            width={cardWidth}
+            height={cardHeight}
+            hint={null}
+          />
+        </View>
       )}
 
       {/* ── NEW badge — top-left ── */}
@@ -109,7 +113,10 @@ function UserCardInner({ user, beforeNavigate }: UserCardProps) {
         <View style={s.onlineDotWrap}>
           <Animated.View style={[
             s.onlinePulse,
-            { transform: [{ scale: pulseAnim }], opacity: pulseAnim.interpolate({ inputRange: [1, 1.9], outputRange: [0.55, 0] }) },
+            {
+              transform: [{ scale: pulseAnim }],
+              opacity: pulseAnim.interpolate({ inputRange: [1, 1.9], outputRange: [0.55, 0] }),
+            },
           ]} />
           <View style={s.onlineDot} />
         </View>
@@ -142,19 +149,15 @@ export const UserCard = memo(UserCardInner);
 
 const s = StyleSheet.create({
   card: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
     borderRadius: RADIUS.xl,
     overflow: 'hidden',
-    marginBottom: 16,
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.savanna,
     shadowColor: '#3A2A1E',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.10,
     shadowRadius: 10,
     elevation: 4,
   },
-  // ── NEW badge ───────────────────────────────────────────────
   newBadge: {
     position: 'absolute',
     top: 8,
@@ -176,7 +179,6 @@ const s = StyleSheet.create({
     letterSpacing: 0.8,
     lineHeight: 11,
   },
-  // ── Online indicator ────────────────────────────────────────
   onlineDotWrap: {
     position: 'absolute',
     top: 8,
@@ -201,7 +203,6 @@ const s = StyleSheet.create({
     borderWidth: 2,
     borderColor: COLORS.white,
   },
-  // ── Info overlay ────────────────────────────────────────────
   overlay: {
     position: 'absolute',
     bottom: 0,

@@ -6,7 +6,7 @@ export function isDuplicateSocialError(message?: string | null) {
 }
 
 export async function isBlockedRelationship(userAId: string, userBId: string) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('blocks')
     .select('id')
     .or(
@@ -14,6 +14,9 @@ export async function isBlockedRelationship(userAId: string, userBId: string) {
     )
     .maybeSingle();
 
+  // If the query fails we must NOT silently return false (= "not blocked"),
+  // because that would let messages/favourites slip through to blocked users.
+  if (error) throw error;
   return !!data;
 }
 

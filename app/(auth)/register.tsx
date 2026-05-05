@@ -12,7 +12,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/store/auth.store';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { COLORS } from '@/constants';
@@ -20,7 +19,6 @@ import { getValidationState, validateEmail, validatePassword } from '@/lib/valid
 import { appDialog } from '@/lib/app-dialog';
 
 export default function RegisterScreen() {
-  const { fetchProfile, fetchSettings } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
@@ -79,12 +77,19 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (data.user) {
-      router.replace({
-        pathname: '/(auth)/onboarding',
-        params: { userId: data.user.id, email: trimmedEmail },
+    if (!data.user || !data.session?.user) {
+      appDialog({
+        title: 'Email sign-up unavailable',
+        message: 'We could not start your account session. Please try again or continue with Google.',
+        icon: 'alert-circle-outline',
       });
+      return;
     }
+
+    router.replace({
+      pathname: '/(auth)/onboarding',
+      params: { userId: data.session.user.id, email: trimmedEmail },
+    });
   };
 
   return (

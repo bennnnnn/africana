@@ -8,7 +8,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONT } from '@/constants';
+import { COLORS, FONT, RADIUS, SHADOWS } from '@/constants';
 
 export const settingsStyles = StyleSheet.create({
   scrollContent: {
@@ -32,6 +32,120 @@ export const settingsStyles = StyleSheet.create({
     lineHeight: 17,
     marginBottom: 8,
     paddingHorizontal: 2,
+  },
+});
+
+/** Grouped list container for the settings hub (iOS-style inset group). */
+export function SettingsHubCard({ children }: { children: React.ReactNode }) {
+  return <View style={hubCardStyles.card}>{children}</View>;
+}
+
+const hubCardStyles = StyleSheet.create({
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    ...SHADOWS.sm,
+  },
+});
+
+const rowStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  rowLast: {
+    borderBottomWidth: 0,
+  },
+  toggleLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+  },
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  labelBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  labelText: {
+    fontSize: FONT.md,
+    fontWeight: FONT.medium,
+    color: COLORS.text,
+  },
+  labelTextDanger: {
+    color: COLORS.error,
+  },
+  descText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 1,
+    lineHeight: 16,
+  },
+});
+
+const hubRowStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  rowLast: {
+    borderBottomWidth: 0,
+  },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  textCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  hubTitle: {
+    fontSize: FONT.md,
+    fontWeight: FONT.semibold,
+    color: COLORS.textStrong,
+  },
+  hubDesc: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+});
+
+const sectionHeaderStyles = StyleSheet.create({
+  text: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.earth,
+    paddingTop: 4,
+    paddingBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  textAfter: {
+    paddingTop: 18,
   },
 });
 
@@ -64,50 +178,29 @@ export function SettingRow({
 }: SettingRowProps) {
   const iconTint = danger ? COLORS.error : (iconColor ?? COLORS.primary);
   const iconBg = danger ? '#FEE2E2' : `${iconColor ?? COLORS.primary}18`;
+  const current = value ?? false;
 
   const iconBox = (
-    <View
-      style={{
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        backgroundColor: iconBg,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-      }}
-    >
+    <View style={[rowStyles.iconBox, { backgroundColor: iconBg }]}>
       <Ionicons name={icon} size={18} color={iconTint} />
     </View>
   );
 
   const labelBlock = (
-    <View style={{ flex: 1, minWidth: 0 }}>
-      <Text style={{ fontSize: FONT.md, fontWeight: FONT.medium, color: danger ? COLORS.error : COLORS.text }}>
-        {label}
-      </Text>
-      {description ? (
-        <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 1, lineHeight: 16 }}>{description}</Text>
-      ) : null}
+    <View style={rowStyles.labelBlock}>
+      <Text style={[rowStyles.labelText, danger && rowStyles.labelTextDanger]}>{label}</Text>
+      {description ? <Text style={rowStyles.descText}>{description}</Text> : null}
     </View>
   );
 
-  const rowStyle = {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
-    borderBottomColor: COLORS.border,
-  };
+  const rowBase = [rowStyles.row, isLast && rowStyles.rowLast];
 
   if (onToggle !== undefined) {
     const a11yLabel = [label, description].filter(Boolean).join('. ');
-    const current = value ?? false;
     return (
-      <View style={rowStyle} accessibilityRole="none">
+      <View style={rowBase} accessibilityRole="none">
         <Pressable
-          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0 }}
+          style={rowStyles.toggleLeft}
           onPress={() => !disabled && onToggle(!current)}
           disabled={disabled}
           accessibilityRole="button"
@@ -119,10 +212,12 @@ export function SettingRow({
         </Pressable>
         <Switch
           value={current}
-          onValueChange={onToggle}
+          onValueChange={(v) => {
+            if (!disabled) void onToggle(v);
+          }}
           disabled={disabled}
           trackColor={{ true: COLORS.primary }}
-          thumbColor="#FFFFFF"
+          thumbColor={COLORS.white}
           accessibilityLabel={label}
         />
       </View>
@@ -135,7 +230,7 @@ export function SettingRow({
       onPress={onPress}
       disabled={!onPress || disabled}
       activeOpacity={onPress && !disabled ? 0.7 : 1}
-      style={rowStyle}
+      style={rowBase}
       accessibilityRole={onPress ? 'button' : 'none'}
       accessibilityLabel={onPress ? navA11y : undefined}
     >
@@ -148,17 +243,7 @@ export function SettingRow({
 
 export function SettingsSectionHeader({ label, first }: { label: string; first?: boolean }) {
   return (
-    <Text
-      style={{
-        fontSize: 11,
-        fontWeight: '800',
-        color: COLORS.earth,
-        paddingTop: first ? 4 : 18,
-        paddingBottom: 8,
-        textTransform: 'uppercase',
-        letterSpacing: 0.8,
-      }}
-    >
+    <Text style={[sectionHeaderStyles.text, !first && sectionHeaderStyles.textAfter]} accessibilityRole="header">
       {label}
     </Text>
   );
@@ -187,35 +272,16 @@ export function SettingsHubRow({
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.75}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
-        borderBottomColor: COLORS.border,
-      }}
+      style={[hubRowStyles.row, isLast && hubRowStyles.rowLast]}
       accessibilityRole="button"
       accessibilityLabel={[label, description].filter(Boolean).join('. ')}
     >
-      <View
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 12,
-          backgroundColor: iconBg,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginRight: 12,
-        }}
-      >
+      <View style={[hubRowStyles.iconWrap, { backgroundColor: iconBg }]}>
         <Ionicons name={icon} size={20} color={iconColor} />
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.textStrong }}>{label}</Text>
-        {description ? (
-          <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 2, lineHeight: 16 }}>{description}</Text>
-        ) : null}
+      <View style={hubRowStyles.textCol}>
+        <Text style={hubRowStyles.hubTitle}>{label}</Text>
+        {description ? <Text style={hubRowStyles.hubDesc}>{description}</Text> : null}
       </View>
       <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
     </TouchableOpacity>

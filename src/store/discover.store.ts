@@ -1,11 +1,17 @@
 import { create } from 'zustand';
+import type { PostgrestFilterBuilder } from '@supabase/postgrest-js';
 import { User, FilterOptions, InterestedIn } from '@/types';
+import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { supabase } from '@/lib/supabase';
-import { notifyUser } from '@/lib/notifications';
+import { notifyLifecycleEmail, notifyUser } from '@/lib/notifications';
 import { appDialog } from '@/lib/app-dialog';
 import { maybeWarnLikeQuota } from '@/lib/rate-limit-warn';
 import { track, EVENTS } from '@/lib/analytics';
+import { isBlockedRelationship } from '@/lib/social-actions';
+import { likesPathSegmentForNotifyType } from '@/constants/likes-routes';
+import { UI_TOAST } from '@/constants/copy';
 import { getOnlineFreshnessCutoffISO, isUserEffectivelyOnline } from '@/lib/utils';
+/** Map discover preference to profile gender filter (undefined → no filter). */
 const interestedInToGender = (v: InterestedIn | undefined): string | null => {
   if (v === 'men') return 'male';
   if (v === 'women') return 'female';
@@ -20,11 +26,14 @@ function shuffleArray<T>(arr: T[]): void {
   }
 }
 
+// Postgrest-js v2.49+ adds Result / RelationName / Relationships / Method — use `any` so the chain stays assignable without generated DB types.
+type DiscoverQuery = PostgrestFilterBuilder<any, any, any, any, any, any, any>;
+
 /** Location, religion, online, birthdate presence, and age — all in SQL so pagination matches the grid. */
 function applyDiscoverSheetFilters(
-  query: any,
+  query: DiscoverQuery,
   params: { filters: FilterOptions; today: Date; effMin: number; effMax: number },
-) {
+): DiscoverQuery {
   const { filters, today, effMin, effMax } = params;
   if (filters.country) query = query.eq('country', filters.country);
   if (filters.state) query = query.eq('state', filters.state);
@@ -166,7 +175,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       // until they upload a photo from Me → Edit profile.
       let query = supabase
         .from('profiles')
-        .select('*')
+        .select(PROFILE_LIST_SELECT as '*')
         .neq('id', userId)
         .eq('show_in_discover', true)
         .not('avatar_url', 'is', null)
@@ -213,9 +222,9 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         return;
       }
 
-      const processRaw = (rows: any[]): User[] =>
+      const processRaw = (rows: Record<string, unknown>[]): User[] =>
         rows.map((u) => {
-          const bday = u.birthdate ? new Date(u.birthdate) : null;
+          const bday = u.birthdate ? new Date(String(u.birthdate)) : null;
           const age = bday
             ? today.getFullYear() -
               bday.getFullYear() -
@@ -227,25 +236,28 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           const effectiveOnlineStatus =
             u.online_visible === false
               ? 'offline'
-              : isUserEffectivelyOnline(u.online_status, u.last_seen)
+              : isUserEffectivelyOnline(
+                  u.online_status as User['online_status'],
+                  String(u.last_seen ?? ''),
+                )
                 ? 'online'
                 : 'offline';
           return {
-            ...u,
+            ...(u as unknown as User),
             age,
             online_status: effectiveOnlineStatus,
-            profile_photos: u.profile_photos ?? [],
-            languages: u.languages ?? [],
+            profile_photos: (u.profile_photos as string[] | null) ?? [],
+            languages: (u.languages as string[] | null) ?? [],
           };
         });
 
-      const rows = data ?? [];
+      const rows = (data ?? []) as Record<string, unknown>[];
 
       const processed = processRaw(rows);
 
       // Online users first, then shuffle the offline pool for variety
-      const online  = processed.filter((u) => (u as any).online_status === 'online');
-      const offline = processed.filter((u) => (u as any).online_status !== 'online');
+      const online  = processed.filter((u) => u.online_status === 'online');
+      const offline = processed.filter((u) => u.online_status !== 'online');
       shuffleArray(offline);
       let result: User[] = [...online, ...offline];
 
@@ -256,7 +268,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
             const needed = PAGE_SIZE - result.length;
             let likedQuery = supabase
               .from('profiles')
-              .select('*')
+              .select(PROFILE_LIST_SELECT as '*')
               .in('id', likedIdsArr)
               .eq('show_in_discover', true)
               .not('avatar_url', 'is', null);
@@ -265,30 +277,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
             likedQuery = likedQuery.order('last_seen', { ascending: false }).limit(needed);
             const { data: likedData } = await likedQuery;
             if (likedData) {
-              const likedProcessed = (() => {
-                const rows = likedData;
-                return rows.map((u: any) => {
-                  const bday = u.birthdate ? new Date(u.birthdate) : null;
-                  const age = bday
-                    ? today.getFullYear() -
-                      bday.getFullYear() -
-                      (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
-                    : 0;
-                  const effectiveOnlineStatus =
-                    u.online_visible === false
-                      ? 'offline'
-                      : isUserEffectivelyOnline(u.online_status, u.last_seen)
-                        ? 'online'
-                        : 'offline';
-                  return {
-                    ...u,
-                    age,
-                    online_status: effectiveOnlineStatus,
-                    profile_photos: u.profile_photos ?? [],
-                    languages: u.languages ?? [],
-                  };
-                });
-              })();
+              const likedProcessed = processRaw(likedData as Record<string, unknown>[]);
               const likedUsers = likedProcessed;
               shuffleArray(likedUsers);
               result = [...result, ...likedUsers];
@@ -383,11 +372,28 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       return false;
     }
 
+    if (await isBlockedRelationship(fromUserId, toUserId)) {
+      appDialog({
+        title: 'Can\u2019t send like',
+        message: UI_TOAST.interactionBlocked,
+        icon: 'ban-outline',
+      });
+      return false;
+    }
+
     const { error: insertError } = await supabase
       .from('likes')
       .insert({ from_user_id: fromUserId, to_user_id: toUserId });
     if (insertError) {
       const blob = `${insertError.message ?? ''} ${insertError.details ?? ''} ${insertError.hint ?? ''}`.toLowerCase();
+      if (blob.includes('interaction blocked between participants')) {
+        appDialog({
+          title: 'Can\u2019t send like',
+          message: UI_TOAST.interactionBlocked,
+          icon: 'ban-outline',
+        });
+        return false;
+      }
       if (blob.includes('rate_limit:likes:hour')) {
         track(EVENTS.RATE_LIMIT_HIT, { topic: 'likes', window: 'hour' });
         appDialog({
@@ -404,8 +410,8 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         });
       } else {
         appDialog({
-          title: 'Could not like',
-          message: insertError.message ?? 'Please try again.',
+          title: 'Like failed',
+          message: insertError.message ?? "Couldn't send your like. Try again.",
           icon: 'alert-circle-outline',
         });
       }
@@ -421,6 +427,12 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     const { data: senderProfile } = await supabase
       .from('profiles').select('full_name').eq('id', fromUserId).single();
     const senderName = senderProfile?.full_name ?? 'Someone';
+    void notifyLifecycleEmail({
+      campaign: 'first_like',
+      recipientId: toUserId,
+      senderName,
+      extra: { userId: fromUserId },
+    });
 
     const { data: mutual } = await supabase
       .from('likes').select('id')
@@ -429,10 +441,22 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     const isMatch = !!mutual;
     if (isMatch) {
       // Only notify the OTHER user — the current user is in the app and will see the MatchModal
-      notifyUser({ type: 'match', recipientId: toUserId, senderId: fromUserId, senderName, extra: { userId: fromUserId } });
+      void notifyUser({
+        type: 'match',
+        recipientId: toUserId,
+        senderId: fromUserId,
+        senderName,
+        extra: { userId: fromUserId, likesSegment: likesPathSegmentForNotifyType('match') },
+      });
       track(EVENTS.MATCH_CREATED);
     } else {
-      notifyUser({ type: 'like', recipientId: toUserId, senderId: fromUserId, senderName, extra: { userId: fromUserId } });
+      void notifyUser({
+        type: 'like',
+        recipientId: toUserId,
+        senderId: fromUserId,
+        senderName,
+        extra: { userId: fromUserId, likesSegment: likesPathSegmentForNotifyType('like') },
+      });
     }
     track(EVENTS.LIKE_SENT, { matched: isMatch });
 

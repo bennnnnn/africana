@@ -57,9 +57,9 @@ export default function LoginScreen() {
     const session = data.session;
     if (!session?.user) {
       appDialog({
-        title: 'Check your email',
-        message: 'Confirm your email address, then sign in again.',
-        icon: 'mail-outline',
+        title: 'Sign in unavailable',
+        message: 'We could not start your session. Please try again.',
+        icon: 'alert-circle-outline',
       });
       return;
     }

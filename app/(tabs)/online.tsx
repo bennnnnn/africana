@@ -20,7 +20,10 @@ import { useChatStore } from '@/store/chat.store';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { User } from '@/types';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
+import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useDialog } from '@/components/ui/DialogProvider';
+import { UI_TOAST } from '@/constants/copy';
 import { getOnlineFreshnessCutoffISO, isUserEffectivelyOnline } from '@/lib/utils';
 import haptics from '@/lib/haptics';
 
@@ -114,7 +117,8 @@ const OnlineRow = memo(function OnlineRow({
 
 export default function OnlineScreen() {
   const { user } = useAuthStore();
-  const { getOrCreateConversation } = useChatStore();
+  const { showToast } = useDialog();
+  const getOrCreateConversation = useChatStore((s) => s.getOrCreateConversation);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -140,7 +144,7 @@ export default function OnlineScreen() {
 
     let query = supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILE_LIST_SELECT as '*')
       .neq('id', user.id)
       .eq('show_in_discover', true)
       .eq('online_visible', true)
@@ -153,7 +157,7 @@ export default function OnlineScreen() {
     }
 
     const { data } = await query;
-    if (data) setOnlineUsers(data);
+    if (data) setOnlineUsers(data as User[]);
   };
 
   const initialLoadDone = useRef(false);
@@ -193,11 +197,16 @@ export default function OnlineScreen() {
   const handleMessage = useCallback(async (toUserId: string) => {
     if (!user) return;
     haptics.tapLight();
-    const convId = await getOrCreateConversation(user.id, toUserId);
-    if (convId) {
-      router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: toUserId } });
+    const result = await getOrCreateConversation(user.id, toUserId);
+    if (!result.ok) {
+      showToast({
+        icon: 'alert-circle-outline',
+        message: result.reason === 'blocked' ? UI_TOAST.openChatBlocked : UI_TOAST.openChatFailed,
+      });
+      return;
     }
-  }, [user, getOrCreateConversation]);
+    router.push({ pathname: '/(chat)/[id]', params: { id: result.conversationId, otherUserId: toUserId } });
+  }, [user, getOrCreateConversation, showToast]);
 
   const handleOpen = useCallback((u: User) => {
     setProfileSeed(u);

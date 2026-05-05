@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONT, RADIUS } from '@/constants';
+import { UI_LABELS } from '@/constants/copy';
 import { registerAppDialog, type DialogConfig, type DialogAction } from '@/lib/app-dialog';
 
 type ToastConfig = {
@@ -53,7 +54,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
     (config: DialogConfig) => {
       fadeAnim.setValue(0);
       scaleAnim.setValue(0.94);
-      setDialog({ actions: [{ label: 'OK', style: 'primary' }], ...config });
+      setDialog({ actions: [{ label: UI_LABELS.ok, style: 'primary' }], ...config });
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
         Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 120, friction: 10 }),

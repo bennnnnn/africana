@@ -6,7 +6,7 @@
 -- the top 20. This function does the intersection in the DB against an
 -- index and returns only the recipient profiles.
 
-create or replace function public.get_matches(p_limit int default 50)
+create or replace function public.get_matches(p_limit int default 50, p_offset int default 0)
 returns setof public.profiles
 language sql
 stable
@@ -32,10 +32,11 @@ as $$
   from mutual m
   join public.profiles p on p.id = m.peer_id
   order by m.matched_at desc
-  limit greatest(1, least(p_limit, 200));
+  limit greatest(1, least(p_limit, 200))
+  offset greatest(0, p_offset);
 $$;
 
-grant execute on function public.get_matches(int) to authenticated;
+grant execute on function public.get_matches(int, int) to authenticated;
 
 -- Supporting indexes. Likely already exist if the likes table has been
 -- queried at scale, but `create index if not exists` is idempotent.

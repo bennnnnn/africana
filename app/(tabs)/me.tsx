@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import {
-  View, Text, ScrollView, TouchableOpacity, Modal,
+  View, Text, ScrollView, TouchableOpacity,
   TextInput, Pressable, ActivityIndicator,
-  Dimensions, StyleSheet, KeyboardAvoidingView, Platform,
+  Dimensions, StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,14 +26,16 @@ import { DatePicker } from '@/components/ui/DatePicker';
 import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
 import * as ImagePicker from 'expo-image-picker';
 import { getEthnicityOptions, getLanguageOptions } from '@/lib/cultural-data';
-import { getCountryByName, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
+import { resolveCountryFromStored, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
 import { getProfileStrength } from '@/lib/profile-completion';
 import { oppositeInterestedIn } from '@/lib/gender-match';
 import type { Gender } from '@/types';
 import { ScreenTitle } from '@/components/ui/ScreenTitle';
 import { HeroPlaceholder } from '@/components/ui/HeroPlaceholder';
 import { appDialog } from '@/lib/app-dialog';
+import { UI_LABELS } from '@/constants/copy';
 import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
+import { EditModal, FieldRow, HOBBY_OPTIONS, em } from '@/components/me/MyProfileEditPrimitives';
 
 const { width } = Dimensions.get('window');
 // Self-profile hero height. Shorter than a typical portrait dating photo so
@@ -41,77 +44,15 @@ const { width } = Dimensions.get('window');
 // lose the face to a center crop.
 const HERO_HEIGHT = width * 0.9;
 
-const HOBBY_OPTIONS = [
-  'Music', 'Reading', 'Travel', 'Cooking', 'Football', 'Dancing',
-  'Fashion', 'Photography', 'Fitness', 'Movies', 'Nature', 'Art',
-  'Gaming', 'Yoga', 'Swimming', 'Hiking', 'Cycling', 'Gardening',
-  'Meditation', 'Writing', 'Business', 'Theology', 'Volunteering',
-  'Poetry', 'History', 'Technology', 'Languages', 'Entrepreneurship',
-];
-
-// ── Edit modal shell ──────────────────────────────────────────────────────────
-function EditModal({ visible, title, onClose, onSave, saving, children }: {
-  visible: boolean; title: string; onClose: () => void;
-  onSave: () => void; saving?: boolean; children: React.ReactNode;
-}) {
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onClose}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.white }}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={em.header}>
-            <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={COLORS.textStrong} /></TouchableOpacity>
-            <Text style={em.title}>{title}</Text>
-            <TouchableOpacity onPress={onSave} disabled={saving} style={em.saveBtn}>
-              <Text style={em.saveTxt}>{saving ? 'Saving…' : 'Save'}</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-            {children}
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </Modal>
-  );
-}
-
-// ── Field row ─────────────────────────────────────────────────────────────────
-function FieldRow({ icon, label, value, onEdit, readOnly }: {
-  icon: keyof typeof Ionicons.glyphMap; label: string;
-  value: string | null | undefined; onEdit: () => void;
-  readOnly?: boolean;
-}) {
-  const filled = !!value;
-  const inner = (
-    <>
-      <View style={[s.fieldIcon, !filled && !readOnly && s.fieldIconEmpty]}>
-        <Ionicons name={icon} size={15} color={filled || readOnly ? COLORS.textStrong : COLORS.emptyField} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={s.fieldLabel}>{label}</Text>
-        <Text style={[s.fieldValue, !filled && !readOnly && s.fieldValueEmpty]}>
-          {filled ? value : readOnly ? '—' : `Add ${label.toLowerCase()}`}
-        </Text>
-      </View>
-      {readOnly ? (
-        <Ionicons name="lock-closed-outline" size={14} color={COLORS.textMuted} />
-      ) : (
-        <Ionicons name={filled ? 'pencil' : 'add-circle-outline'} size={16} color={filled ? COLORS.textStrong : COLORS.emptyField} />
-      )}
-    </>
-  );
-  if (readOnly) {
-    return <View style={[s.fieldRow, { opacity: 0.92 }]}>{inner}</View>;
-  }
-  return (
-    <TouchableOpacity onPress={onEdit} activeOpacity={0.7} style={s.fieldRow}>
-      {inner}
-    </TouchableOpacity>
-  );
-}
-
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function MyProfileScreen() {
-  const { user, updateProfile, fetchProfile } = useAuthStore();
+  const { user, updateProfile, fetchProfile } = useAuthStore(
+    useShallow((s) => ({
+      user: s.user,
+      updateProfile: s.updateProfile,
+      fetchProfile: s.fetchProfile,
+    })),
+  );
   const scrollRef = useRef<ScrollView>(null);
   const heroPhotoScrollRef = useRef<ScrollView>(null);
   const sectionY = useRef<Record<string, number>>({});
@@ -193,7 +134,7 @@ export default function MyProfileScreen() {
 
   // ── Cultural data loader (mirrors onboarding logic) ────────────────────────
   const loadCultureData = async () => {
-    const livingCountryData = getCountryByName(user.country ?? '');
+    const livingCountryData = resolveCountryFromStored(user.country ?? '');
     const livesInAfrica = livingCountryData ? AFRICAN_COUNTRY_CODES.has(livingCountryData.code) : false;
 
     let countryCode: string | undefined;
@@ -206,7 +147,7 @@ export default function MyProfileScreen() {
       city         = user.city   ?? '';
     } else {
       // Diaspora — try origin country first
-      const originData = getCountryByName((user as any).origin_country ?? '');
+      const originData = resolveCountryFromStored((user as any).origin_country ?? '');
       if (originData && AFRICAN_COUNTRY_CODES.has(originData.code)) {
         countryCode = originData.code;
         subdivision  = (user as any).origin_state ?? '';
@@ -238,7 +179,7 @@ export default function MyProfileScreen() {
     setSaving(true);
     try { await updateProfile(updates); close(); }
     catch (e: any) {
-      appDialog({ title: 'Could not save', message: e?.message ?? 'Please try again.', icon: 'alert-circle-outline' });
+      appDialog({ title: 'Save failed', message: e?.message ?? "Couldn't save changes. Try again.", icon: 'alert-circle-outline' });
     }
     finally { setSaving(false); }
   };
@@ -254,7 +195,7 @@ export default function MyProfileScreen() {
   };
 
   const openLocation = () => {
-    const countryData = getCountryByName(user.country ?? '');
+    const countryData = resolveCountryFromStored(user.country ?? '');
     setEditing('location');
     setEditLocation({
       country: user.country ?? '',
@@ -265,7 +206,7 @@ export default function MyProfileScreen() {
   };
 
   const openOriginLocation = () => {
-    const countryData = getCountryByName(user.origin_country ?? '');
+    const countryData = resolveCountryFromStored(user.origin_country ?? '');
     setEditing('origin_location');
     setEditOriginLocation({
       country: user.origin_country ?? '',
@@ -281,9 +222,9 @@ export default function MyProfileScreen() {
       message: 'Remove this photo from your profile?',
       icon: 'trash-outline',
       actions: [
-        { label: 'Cancel', style: 'cancel' },
+        { label: UI_LABELS.cancel, style: 'cancel' },
         {
-          label: 'Remove',
+          label: UI_LABELS.delete,
           style: 'destructive',
           onPress: async () => {
             const current = user.profile_photos ?? [];
@@ -295,8 +236,8 @@ export default function MyProfileScreen() {
               });
             } catch (e: unknown) {
               appDialog({
-                title: 'Could not remove photo',
-                message: e instanceof Error ? e.message : 'Try again.',
+                title: 'Remove failed',
+                message: e instanceof Error ? e.message : "Couldn't remove the photo. Try again.",
                 icon: 'alert-circle-outline',
               });
             }
@@ -341,14 +282,14 @@ export default function MyProfileScreen() {
         const out = await uploadToAvatarsBucket(user.id, asset.uri, asset.mimeType);
         if (!('error' in out)) uploaded.push(out.publicUrl);
       }
-      if (uploaded.length === 0) throw new Error('Could not upload photos.');
+      if (uploaded.length === 0) throw new Error("Couldn't upload photos. Try again.");
       const updatedPhotos = [...currentPhotos, ...uploaded];
       await updateProfile({
         profile_photos: updatedPhotos,
         avatar_url: currentPhotos.length === 0 ? updatedPhotos[0] : user.avatar_url,
       });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Please try again.';
+      const msg = e instanceof Error ? e.message : "Couldn't upload photos. Try again.";
       appDialog({ title: 'Upload failed', message: msg, icon: 'cloud-offline-outline' });
     } finally {
       setPhotoUploading(false);
@@ -381,15 +322,13 @@ export default function MyProfileScreen() {
   const bodyTypeLabel     = user.body_type      ? PHYSICAL_CONDITION_OPTIONS.find(o => o.value === user.body_type)?.label ?? user.body_type : null;
   const occupationLabel   = user.occupation     ? OCCUPATION_OPTIONS.find(o => o.value === user.occupation)?.label ?? user.occupation  : null;
   const interestedInLabel =
-    user.gender === 'male' || user.gender === 'female'
-      ? INTERESTED_IN_OPTIONS.find((o) => o.value === user.interested_in)?.label ?? null
-      : null;
+    INTERESTED_IN_OPTIONS.find((o) => o.value === user.interested_in)?.label ?? null;
   const locationDisplay    = [user.city, user.state, user.country].filter(Boolean).join(', ');
   const originDisplay      = [user.origin_city, user.origin_state, user.origin_country].filter(Boolean).join(', ');
 
   // Detect if diaspora user has no origin set (needed for ethnicity/language data)
-  const livesInAfrica      = user.country ? AFRICAN_COUNTRY_CODES.has(getCountryByName(user.country)?.code ?? '') : false;
-  const hasAfricanOrigin   = !!user.origin_country && AFRICAN_COUNTRY_CODES.has(getCountryByName(user.origin_country)?.code ?? '');
+  const livesInAfrica      = user.country ? AFRICAN_COUNTRY_CODES.has(resolveCountryFromStored(user.country)?.code ?? '') : false;
+  const hasAfricanOrigin   = !!user.origin_country && AFRICAN_COUNTRY_CODES.has(resolveCountryFromStored(user.origin_country)?.code ?? '');
   const needsOriginForData = !livesInAfrica && !hasAfricanOrigin;
 
   const strength = getProfileStrength(user);
@@ -980,9 +919,7 @@ export default function MyProfileScreen() {
         onSave={() =>
           save({
             gender: editSelect,
-            ...(editSelect === 'male' || editSelect === 'female'
-              ? { interested_in: oppositeInterestedIn(editSelect as Gender) }
-              : {}),
+            interested_in: oppositeInterestedIn(editSelect as Gender),
           })
         }>
         {renderSelectList(GENDER_OPTIONS, editSelect, setEditSelect)}
@@ -1102,16 +1039,6 @@ const s = StyleSheet.create({
   sectionEditBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
   bioText: { flex: 1, fontSize: FONT.md, color: COLORS.textStrong, lineHeight: 23 },
   emptyPrompt: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADIUS.md, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primaryBorder, backgroundColor: COLORS.primarySurface, marginBottom: 8 },
-  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  fieldIcon: { width: 32, height: 32, borderRadius: 9, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
-  fieldIconEmpty: {
-    backgroundColor: COLORS.emptyFieldSurface,
-    borderWidth: 1,
-    borderColor: COLORS.emptyFieldBorder,
-  },
-  fieldLabel: { fontSize: FONT.xs, color: COLORS.textSecondary, fontWeight: FONT.medium, marginBottom: 1 },
-  fieldValue: { fontSize: 14, color: COLORS.textStrong, fontWeight: FONT.semibold },
-  fieldValueEmpty: { color: COLORS.emptyField, fontWeight: FONT.semibold, fontStyle: 'italic' },
   badge: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.xl, backgroundColor: COLORS.savanna, borderWidth: 1, borderColor: COLORS.border },
   badgeText: { fontSize: FONT.sm, color: COLORS.textStrong, fontWeight: FONT.semibold },
   addPhotoTile: { backgroundColor: COLORS.primarySurface, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primaryBorder, alignItems: 'center', justifyContent: 'center' },
@@ -1119,27 +1046,4 @@ const s = StyleSheet.create({
   stripThumbActive:{ borderColor: COLORS.primary },
   stripImg:       { width: '100%', height: '100%' },
   stripCheck:     { position: 'absolute', bottom: 3, right: 3, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-});
-
-const em = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  title: { fontSize: FONT.lg, fontWeight: FONT.bold, color: COLORS.textStrong },
-  saveBtn: { backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: RADIUS.xl },
-  saveTxt: { color: COLORS.white, fontWeight: FONT.bold, fontSize: 14 },
-  input: { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 14, fontSize: FONT.md, color: COLORS.textStrong, backgroundColor: COLORS.white },
-  textArea: { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12, fontSize: FONT.md, color: COLORS.textStrong, backgroundColor: COLORS.white, minHeight: 140, textAlignVertical: 'top' },
-  searchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: COLORS.white, marginBottom: 14 },
-  option: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white },
-  optionOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
-  optionTxt: { fontSize: FONT.md, color: COLORS.textStrong, fontWeight: FONT.medium },
-  optionTxtOn: { color: COLORS.success, fontWeight: FONT.bold },
-  bigChip: { flex: 1, paddingVertical: 16, borderRadius: RADIUS.lg, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white, alignItems: 'center' },
-  bigChipOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
-  bigChipTxt: { fontSize: FONT.md, color: COLORS.textSecondary, fontWeight: FONT.medium },
-  bigChipTxtOn: { color: COLORS.success, fontWeight: FONT.bold },
-  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white },
-  chipOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
-  chipTxt: { fontSize: 14, color: COLORS.textSecondary, fontWeight: FONT.medium },
-  chipTxtOn: { color: COLORS.success, fontWeight: FONT.bold },
-  groupLabel: { fontSize: FONT.sm, fontWeight: FONT.bold, color: COLORS.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
 });

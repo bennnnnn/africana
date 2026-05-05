@@ -1,8 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import {
   View, Text, TouchableOpacity, Dimensions, Platform,
   ActivityIndicator, RefreshControl, Animated, StyleSheet, ScrollView,
+  NativeScrollEvent, NativeSyntheticEvent,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -12,13 +15,14 @@ import { useDiscoverStore } from '@/store/discover.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { UserCard } from '@/components/discover/UserCard';
 import { FilterSheet } from '@/components/discover/FilterSheet';
+import { QuickPreviewModal } from '@/components/discover/QuickPreviewModal';
 import { ScreenTitle } from '@/components/ui/ScreenTitle';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { Image } from 'expo-image';
 import haptics from '@/lib/haptics';
 import { PostOnboardingProfileBanner } from '@/components/profile/PostOnboardingProfileBanner';
 import { COLORS, RADIUS, FONT, RELIGION_OPTIONS } from '@/constants';
-import { FilterOptions } from '@/types';
+import { FilterOptions, User } from '@/types';
 import {
   loadOnboardingSkippedHints,
   clearOnboardingSkippedHints,
@@ -44,13 +48,31 @@ export default function DiscoverScreen() {
     resetFilters,
     subscribeToOnlineStatus,
     unsubscribeFromOnlineStatus,
-  } = useDiscoverStore();
+  } = useDiscoverStore(
+    useShallow((s) => ({
+      users: s.users,
+      isLoading: s.isLoading,
+      hasMore: s.hasMore,
+      filters: s.filters,
+      fetchError: s.fetchError,
+      fetchUsers: s.fetchUsers,
+      fetchLikedUserIds: s.fetchLikedUserIds,
+      clearFetchError: s.clearFetchError,
+      setFilters: s.setFilters,
+      resetFilters: s.resetFilters,
+      subscribeToOnlineStatus: s.subscribeToOnlineStatus,
+      unsubscribeFromOnlineStatus: s.unsubscribeFromOnlineStatus,
+    })),
+  );
   const [showFilters, setShowFilters] = useState(false);
   const [refreshing, setRefreshing]   = useState(false);
   const [postOnboardHints, setPostOnboardHints] = useState<SkippedOnboardingHints | null>(null);
+  const [previewStartIndex, setPreviewStartIndex] = useState(0);
+  const [showPreview, setShowPreview] = useState(false);
 
   // ── Scroll-driven header animations ─────────────────────────────────────────
   const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollValueRef = useRef(0);
 
   // On overscroll (pull down, scrollY goes negative) header gently stretches down — elastic feel
   const headerTranslateY = scrollY.interpolate({
@@ -65,6 +87,13 @@ export default function DiscoverScreen() {
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
+
+  // Manual scroll handler for FlashList (doesn't support Animated.event natively)
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = event.nativeEvent.contentOffset.y;
+    scrollValueRef.current = y;
+    scrollY.setValue(y);
+  }, [scrollY]);
 
   const agePref = useMemo(
     () =>
@@ -185,6 +214,16 @@ export default function DiscoverScreen() {
     [user, fetchUsers, agePref],
   );
 
+  const handleLongPressUser = useCallback((selectedUser: User) => {
+    const idx = users.findIndex((u) => u.id === selectedUser.id);
+    setPreviewStartIndex(idx >= 0 ? idx : 0);
+    setShowPreview(true);
+  }, [users]);
+
+  const handleClosePreview = useCallback(() => {
+    setShowPreview(false);
+  }, []);
+
   // Warm the image cache for the next ~6 cards just out of view. By the time
   // the user scrolls them in, the photo is already decoded and renders with
   // no fade-in. `Image.prefetch` is idempotent so re-calling for already-
@@ -213,151 +252,164 @@ export default function DiscoverScreen() {
   const filterChipsHeight = activeFilterCount > 0 ? 44 : 0;
   const totalHeaderHeight = insets.top + HEADER_HEIGHT + filterChipsHeight;
   const screenWidth = Dimensions.get('window').width;
-  const skeletonCardWidth = (screenWidth - 48) / 2;
-  const skeletonCardHeight = skeletonCardWidth * 1.45;
+  const GRID_PADDING = 16;  // padding on each side of the list
+  const GRID_GUTTER  = 16;  // gap between the two columns
+  const CARD_WIDTH   = Math.floor((screenWidth - GRID_PADDING * 2 - GRID_GUTTER) / 2);
+  const CARD_HEIGHT  = Math.round(CARD_WIDTH * 1.45);
+  // Group users into pairs for manual 2-column rows
+  const rowPairs = useMemo(() => {
+    const pairs: [typeof users[number], typeof users[number] | null][] = [];
+    for (let i = 0; i < users.length; i += 2) {
+      pairs.push([users[i], users[i + 1] ?? null]);
+    }
+    return pairs;
+  }, [users]);
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
 
       {/* ── Full-screen scrollable grid ── */}
-      <Animated.FlatList
-        data={users}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        initialNumToRender={8}
-        maxToRenderPerBatch={6}
-        windowSize={7}
-        updateCellsBatchingPeriod={50}
-        style={{ flex: 1 }}
-        contentContainerStyle={{
-          flexGrow: 1,
-          paddingTop: totalHeaderHeight + 8,
-          paddingHorizontal: 16,
-          paddingBottom: tabBarHeight + 16,
-        }}
-        columnWrapperStyle={{ justifyContent: 'space-between' }}
-        showsVerticalScrollIndicator={false}
-        bounces
-        alwaysBounceVertical
-        overScrollMode="always"
-        decelerationRate="normal"
-        scrollEventThrottle={16}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true },
-        )}
-        removeClippedSubviews={Platform.OS === 'android'}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.3}
-        onViewableItemsChanged={handleViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={COLORS.primary}
-            progressViewOffset={totalHeaderHeight}
-          />
-        }
-        ListHeaderComponent={
-          postOnboardReminders.length > 0 ? (
-            <PostOnboardingProfileBanner
-              reminders={postOnboardReminders}
-              onProfilePress={() => router.push('/(tabs)/me')}
-              onDismiss={async () => {
-                await clearOnboardingSkippedHints();
-                setPostOnboardHints(null);
-              }}
+      <View style={{ flex: 1 }}>
+        <FlashList
+          data={rowPairs}
+          keyExtractor={(_, index) => String(index)}
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingTop: totalHeaderHeight + 8,
+            paddingHorizontal: GRID_PADDING,
+            paddingBottom: tabBarHeight + 16,
+          }}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.3}
+          onViewableItemsChanged={handleViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={COLORS.primary}
+              progressViewOffset={totalHeaderHeight}
             />
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <UserCard
-            user={item}
-            beforeNavigate={beforeProfileNavigate}
-          />
-        )}
-        ListEmptyComponent={
-          isLoading && users.length === 0 ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <SkeletonCard key={i} width={skeletonCardWidth} height={skeletonCardHeight} radius={20} />
-              ))}
-            </View>
-          ) : fetchError ? (
-            <View style={{ alignItems: 'center', paddingTop: 48, paddingHorizontal: 32, gap: 14 }}>
-              <Ionicons name="cloud-offline-outline" size={44} color={COLORS.textMuted} />
-              <Text style={{ fontSize: FONT.lg, fontWeight: FONT.extrabold, color: COLORS.text, textAlign: 'center' }}>
-                Could not load Discover
-              </Text>
-              <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
-                {fetchError}
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  clearFetchError();
-                  if (user) void fetchUsers(user.id, user.interested_in, true, agePref);
+          }
+          ListHeaderComponent={
+            postOnboardReminders.length > 0 ? (
+              <PostOnboardingProfileBanner
+                reminders={postOnboardReminders}
+                onProfilePress={() => router.push('/(tabs)/me')}
+                onDismiss={async () => {
+                  await clearOnboardingSkippedHints();
+                  setPostOnboardHints(null);
                 }}
-                style={{ marginTop: 4, backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.xxl }}
-              >
-                <Text style={{ color: COLORS.white, fontWeight: FONT.bold, fontSize: 14 }}>Try again</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={{ alignItems: 'center', paddingTop: 60, paddingHorizontal: 32, gap: 12 }}>
-              <Text style={{ fontSize: 48 }}>🌍</Text>
-              <Text style={{ fontSize: FONT.xl, fontWeight: FONT.extrabold, color: COLORS.text, textAlign: 'center' }}>
-                No members found
-              </Text>
-              <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
-                Try widening your filters and more Africana members will appear.
-              </Text>
-              {activeFilterCount > 0 && (
-                <TouchableOpacity
-                  onPress={() => {
-                    resetFilters();
-                    if (user) void fetchUsers(user.id, user.interested_in, true, agePref);
-                  }}
-                  style={{ marginTop: 8, backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.xxl }}
-                >
-                  <Text style={{ color: COLORS.white, fontWeight: FONT.bold, fontSize: 14 }}>Clear Filters</Text>
-                </TouchableOpacity>
+              />
+            ) : null
+          }
+          renderItem={({ item: pair }) => (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+              <UserCard
+                user={pair[0]}
+                cardWidth={CARD_WIDTH}
+                cardHeight={CARD_HEIGHT}
+                beforeNavigate={beforeProfileNavigate}
+                onLongPress={handleLongPressUser}
+              />
+              {pair[1] ? (
+                <UserCard
+                  user={pair[1]}
+                  cardWidth={CARD_WIDTH}
+                  cardHeight={CARD_HEIGHT}
+                  beforeNavigate={beforeProfileNavigate}
+                  onLongPress={handleLongPressUser}
+                />
+              ) : (
+                <View style={{ width: CARD_WIDTH }} />
               )}
             </View>
-          )
-        }
-        ListFooterComponent={
-          users.length === 0 ? null : (
-            <View>
-              {fetchError ? (
-                <View style={{ paddingVertical: 16, paddingHorizontal: 16, marginBottom: 8, backgroundColor: COLORS.primarySurface, borderRadius: RADIUS.xl, gap: 10 }}>
-                  <Text style={{ fontSize: 13, color: COLORS.text, textAlign: 'center' }}>{fetchError}</Text>
+          )}
+          ListEmptyComponent={
+            isLoading && users.length === 0 ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <SkeletonCard key={i} width={CARD_WIDTH} height={CARD_HEIGHT} radius={20} />
+                ))}
+              </View>
+            ) : fetchError ? (
+              <View style={{ alignItems: 'center', paddingTop: 48, paddingHorizontal: 32, gap: 14 }}>
+                <Ionicons name="cloud-offline-outline" size={44} color={COLORS.textMuted} />
+                <Text style={{ fontSize: FONT.lg, fontWeight: FONT.extrabold, color: COLORS.text, textAlign: 'center' }}>
+                  Could not load Discover
+                </Text>
+                <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
+                  {fetchError}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    clearFetchError();
+                    if (user) void fetchUsers(user.id, user.interested_in, true, agePref);
+                  }}
+                  style={{ marginTop: 4, backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.xxl }}
+                >
+                  <Text style={{ color: COLORS.white, fontWeight: FONT.bold, fontSize: 14 }}>Try again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={{ alignItems: 'center', paddingTop: 60, paddingHorizontal: 32, gap: 12 }}>
+                <Text style={{ fontSize: 48 }}>🌍</Text>
+                <Text style={{ fontSize: FONT.xl, fontWeight: FONT.extrabold, color: COLORS.text, textAlign: 'center' }}>
+                  No members found
+                </Text>
+                <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
+                  Try widening your filters and more Africana members will appear.
+                </Text>
+                {activeFilterCount > 0 && (
                   <TouchableOpacity
                     onPress={() => {
-                      clearFetchError();
+                      resetFilters();
                       if (user) void fetchUsers(user.id, user.interested_in, true, agePref);
                     }}
-                    style={{ alignSelf: 'center', backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: RADIUS.full }}
+                    style={{ marginTop: 8, backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.xxl }}
                   >
-                    <Text style={{ color: COLORS.white, fontWeight: FONT.bold, fontSize: 13 }}>Retry</Text>
+                    <Text style={{ color: COLORS.white, fontWeight: FONT.bold, fontSize: 14 }}>Clear Filters</Text>
                   </TouchableOpacity>
-                </View>
-              ) : null}
-              {isLoading && hasMore ? (
-                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                  <ActivityIndicator size="small" color={COLORS.primary} />
-                </View>
-              ) : !hasMore ? (
-                <View style={{ paddingVertical: 28, alignItems: 'center', paddingHorizontal: 16 }}>
-                  <Text style={{ fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.textSecondary }}>
-                    All caught up
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          )
-        }
-      />
+                )}
+              </View>
+            )
+          }
+          ListFooterComponent={
+            users.length === 0 ? null : (
+              <View>
+                {fetchError ? (
+                  <View style={{ paddingVertical: 16, paddingHorizontal: 16, marginBottom: 8, backgroundColor: COLORS.primarySurface, borderRadius: RADIUS.xl, gap: 10 }}>
+                    <Text style={{ fontSize: 13, color: COLORS.text, textAlign: 'center' }}>{fetchError}</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        clearFetchError();
+                        if (user) void fetchUsers(user.id, user.interested_in, true, agePref);
+                      }}
+                      style={{ alignSelf: 'center', backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: RADIUS.full }}
+                    >
+                      <Text style={{ color: COLORS.white, fontWeight: FONT.bold, fontSize: 13 }}>Retry</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+                {isLoading && hasMore ? (
+                  <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                  </View>
+                ) : !hasMore ? (
+                  <View style={{ paddingVertical: 28, alignItems: 'center', paddingHorizontal: 16 }}>
+                    <Text style={{ fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.textSecondary }}>
+                      All caught up
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            )
+          }
+        />
+      </View>
 
       {/* ── Fixed header with elastic overscroll + depth shadow ── */}
       <Animated.View
@@ -409,6 +461,13 @@ export default function DiscoverScreen() {
         onClose={() => setShowFilters(false)}
         onApply={handleApplyFilters}
         onReset={handleResetFilters}
+      />
+
+      <QuickPreviewModal
+        visible={showPreview}
+        users={users}
+        startIndex={previewStartIndex}
+        onClose={handleClosePreview}
       />
     </View>
   );

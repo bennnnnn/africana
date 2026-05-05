@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Session } from '@supabase/supabase-js';
-import { User, UserSettings } from '@/types';
+import { User, UserSettings, type Gender } from '@/types';
+import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { supabase } from '@/lib/supabase';
 import { normalizeInterestedInFromDb } from '@/lib/gender-match';
 import { resetRateLimitWarnings } from '@/lib/rate-limit-warn';
@@ -47,7 +48,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   fetchProfile: async (userId) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILE_LIST_SELECT as '*')
       .eq('id', userId)
       .maybeSingle();
 
@@ -57,15 +58,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     const today = new Date();
-    const bday  = data.birthdate ? new Date(data.birthdate) : null;
+    const bday  = data.birthdate
+      ? (() => {
+          const [y, m, d] = (data.birthdate as string).split('-').map(Number);
+          return new Date(y, m - 1, d); // local date — avoids UTC-midnight off-by-one
+        })()
+      : null;
     const age   = bday
       ? today.getFullYear() - bday.getFullYear()
         - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
       : undefined;
 
-    const interested_in = normalizeInterestedInFromDb(data.gender, data.interested_in as string | null | undefined);
-    if (interested_in !== data.interested_in) {
-      void supabase.from('profiles').update({ interested_in }).eq('id', userId);
+    const rawGender = String(data.gender ?? '');
+    const gender: Gender =
+      rawGender === 'male' || rawGender === 'female' ? rawGender : 'female';
+
+    const interested_in = normalizeInterestedInFromDb(gender, data.interested_in as string | null | undefined);
+
+    const profileFix: { gender?: Gender; interested_in?: typeof interested_in } = {};
+    if (gender !== data.gender) profileFix.gender = gender;
+    if (interested_in !== data.interested_in) profileFix.interested_in = interested_in;
+    if (Object.keys(profileFix).length) {
+      void supabase.from('profiles').update(profileFix).eq('id', userId);
     }
 
     // Email is no longer stored on public.profiles (it would leak via the
@@ -76,6 +90,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: {
         ...data,
         email: sessionEmail,
+        gender,
         interested_in,
         age,
         profile_photos: data.profile_photos ?? [],
@@ -175,6 +190,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     const { user } = get();
     if (user) {
+      await supabase
+        .from('user_settings')
+        .update({ push_token: null })
+        .eq('user_id', user.id);
+
       await supabase
         .from('profiles')
         .update({ online_status: 'offline', last_seen: new Date().toISOString() })

@@ -4,12 +4,13 @@ export type ValidationResult = {
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const FIRST_NAME_RE = /^[A-Za-z]+(?:[-'][A-Za-z]+)*$/;
+// Allow Unicode letters (covers accented and non-Latin African names like Ndèye, Ọlúwasẹun, Aimé)
+const FIRST_NAME_RE = /^[\p{L}]+(?:[-'][\p{L}]+)*$/u;
 const LETTER_RE = /[A-Za-z]/;
 const NUMBER_RE = /\d/;
 const HEIGHT_RE = /^\d{2,3}$/;
-const WORD_LIST_RE = /^[A-Za-z]+(?:[ -][A-Za-z]+)*(?:,\s*[A-Za-z]+(?:[ -][A-Za-z]+)*)*$/;
-const TEXT_RE = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
+const WORD_LIST_RE = /^[\p{L}]+(?:[ -][\p{L}]+)*(?:,\s*[\p{L}]+(?:[ -][\p{L}]+)*)*$/u;
+const TEXT_RE = /^[\p{L}]+(?:[ -][\p{L}]+)*$/u;
 
 export function validateEmail(value: string): ValidationResult {
   const normalized = value.trim().toLowerCase();

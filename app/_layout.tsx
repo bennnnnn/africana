@@ -1,6 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus, InteractionManager } from 'react-native';
-import { registerForPushNotifications } from '@/lib/notifications';
+import {
+  registerForPushNotifications,
+  queueWelcomeEmail,
+  resetLifecycleEmailQueue,
+} from '@/lib/notifications';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -23,6 +27,7 @@ import { DialogProvider } from '@/components/ui/DialogProvider';
 import { useFonts, DMSerifDisplay_400Regular } from '@expo-google-fonts/dm-serif-display';
 import { clearProfileSeedCache, hydrateProfileSeedCache } from '@/lib/profile-seed-cache';
 import { initAnalytics, identify, resetAnalytics, track, EVENTS } from '@/lib/analytics';
+import { isUuidString } from '@/lib/utils';
 
 /** Optional: Expo Go may not ship expo-notifications — load after all imports (valid ESM). */
 let Notifications: typeof import('expo-notifications') | null = null;
@@ -63,6 +68,7 @@ export default function RootLayout() {
   const router = useRouter();
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const notifResponseSub = useRef<any>(null);
+  const notifReceivedSub = useRef<any>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [fontsLoaded] = useFonts({ DMSerifDisplay_400Regular });
 
@@ -119,8 +125,11 @@ export default function RootLayout() {
             InteractionManager.runAfterInteractions(() => {
               void setOnlineStatus(uid, 'online').catch(() => {});
               startHeartbeat(uid);
+              queueWelcomeEmail(uid);
               void registerForPushNotifications(uid).then((r) => {
-                if (!r.ok) console.warn('[push] register on bootstrap:', r.reason, r.detail ?? '');
+                if (!r.ok && r.reason !== 'expo_go') {
+                  console.warn('[push] register on bootstrap:', r.reason, r.detail ?? '');
+                }
               });
               identify(uid);
             });
@@ -142,7 +151,24 @@ export default function RootLayout() {
         const data = response.notification.request.content.data as Record<string, string> | undefined;
         if (data?.conversationId) {
           router.push(`/(chat)/${data.conversationId}`);
-        } else if (data?.userId) {
+        } else if (data?.likesSegment && /^(matches|received|viewers|stars)$/.test(data.likesSegment)) {
+          router.push({ pathname: '/(tabs)/likes', params: { tab: data.likesSegment } });
+        } else if (data?.userId && isUuidString(data.userId)) {
+          router.push(`/(profile)/${data.userId}`);
+        }
+      });
+    }
+
+    // Handle pushes that arrive while the app is in the foreground — navigate
+    // to the relevant screen so the user doesn't have to tap the banner.
+    if (Notifications?.addNotificationReceivedListener) {
+      notifReceivedSub.current = Notifications.addNotificationReceivedListener((notification) => {
+        const data = notification.request.content.data as Record<string, string> | undefined;
+        if (data?.conversationId) {
+          router.push(`/(chat)/${data.conversationId}`);
+        } else if (data?.likesSegment && /^(matches|received|viewers|stars)$/.test(data.likesSegment)) {
+          router.push({ pathname: '/(tabs)/likes', params: { tab: data.likesSegment } });
+        } else if (data?.userId && isUuidString(data.userId)) {
           router.push(`/(profile)/${data.userId}`);
         }
       });
@@ -176,8 +202,11 @@ export default function RootLayout() {
         void fetchProfile(uid).catch((e) => console.error('fetchProfile (auth change)', e));
         void fetchSettings(uid).catch((e) => console.error('fetchSettings (auth change)', e));
         InteractionManager.runAfterInteractions(() => {
+          queueWelcomeEmail(uid);
           void registerForPushNotifications(uid).then((r) => {
-            if (!r.ok) console.warn('[push] register on auth change:', r.reason, r.detail ?? '');
+            if (!r.ok && r.reason !== 'expo_go') {
+              console.warn('[push] register on auth change:', r.reason, r.detail ?? '');
+            }
           });
           identify(uid);
         });
@@ -188,6 +217,7 @@ export default function RootLayout() {
       } else if (event === 'SIGNED_OUT') {
         track(EVENTS.AUTH_SIGNOUT);
         resetAnalytics();
+        resetLifecycleEmailQueue();
         stopHeartbeat();
         void clearProfileSeedCache().catch(() => {});
         // Only redirect on explicit sign-out, not on initial load
@@ -209,8 +239,11 @@ export default function RootLayout() {
             setSession(session);
             await fetchProfile(session.user.id);
             await fetchSettings(session.user.id);
+            queueWelcomeEmail(session.user.id);
             void registerForPushNotifications(session.user.id).then((r) => {
-              if (!r.ok) console.warn('[push] register on deep link:', r.reason, r.detail ?? '');
+              if (!r.ok && r.reason !== 'expo_go') {
+                console.warn('[push] register on deep link:', r.reason, r.detail ?? '');
+              }
             });
             const { user } = useAuthStore.getState();
             if (isProfileCompleteForDiscover(user)) {
@@ -239,6 +272,7 @@ export default function RootLayout() {
       linkSub.remove();
       appStateSub.remove();
       notifResponseSub.current?.remove();
+      notifReceivedSub.current?.remove();
       stopHeartbeat();
     };
   }, []);

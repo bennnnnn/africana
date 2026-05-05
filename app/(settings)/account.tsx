@@ -11,6 +11,7 @@ import {
   settingsStyles,
 } from '@/components/settings/settings-shared';
 import { COLORS } from '@/constants';
+import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import { exportAndShareUserData } from '@/lib/data-export';
 
 const appVersion =
@@ -31,7 +32,7 @@ export default function AccountSettingsScreen() {
       const result = await exportAndShareUserData();
       if (result.ok) {
         showToast({
-          message: 'Data export ready — pick a destination',
+          message: UI_TOAST.exportReady,
           icon: 'cloud-download-outline',
         });
         return;
@@ -42,8 +43,8 @@ export default function AccountSettingsScreen() {
       showToast({
         message:
           result.reason === 'unauthenticated'
-            ? 'Signed out. Please sign back in and try again.'
-            : 'Could not export data. Please try again in a moment.',
+            ? UI_TOAST.sessionExpired
+            : UI_TOAST.exportFailed,
         icon: 'alert-circle-outline',
       });
     } finally {
@@ -54,12 +55,12 @@ export default function AccountSettingsScreen() {
   const handleSignOut = useCallback(() => {
     showDialog({
       title: 'Sign out',
-      message: 'Are you sure you want to sign out?',
+      message: 'Sign out of your account?',
       icon: 'log-out-outline',
       actions: [
-        { label: 'Cancel', style: 'cancel' },
+        { label: UI_LABELS.cancel, style: 'cancel' },
         {
-          label: 'Sign out',
+          label: UI_LABELS.signOut,
           style: 'destructive',
           onPress: async () => {
             setBusy(true);
@@ -90,10 +91,9 @@ export default function AccountSettingsScreen() {
             onPress={() =>
               showDialog({
                 title: `Africana v${appVersion}`,
-                message:
-                  'A dating app built for Africans and the African diaspora — connecting hearts across the world.',
+                message: 'Africana connects Africans and the African diaspora around the world.',
                 icon: 'information-circle-outline',
-                actions: [{ label: 'Close', style: 'primary' }],
+                actions: [{ label: UI_LABELS.ok, style: 'primary' }],
               })
             }
           />

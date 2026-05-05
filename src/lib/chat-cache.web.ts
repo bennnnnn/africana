@@ -1,5 +1,23 @@
 import type { Conversation, Message } from '@/types';
 
+// ── LRU-capped in-memory stores ──────────────────────────────────────────────
+// Without a cap these Maps grow for the entire browser-tab lifetime: every
+// conversation the user opens accumulates its full message list in memory and
+// is never evicted.  On low-RAM mobile browsers (PWA) the OS eventually kills
+// the tab.  We keep the 30 most-recently-accessed entries per store and evict
+// the oldest on overflow.
+const MAX_ENTRIES = 30;
+
+function lruSet<V>(map: Map<string, V>, key: string, value: V): void {
+  if (map.has(key)) map.delete(key); // refresh recency
+  map.set(key, value);
+  if (map.size > MAX_ENTRIES) {
+    // Map preserves insertion order; first key is the oldest
+    const oldest = map.keys().next().value;
+    if (oldest !== undefined) map.delete(oldest);
+  }
+}
+
 const conversationSnapshotStore = new Map<string, Conversation[]>();
 const conversationStore = new Map<string, Conversation[]>();
 const messageStore = new Map<string, Message[]>();
@@ -35,8 +53,25 @@ export async function getCachedConversationSnapshot(
 
 export async function replaceCachedConversations(userId: string, conversations: Conversation[]): Promise<void> {
   const next = conversations.map(normalizeConversation);
-  conversationSnapshotStore.set(userId, next);
-  conversationStore.set(userId, next);
+  lruSet(conversationSnapshotStore, userId, next);
+  lruSet(conversationStore, userId, next);
+}
+
+export async function deleteCachedConversation(userId: string, conversationId: string): Promise<void> {
+  // Remove from snapshot store
+  const snapshot = conversationSnapshotStore.get(userId);
+  if (snapshot) {
+    const filtered = snapshot.filter((c) => c.id !== conversationId);
+    lruSet(conversationSnapshotStore, userId, filtered);
+  }
+  // Remove from conversation store
+  const convs = conversationStore.get(userId);
+  if (convs) {
+    const filtered = convs.filter((c) => c.id !== conversationId);
+    lruSet(conversationStore, userId, filtered);
+  }
+  // Remove message cache for this conversation
+  messageStore.delete(conversationId);
 }
 
 export async function getCachedMessages(conversationId: string): Promise<Message[]> {
@@ -44,7 +79,7 @@ export async function getCachedMessages(conversationId: string): Promise<Message
 }
 
 export async function replaceCachedMessages(conversationId: string, messages: Message[]): Promise<void> {
-  messageStore.set(conversationId, messages.map(normalizeMessage));
+  lruSet(messageStore, conversationId, messages.map(normalizeMessage));
 }
 
 export async function clearCachedMessages(conversationId: string): Promise<void> {

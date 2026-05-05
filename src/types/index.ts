@@ -115,6 +115,11 @@ export interface Message {
   edited_at?: string | null;
   reactions?: string[];
   sender?: User;
+  /**
+   * IDs of users who have soft-deleted this message ("delete for me only").
+   * The client filters out messages where the current user's id appears here.
+   */
+  deleted_for?: string[];
   /** Stable list key across optimistic → server id swap (avoids FlatList remount jank). */
   listKey?: string;
 }

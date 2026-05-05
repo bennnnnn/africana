@@ -195,8 +195,22 @@ export async function sendLocalNotification(
 }
 
 // ── Call Edge Function to push-notify another user ───────────────────────────
+export type ActivityNotificationType = 'message' | 'like' | 'match' | 'view' | 'favourite';
+
+export type LifecycleEmailCampaign =
+  | 'welcome'
+  | 'first_message'
+  | 'first_like'
+  | 'away_3d'
+  | 'away_7d'
+  | 'away_14d'
+  | 'away_21d'
+  | 'away_30d';
+
+const queuedLifecycleEmails = new Set<string>();
+
 export async function notifyUser(params: {
-  type: 'message' | 'like' | 'match' | 'view' | 'favourite';
+  type: ActivityNotificationType;
   recipientId: string;
   senderId: string;
   senderName: string;
@@ -213,4 +227,39 @@ export async function notifyUser(params: {
   } catch {
     // Non-critical — best effort
   }
+}
+
+export async function notifyLifecycleEmail(params: {
+  campaign: LifecycleEmailCampaign;
+  recipientId: string;
+  senderName?: string | null;
+  extra?: Record<string, string>;
+}): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    await supabase.functions.invoke('notify', {
+      body: {
+        kind: 'campaign',
+        campaign: params.campaign,
+        recipientId: params.recipientId,
+        senderName: params.senderName ?? null,
+        extra: params.extra,
+      },
+    });
+  } catch {
+    // Non-critical — best effort
+  }
+}
+
+export function queueWelcomeEmail(recipientId: string): void {
+  const key = `welcome:${recipientId}`;
+  if (queuedLifecycleEmails.has(key)) return;
+  queuedLifecycleEmails.add(key);
+  void notifyLifecycleEmail({ campaign: 'welcome', recipientId });
+}
+
+export function resetLifecycleEmailQueue(): void {
+  queuedLifecycleEmails.clear();
 }

@@ -18,12 +18,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { acquireTypingChannel } from '@/lib/typing-channel';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
+import { useShallow } from 'zustand/react/shallow';
 import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ScreenTitle } from '@/components/ui/ScreenTitle';
 import { SkeletonRow } from '@/components/ui/Skeleton';
 import { Conversation } from '@/types';
 import { COLORS, RADIUS, FONT } from '@/constants';
+import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import haptics from '@/lib/haptics';
 import { isUserEffectivelyOnline } from '@/lib/utils';
 import dayjs from 'dayjs';
@@ -136,7 +138,14 @@ export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 56 + insets.bottom;
   const { user } = useAuthStore();
-  const { conversations, isLoading, fetchConversations, deleteConversation } = useChatStore();
+  const { conversations, isLoading, fetchConversations, deleteConversation } = useChatStore(
+    useShallow((s) => ({
+      conversations: s.conversations,
+      isLoading: s.isLoading,
+      fetchConversations: s.fetchConversations,
+      deleteConversation: s.deleteConversation,
+    })),
+  );
   const { showDialog, showToast } = useDialog();
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
@@ -223,7 +232,7 @@ export default function MessagesScreen() {
     try {
       await fetchConversations(user.id);
     } catch {
-      showToast({ icon: 'alert-circle-outline', message: 'Could not refresh. Please try again.' });
+      showToast({ icon: 'alert-circle-outline', message: UI_TOAST.refreshFailed });
     } finally {
       setRefreshing(false);
     }
@@ -255,18 +264,22 @@ export default function MessagesScreen() {
       haptics.tapMedium();
       const otherName = item.other_user?.full_name ?? 'this user';
       showDialog({
-        title: 'Delete conversation',
-        message: `Your entire chat with ${otherName} will be permanently removed. This cannot be undone.`,
+        title: 'Delete chat',
+        message: `Delete your chat with ${otherName}? This can't be undone.`,
         icon: 'trash-outline',
         actions: [
-          { label: 'Cancel', style: 'cancel' },
+          { label: UI_LABELS.cancel, style: 'cancel' },
           {
-            label: 'Delete',
+            label: UI_LABELS.delete,
             style: 'destructive',
             onPress: async () => {
               haptics.tapMedium();
-              await deleteConversation(item.id);
-              showToast({ message: 'Conversation deleted', icon: 'trash-outline' });
+              try {
+                await deleteConversation(item.id);
+                showToast({ message: UI_TOAST.chatDeleted, icon: 'trash-outline' });
+              } catch {
+                showToast({ message: 'Failed to delete chat. Please try again.', icon: 'alert-circle-outline' });
+              }
             },
           },
         ],
@@ -356,9 +369,10 @@ export default function MessagesScreen() {
 }
 
 const keyExtractor = (item: Conversation) => item.id;
+const SEPARATOR_HEIGHT = StyleSheet.hairlineWidth;
 const getItemLayout = (_: ArrayLike<Conversation> | null | undefined, index: number) => ({
   length: ROW_HEIGHT,
-  offset: ROW_HEIGHT * index,
+  offset: (ROW_HEIGHT + SEPARATOR_HEIGHT) * index,
   index,
 });
 const ItemSeparator = () => <View style={s.sep} />;

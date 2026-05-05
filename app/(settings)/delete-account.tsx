@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/store/auth.store';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -26,7 +27,9 @@ function hasGoogleIdentity(identities: { provider?: string }[] | undefined): boo
 }
 
 export default function DeleteAccountScreen() {
-  const { user, session } = useAuthStore();
+  const { user, session } = useAuthStore(
+    useShallow((s) => ({ user: s.user, session: s.session })),
+  );
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
