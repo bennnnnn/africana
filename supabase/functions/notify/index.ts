@@ -11,10 +11,17 @@ import {
   supabaseAdmin,
 } from '../_shared/email-lifecycle.ts';
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+/** Mobile clients do not rely on browser CORS; avoid wildcard origin. */
+const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuidString(value: unknown): value is string {
+  return typeof value === 'string' && UUID_RE.test(value);
+}
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -80,14 +87,38 @@ Deno.serve(async (req) => {
     return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
   }
 
+  let raw: string;
   try {
-    const payload: NotifyPayload = await req.json();
+    raw = await req.text();
+  } catch {
+    return new Response(JSON.stringify({ ok: false, error: 'bad_request' }), {
+      status: 400,
+      headers: CORS_HEADERS,
+    });
+  }
 
-    const callerOrErr = await requireCallerId(req);
-    if (callerOrErr instanceof Response) return callerOrErr;
-    const callerId = callerOrErr;
+  const callerOrErr = await requireCallerId(req);
+  if (callerOrErr instanceof Response) return callerOrErr;
+  const callerId = callerOrErr;
 
+  let payload: NotifyPayload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return new Response(JSON.stringify({ ok: false, error: 'invalid_json' }), {
+      status: 400,
+      headers: CORS_HEADERS,
+    });
+  }
+
+  try {
     if (payload.kind === 'campaign') {
+      if (!isUuidString(payload.recipientId)) {
+        return new Response(JSON.stringify({ ok: false, error: 'invalid_recipient' }), {
+          status: 400,
+          headers: CORS_HEADERS,
+        });
+      }
       if (payload.recipientId !== callerId) {
         return new Response(JSON.stringify({ ok: false, error: 'forbidden' }), {
           status: 403,
@@ -108,6 +139,12 @@ Deno.serve(async (req) => {
     }
 
     const { type, recipientId, senderId, senderName, extra } = payload;
+    if (!isUuidString(recipientId) || !isUuidString(senderId)) {
+      return new Response(JSON.stringify({ ok: false, error: 'invalid_ids' }), {
+        status: 400,
+        headers: CORS_HEADERS,
+      });
+    }
     if (senderId !== callerId) {
       return new Response(JSON.stringify({ ok: false, error: 'sender_mismatch' }), {
         status: 403,
@@ -206,6 +243,10 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ ok: true, results }), { status: 200, headers: CORS_HEADERS });
   } catch (err) {
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: CORS_HEADERS });
+    console.error('[notify]', err);
+    return new Response(JSON.stringify({ ok: false, error: 'internal' }), {
+      status: 500,
+      headers: CORS_HEADERS,
+    });
   }
 });

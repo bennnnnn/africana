@@ -100,13 +100,16 @@ export async function localImageUriToArrayBuffer(uri: string): Promise<ArrayBuff
   return fallback;
 }
 
+type UploadAccess = 'public' | 'private';
+
 async function uploadLocalImageToBucket(
   bucket: string,
   storagePath: string,
   localUri: string,
   upsert: boolean,
-  mimeType?: string | null,
-): Promise<{ publicUrl: string } | { error: string }> {
+  mimeType: string | null | undefined,
+  access: UploadAccess,
+): Promise<{ publicUrl: string } | { storagePath: string } | { error: string }> {
   const { uri: compressedUri, mimeType: compressedMime } = await compressForUpload(localUri);
   const effectiveMime = compressedMime || mimeType || null;
   const contentType = imageContentType(compressedUri, effectiveMime);
@@ -124,8 +127,26 @@ async function uploadLocalImageToBucket(
 
   if (error) return { error: error.message };
 
+  if (access === 'private') {
+    return { storagePath };
+  }
   const { data } = supabase.storage.from(bucket).getPublicUrl(storagePath);
   return { publicUrl: data.publicUrl };
+}
+
+/** Private bucket for verification selfies (RLS: own folder only). */
+export const VERIFICATION_PHOTOS_BUCKET = 'verification-photos';
+
+/** Signed URL for moderation or in-app preview of a private verification object. */
+export async function createSignedVerificationPhotoUrl(
+  storagePath: string,
+  expiresInSeconds = 3600,
+): Promise<{ signedUrl: string } | { error: string }> {
+  const { data, error } = await supabase.storage
+    .from(VERIFICATION_PHOTOS_BUCKET)
+    .createSignedUrl(storagePath, expiresInSeconds);
+  if (error) return { error: error.message };
+  return { signedUrl: data.signedUrl };
 }
 
 export async function uploadToAvatarsBucket(
@@ -135,20 +156,32 @@ export async function uploadToAvatarsBucket(
 ): Promise<{ publicUrl: string } | { error: string }> {
   // Always .jpg — compressForUpload() converts everything to JPEG before upload.
   const path = `${userId}/${Date.now()}.jpg`;
-  return uploadLocalImageToBucket('avatars', path, localUri, false, mimeType);
+  const out = await uploadLocalImageToBucket('avatars', path, localUri, false, mimeType, 'public');
+  if ('error' in out) return out;
+  if (!('publicUrl' in out)) return { error: 'Upload failed.' };
+  return { publicUrl: out.publicUrl };
 }
 
 /**
- * Verification selfie → `avatars` bucket.
- * Uses avatars (no allowed_mime_types restriction) to avoid the mime-type
- * RLS rejection that profile-photos enforces. Path is timestamped so each
- * submission is a new object — no upsert needed.
+ * Verification selfie → private `verification-photos` bucket.
+ * Store the returned `storagePath` in `profiles.verification_photo` (not a public URL).
+ * Legacy rows may still hold a public `avatars` URL until users re-submit.
  */
 export async function uploadVerificationSelfie(
   userId: string,
   localUri: string,
   mimeType?: string | null,
-): Promise<{ publicUrl: string } | { error: string }> {
+): Promise<{ storagePath: string } | { error: string }> {
   const path = `${userId}/verification-${Date.now()}.jpg`;
-  return uploadLocalImageToBucket('avatars', path, localUri, false, mimeType);
+  const out = await uploadLocalImageToBucket(
+    VERIFICATION_PHOTOS_BUCKET,
+    path,
+    localUri,
+    false,
+    mimeType,
+    'private',
+  );
+  if ('error' in out) return out;
+  if (!('storagePath' in out)) return { error: 'Upload failed.' };
+  return { storagePath: out.storagePath };
 }

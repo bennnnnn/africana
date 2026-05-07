@@ -92,11 +92,11 @@ export default function VerifyScreen() {
     try {
       const out = await uploadVerificationSelfie(user.id, selfieUri, selfieMime);
       if ('error' in out) throw new Error(out.error);
-      const publicUrl = out.publicUrl;
+      const storagePath = out.storagePath;
 
       await updateProfile({
         verification_status: 'pending',
-        verification_photo: publicUrl,
+        verification_photo: storagePath,
       });
 
       track(EVENTS.VERIFICATION_COMPLETE);

@@ -343,8 +343,14 @@ export const APP_NAME = 'Africana';
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
-if (__DEV__ && (!SUPABASE_URL || !SUPABASE_ANON_KEY)) {
-  throw new Error('Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY — check your .env file.');
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  const err = new Error(
+    'Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY — check EAS env / .env.',
+  );
+  void import('@/lib/sentry')
+    .then((m) => m.captureException(err, { phase: 'config', supabaseUrlSet: !!SUPABASE_URL }))
+    .catch(() => {});
+  throw err;
 }
 
 export const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?background=EF3E2A&color=fff&size=200&name=';

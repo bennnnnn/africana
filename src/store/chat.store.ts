@@ -457,7 +457,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }));
     enqueueReplaceCachedMessages(conversationId, tailForCache(get().messages[conversationId] ?? []));
 
-    // DB trigger `sync_conversation_last_message` keeps `conversations.last_message*` in sync.
+    // DB trigger `trg_messages_refresh_conversation_preview_*` keeps `conversations.last_message*` in sync.
 
     if (recipientId) {
       void notifyUser({ type: 'message', recipientId, senderId, senderName, extra: { conversationId } });
@@ -575,13 +575,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     await supabase.from('messages').delete().eq('id', messageId);
 
-    if (isLast) {
-      const newLast = updatedMessages.length > 0 ? updatedMessages[updatedMessages.length - 1] : null;
-      await supabase.from('conversations').update({
-        last_message: newLast ? newLast.content : null,
-        last_message_at: newLast ? newLast.created_at : null,
-      }).eq('id', conversationId);
-    }
+    // `refresh_conversation_preview` trigger keeps last_message / last_message_at in sync.
   },
 
   softDeleteMessageForSelf: async (conversationId, messageId) => {
@@ -611,17 +605,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Server-side soft delete. (RPC verifies participant membership.)
     await supabase.rpc('soft_delete_message_for_self', { p_message_id: messageId });
 
-    // If we removed the last message, recompute the conversation preview.
-    if (isLast) {
-      const newLast = updatedMessages.length > 0 ? updatedMessages[updatedMessages.length - 1] : null;
-      await supabase
-        .from('conversations')
-        .update({
-          last_message: newLast ? newLast.content : null,
-          last_message_at: newLast ? newLast.created_at : null,
-        })
-        .eq('id', conversationId);
-    }
+    // Preview text stays server-authoritative; soft-delete does not remove the row.
   },
 
   markMessagesRead: async (conversationId, userId) => {
@@ -653,12 +637,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         logWarn('[chat-cache] markMessagesRead persist failed', e);
       }
     }
-    await supabase
-      .from('messages')
-      .update({ read_at: readAt })
-      .eq('conversation_id', conversationId)
-      .is('read_at', null)
-      .neq('sender_id', userId);
+    const { error: readErr } = await supabase.rpc('mark_conversation_read', {
+      p_conversation_id: conversationId,
+    });
+    if (readErr) {
+      logWarn('[markMessagesRead] mark_conversation_read failed', readErr);
+    }
   },
 
   addMessage: (conversationId, message) => {
