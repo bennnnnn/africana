@@ -12,6 +12,7 @@ import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/store/auth.store';
 import { uploadToAvatarsBucket, publicAvatarsUrlToStoragePath } from '@/lib/storage-image-upload';
 import { supabase } from '@/lib/supabase';
@@ -24,7 +25,9 @@ const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 56) / 3;
 
 export default function PhotosScreen() {
-  const { user, updateProfile } = useAuthStore();
+  const { user, updateProfile } = useAuthStore(
+    useShallow((s) => ({ user: s.user, updateProfile: s.updateProfile })),
+  );
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
 

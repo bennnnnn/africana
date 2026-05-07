@@ -50,7 +50,7 @@ const { width } = Dimensions.get('window');
 
 export default function OnboardingScreen() {
   const params = useLocalSearchParams<{ userId: string; email: string }>();
-  const { hydrateUserFromServer } = useAuthStore();
+  const hydrateUserFromServer = useAuthStore((s) => s.hydrateUserFromServer);
 
   const [step, setStep] = useState(1);
   const progressAnim = useRef(new Animated.Value((1 / TOTAL_STEPS) * 100)).current;

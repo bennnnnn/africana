@@ -100,7 +100,7 @@ const ActivityRow = memo(function ActivityRow({
 });
 
 export default function ActivityScreen() {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

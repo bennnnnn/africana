@@ -123,7 +123,7 @@ const OnlineRow = memo(function OnlineRow({
 
 export default function OnlineScreen() {
   const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const { showToast } = useDialog();
   const getOrCreateConversation = useChatStore((s) => s.getOrCreateConversation);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);

@@ -38,7 +38,7 @@ const SLIDES = [
 ];
 
 export default function WelcomeScreen() {
-  const { hydrateUserFromServer } = useAuthStore();
+  const hydrateUserFromServer = useAuthStore((s) => s.hydrateUserFromServer);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const flatListRef = useRef<FlatList>(null);

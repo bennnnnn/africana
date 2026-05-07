@@ -1,11 +1,18 @@
 import { View, ActivityIndicator } from 'react-native';
 import { Redirect } from 'expo-router';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/store/auth.store';
 import { COLORS } from '@/constants';
 import { postAuthHref } from '@/lib/profile-completion';
 
 export default function Index() {
-  const { session, user, isInitialized } = useAuthStore();
+  const { session, user, isInitialized } = useAuthStore(
+    useShallow((s) => ({
+      session: s.session,
+      user: s.user,
+      isInitialized: s.isInitialized,
+    })),
+  );
 
   // Wait for the initial getSession() + profile fetch to resolve before routing.
   // Without this, the Zustand store starts with session=null on every

@@ -23,7 +23,7 @@ import { redirectAfterAuth } from '@/lib/profile-completion';
 import { appDialog } from '@/lib/app-dialog';
 
 export default function LoginScreen() {
-  const { hydrateUserFromServer } = useAuthStore();
+  const hydrateUserFromServer = useAuthStore((s) => s.hydrateUserFromServer);
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');

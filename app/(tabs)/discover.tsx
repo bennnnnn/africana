@@ -40,7 +40,7 @@ const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 56 + insets.bottom;
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const {
     users,
     isLoading,
@@ -300,7 +300,7 @@ export default function DiscoverScreen() {
       <View style={s.flex}>
         <AnimatedFlashList
           data={rowPairs}
-          keyExtractor={(_, index) => String(index)}
+          keyExtractor={(pair) => `${pair[0].id}-${pair[1]?.id ?? 'none'}`}
           style={s.flex}
           contentContainerStyle={{
             paddingTop: listPaddingTopAnim,

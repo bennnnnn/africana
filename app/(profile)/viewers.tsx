@@ -129,7 +129,7 @@ function timeAgo(iso: string): string {
 
 export default function ViewersScreen() {
   const { colors } = useTheme();
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const [viewers, setViewers] = useState<ViewerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

@@ -71,7 +71,13 @@ function TabIcon({
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { session, user, isInitialized } = useAuthStore();
+  const { session, user, isInitialized } = useAuthStore(
+    useShallow((s) => ({
+      session: s.session,
+      user: s.user,
+      isInitialized: s.isInitialized,
+    })),
+  );
   const { conversations } = useChatStore(
     useShallow((s) => ({
       conversations: s.conversations,

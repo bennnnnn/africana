@@ -3,6 +3,7 @@ import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useShallow } from 'zustand/react/shallow';
 // Native keyboard inset provider. This is the only reliable way to handle
 // keyboard insets on Android edge-to-edge across OEMs (Samsung, MIUI,
 // ColorOS, etc.) — it reads insets from `WindowInsetsCompat` natively
@@ -16,7 +17,13 @@ import { useFonts, DMSerifDisplay_400Regular } from '@expo-google-fonts/dm-serif
 import { useRootLayoutBootstrap } from '@/hooks/use-root-layout-bootstrap';
 
 export default function RootLayout() {
-  const { setSession, hydrateUserFromServer, setInitialized } = useAuthStore();
+  const { setSession, hydrateUserFromServer, setInitialized } = useAuthStore(
+    useShallow((s) => ({
+      setSession: s.setSession,
+      hydrateUserFromServer: s.hydrateUserFromServer,
+      setInitialized: s.setInitialized,
+    })),
+  );
   const router = useRouter();
   const [fontsLoaded] = useFonts({ DMSerifDisplay_400Regular });
   useRootLayoutBootstrap({

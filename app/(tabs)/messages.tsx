@@ -145,7 +145,7 @@ const ConversationRow = memo(function ConversationRow({
 export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 56 + insets.bottom;
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const { conversations, isLoading, fetchConversations, deleteConversation } = useChatStore(
     useShallow((s) => ({
       conversations: s.conversations,

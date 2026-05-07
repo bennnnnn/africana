@@ -20,7 +20,7 @@ const appVersion =
   '1.0.0';
 
 export default function AccountSettingsScreen() {
-  const { signOut } = useAuthStore();
+  const signOut = useAuthStore((s) => s.signOut);
   const { showDialog, showToast } = useDialog();
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);

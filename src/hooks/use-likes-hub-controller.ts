@@ -47,7 +47,7 @@ export function useLikesHubController(): LikesHubContextValue {
   const pathSeg = Array.isArray(tabParam) ? tabParam[0] : tabParam;
   const activeTab = likesTabFromPathSegment(typeof pathSeg === 'string' ? pathSeg : undefined);
 
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const { showToast } = useDialog();
   const getOrCreateConversation = useChatStore((state) => state.getOrCreateConversation);
 

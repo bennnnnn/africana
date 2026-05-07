@@ -191,7 +191,7 @@ interface QuickPreviewModalProps {
 export function QuickPreviewModal({ visible, users, startIndex, onClose }: QuickPreviewModalProps) {
   const insets = useSafeAreaInsets();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
-  const { user: currentUser } = useAuthStore();
+  const currentUser = useAuthStore((s) => s.user);
   const { likedUserIds, toggleLike } = useDiscoverStore(
     useShallow((s) => ({ likedUserIds: s.likedUserIds, toggleLike: s.toggleLike })),
   );

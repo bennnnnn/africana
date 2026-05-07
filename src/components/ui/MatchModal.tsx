@@ -28,7 +28,7 @@ interface MatchModalProps {
 }
 
 export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const { showToast } = useDialog();
   const getOrCreateConversation = useChatStore((s) => s.getOrCreateConversation);
 
