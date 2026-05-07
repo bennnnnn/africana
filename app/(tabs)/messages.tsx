@@ -27,11 +27,12 @@ import { Conversation } from '@/types';
 import { COLORS, RADIUS, FONT } from '@/constants';
 import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import haptics from '@/lib/haptics';
-import { isUserEffectivelyOnline } from '@/lib/utils';
+import { getEffectivePresence } from '@/lib/utils';
+import { TIMINGS } from '@/lib/timings';
 import dayjs from 'dayjs';
 
 const ROW_HEIGHT = 76;
-const TYPING_TTL_MS = 3500;
+const TYPING_TTL_MS = TIMINGS.typingTtlMs;
 /** Cap how many conversations we open realtime channels on for typing. */
 const MAX_TYPING_SUBSCRIPTIONS = 30;
 
@@ -91,11 +92,11 @@ const ConversationRow = memo(function ConversationRow({
         uri={other?.avatar_url}
         name={other?.full_name ?? '?'}
         size={52}
-        onlineStatus={
-          isUserEffectivelyOnline(other?.online_status, other?.last_seen)
-            ? 'online'
-            : 'offline'
-        }
+        onlineStatus={getEffectivePresence({
+          online_visible: other?.online_visible,
+          online_status: other?.online_status,
+          last_seen: other?.last_seen ?? '',
+        })}
         showStatus
       />
 

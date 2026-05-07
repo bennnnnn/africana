@@ -4,6 +4,7 @@
 import {
   type ActivityNotifyType,
   type LifecycleCampaign,
+  escapeHtml,
   getRecipientContext,
   sendEmail,
   sendLifecycleCampaignEmail,
@@ -52,6 +53,25 @@ const EMAIL_SUBJECTS: Record<ActivityNotifyType, (name: string) => string> = {
   favourite: (name) => `⭐ ${name} starred your Africana profile`,
 };
 
+async function requireCallerId(req: Request): Promise<string | Response> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ ok: false, error: 'missing_authorization' }), {
+      status: 401,
+      headers: CORS_HEADERS,
+    });
+  }
+  const jwt = authHeader.slice('Bearer '.length).trim();
+  const { data, error } = await supabaseAdmin.auth.getUser(jwt);
+  if (error || !data?.user?.id) {
+    return new Response(JSON.stringify({ ok: false, error: 'invalid_token' }), {
+      status: 401,
+      headers: CORS_HEADERS,
+    });
+  }
+  return data.user.id;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS });
@@ -62,7 +82,18 @@ Deno.serve(async (req) => {
 
   try {
     const payload: NotifyPayload = await req.json();
+
+    const callerOrErr = await requireCallerId(req);
+    if (callerOrErr instanceof Response) return callerOrErr;
+    const callerId = callerOrErr;
+
     if (payload.kind === 'campaign') {
+      if (payload.recipientId !== callerId) {
+        return new Response(JSON.stringify({ ok: false, error: 'forbidden' }), {
+          status: 403,
+          headers: CORS_HEADERS,
+        });
+      }
       const result = await sendLifecycleCampaignEmail({
         campaign: payload.campaign,
         recipientId: payload.recipientId,
@@ -77,6 +108,12 @@ Deno.serve(async (req) => {
     }
 
     const { type, recipientId, senderId, senderName, extra } = payload;
+    if (senderId !== callerId) {
+      return new Response(JSON.stringify({ ok: false, error: 'sender_mismatch' }), {
+        status: 403,
+        headers: CORS_HEADERS,
+      });
+    }
 
     // Block check — never push/email a user about someone they (or the sender) has blocked.
     const { data: blockRow } = await supabaseAdmin
@@ -146,11 +183,13 @@ Deno.serve(async (req) => {
     if (emailEnabled && (type === 'like' || type === 'match' || type === 'favourite') && recipient.email) {
       const subject = EMAIL_SUBJECTS[type](senderName);
       const recipientName = recipient.fullName ?? 'there';
+      const safeRecipient = escapeHtml(recipientName);
+      const safeBody = escapeHtml(template.body);
       const html = `
         <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
           <h1 style="color:#C84B31;font-size:24px;margin-bottom:8px">Africana 🌍</h1>
-          <p style="font-size:16px;color:#1A1A1A">Hi ${recipientName},</p>
-          <p style="font-size:16px;color:#1A1A1A">${template.body}.</p>
+          <p style="font-size:16px;color:#1A1A1A">Hi ${safeRecipient},</p>
+          <p style="font-size:16px;color:#1A1A1A">${safeBody}.</p>
           <p style="font-size:14px;color:#6B7280;margin-top:24px">
             Open the Africana app to respond. If you'd like to stop receiving these emails,
             you can turn them off in Settings → Notifications.

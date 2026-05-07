@@ -20,6 +20,8 @@ import { Button } from '@/components/ui/Button';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { appDialog } from '@/lib/app-dialog';
 import { UI_LABELS } from '@/constants/copy';
+import { unblockUser } from '@/lib/social-actions';
+import { track, EVENTS } from '@/lib/analytics';
 
 interface BlockedUser extends User {
   block_id: string;
@@ -149,16 +151,18 @@ export default function BlockedUsersScreen() {
           label: 'Unblock',
           style: 'primary',
           onPress: async () => {
-            const { error } = await supabase.from('blocks').delete().eq('id', blockId);
-            if (error) {
+            try {
+              await unblockUser(blockId);
+              track(EVENTS.BLOCK_REMOVED);
+              setBlockedUsers((prev) => prev.filter((u) => u.block_id !== blockId));
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : "Couldn't unblock this user. Try again.";
               appDialog({
                 title: 'Unblock failed',
-                message: error.message || "Couldn't unblock this user. Try again.",
+                message: msg,
                 icon: 'alert-circle-outline',
               });
-              return;
             }
-            setBlockedUsers((prev) => prev.filter((u) => u.block_id !== blockId));
           },
         },
       ],

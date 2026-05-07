@@ -3,14 +3,17 @@ import type { PostgrestFilterBuilder } from '@supabase/postgrest-js';
 import { User, FilterOptions, InterestedIn } from '@/types';
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/auth.store';
 import { notifyLifecycleEmail, notifyUser } from '@/lib/notifications';
 import { appDialog } from '@/lib/app-dialog';
 import { maybeWarnLikeQuota } from '@/lib/rate-limit-warn';
 import { track, EVENTS } from '@/lib/analytics';
 import { isBlockedRelationship } from '@/lib/social-actions';
 import { likesPathSegmentForNotifyType } from '@/constants/likes-routes';
+import { classifyLikesInsertError } from '@/lib/map-likes-insert-error';
 import { UI_TOAST } from '@/constants/copy';
-import { getOnlineFreshnessCutoffISO, isUserEffectivelyOnline } from '@/lib/utils';
+import { getOnlineFreshnessCutoffISO, getEffectivePresence } from '@/lib/utils';
+import { fetchSymmetricBlockedPeerIds } from '@/lib/block-queries';
 /** Map discover preference to profile gender filter (undefined → no filter). */
 const interestedInToGender = (v: InterestedIn | undefined): string | null => {
   if (v === 'men') return 'male';
@@ -63,6 +66,13 @@ function applyDiscoverSheetFilters(
 
 interface AgePref { min: number; max: number }
 
+export type DiscoverFetchUsersParams = {
+  userId: string;
+  interestedIn?: InterestedIn;
+  reset?: boolean;
+  agePref?: AgePref;
+};
+
 interface DiscoverState {
   users: User[];
   isLoading: boolean;
@@ -75,7 +85,7 @@ interface DiscoverState {
   setFilters: (filters: Partial<FilterOptions>) => void;
   resetFilters: () => void;
   clearFetchError: () => void;
-  fetchUsers: (userId: string, interestedIn?: InterestedIn, reset?: boolean, agePref?: AgePref) => Promise<void>;
+  fetchUsers: (params: DiscoverFetchUsersParams) => Promise<void>;
   toggleLike: (fromUserId: string, toUserId: string) => Promise<boolean>;
   fetchLikedUserIds: (userId: string) => Promise<void>;
   subscribeToOnlineStatus: () => void;
@@ -130,7 +140,8 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
 
   clearFetchError: () => set({ fetchError: null }),
 
-  fetchUsers: async (userId, interestedIn, reset = false, agePref) => {
+  fetchUsers: async (params) => {
+    const { userId, interestedIn, reset = false, agePref } = params;
     const { filters, page, isLoading } = get();
     if (isLoading) return;
 
@@ -145,19 +156,14 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       let likedIds: Set<string>;
 
       if (reset || _cachedForUserId !== userId) {
-        const [blocksRes, likedRes] = await Promise.all([
-          supabase
-            .from('blocks')
-            .select('blocked_id, blocker_id')
-            .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`),
+        const [blockedIdsRes, likedRes] = await Promise.all([
+          fetchSymmetricBlockedPeerIds(userId),
           supabase
             .from('likes')
             .select('to_user_id')
             .eq('from_user_id', userId),
         ]);
-        blockedIds = (blocksRes.data ?? []).map((b) =>
-          b.blocker_id === userId ? b.blocked_id : b.blocker_id
-        );
+        blockedIds = blockedIdsRes;
         likedIds = new Set<string>((likedRes.data ?? []).map((l) => l.to_user_id));
         _cachedBlockedIds = blockedIds;
         _cachedLikedIds = likedIds;
@@ -233,15 +239,11 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           // Effective status pairs the column with a fresh `last_seen` so a
           // crashed/force-quit account doesn't sit at the top of the grid
           // claiming to be online for hours.
-          const effectiveOnlineStatus =
-            u.online_visible === false
-              ? 'offline'
-              : isUserEffectivelyOnline(
-                  u.online_status as User['online_status'],
-                  String(u.last_seen ?? ''),
-                )
-                ? 'online'
-                : 'offline';
+          const effectiveOnlineStatus = getEffectivePresence({
+            online_visible: u.online_visible as boolean | null | undefined,
+            online_status: u.online_status as string | null,
+            last_seen: String(u.last_seen ?? ''),
+          });
           return {
             ...(u as unknown as User),
             age,
@@ -337,9 +339,11 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
               // Re-apply the freshness check on every update so a heartbeat
               // that arrives moments before the peer goes offline doesn't
               // leave them stuck "online" in the local cache.
-              const effective = isUserEffectivelyOnline(rawStatus, nextLastSeen)
-                ? 'online'
-                : 'offline';
+              const effective = getEffectivePresence({
+                online_visible: u.online_visible,
+                online_status: rawStatus,
+                last_seen: nextLastSeen ?? '',
+              });
               return { ...u, online_status: effective as any, last_seen: nextLastSeen };
             }),
           }));
@@ -385,8 +389,8 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       .from('likes')
       .insert({ from_user_id: fromUserId, to_user_id: toUserId });
     if (insertError) {
-      const blob = `${insertError.message ?? ''} ${insertError.details ?? ''} ${insertError.hint ?? ''}`.toLowerCase();
-      if (blob.includes('interaction blocked between participants')) {
+      const kind = classifyLikesInsertError(insertError);
+      if (kind === 'interaction_blocked') {
         appDialog({
           title: 'Can\u2019t send like',
           message: UI_TOAST.interactionBlocked,
@@ -394,14 +398,14 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         });
         return false;
       }
-      if (blob.includes('rate_limit:likes:hour')) {
+      if (kind === 'rate_hour') {
         track(EVENTS.RATE_LIMIT_HIT, { topic: 'likes', window: 'hour' });
         appDialog({
           title: 'Slow down',
           message: 'You\u2019re liking too fast. Take a breather and try again in a bit.',
           icon: 'time-outline',
         });
-      } else if (blob.includes('rate_limit:likes:day')) {
+      } else if (kind === 'rate_day') {
         track(EVENTS.RATE_LIMIT_HIT, { topic: 'likes', window: 'day' });
         appDialog({
           title: 'Daily like limit reached',
@@ -424,9 +428,11 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     });
     _cachedLikedIds.add(toUserId);
 
-    const { data: senderProfile } = await supabase
-      .from('profiles').select('full_name').eq('id', fromUserId).single();
-    const senderName = senderProfile?.full_name ?? 'Someone';
+    const senderName =
+      useAuthStore.getState().user?.id === fromUserId
+        ? (useAuthStore.getState().user?.full_name ?? 'Someone')
+        : ((await supabase.from('profiles').select('full_name').eq('id', fromUserId).maybeSingle()).data
+            ?.full_name ?? 'Someone');
     void notifyLifecycleEmail({
       campaign: 'first_like',
       recipientId: toUserId,
@@ -466,3 +472,25 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     return isMatch;
   },
 }));
+
+/** Tear down discover realtime + module caches on logout (avoids cross-user leakage). */
+export function resetDiscoverModuleState(): void {
+  if (_realtimeChannel) {
+    void supabase.removeChannel(_realtimeChannel);
+    _realtimeChannel = null;
+  }
+  _subscribed = false;
+  _cachedBlockedIds = [];
+  _cachedLikedIds = new Set();
+  _cachedForUserId = null;
+  fetchLikedUserIdsPending.clear();
+  useDiscoverStore.setState({
+    users: [],
+    isLoading: false,
+    hasMore: true,
+    page: 0,
+    filters: DEFAULT_FILTERS,
+    likedUserIds: new Set(),
+    fetchError: null,
+  });
+}

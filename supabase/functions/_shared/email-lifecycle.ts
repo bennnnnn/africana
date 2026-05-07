@@ -38,7 +38,10 @@ export type RecipientContext = {
 
 type LifecycleEmailResult =
   | { ok: true; reason: 'sent' }
-  | { ok: false; reason: 'missing_email' | 'already_sent' | 'delivery_unavailable' };
+  | {
+      ok: false;
+      reason: 'missing_email' | 'already_sent' | 'delivery_unavailable' | 'email_opt_out';
+    };
 
 export const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -47,7 +50,8 @@ export const supabaseAdmin = createClient(
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
 
-function escapeHtml(value: string): string {
+/** Shared by Edge Functions that build HTML (activity emails, etc.). */
+export function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -247,6 +251,11 @@ export async function sendLifecycleCampaignEmail(params: {
   const recipient = await getRecipientContext(params.recipientId);
   if (!recipient.email) {
     return { ok: false, reason: 'missing_email' };
+  }
+
+  const isAwayCampaign = AWAY_CAMPAIGNS.some((c) => c.campaign === params.campaign);
+  if (isAwayCampaign && recipient.settings?.email_notifications !== true) {
+    return { ok: false, reason: 'email_opt_out' };
   }
 
   const claimed = await claimLifecycleCampaignEvent({

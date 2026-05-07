@@ -118,3 +118,4 @@ export const chatScreenStyles = StyleSheet.create({
     ...SHADOWS.lg,
   },
 });
+

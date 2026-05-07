@@ -2,7 +2,7 @@
 --
 -- This migration locks down six things that App Store dating-app review and
 -- GDPR/PIPEDA expect to see BEFORE v1 goes live:
---   1. `blocks` table exists with RLS (was only in src/lib/supabase-schema.sql).
+--   1. `blocks` table exists with RLS.
 --   2. `reports` table exists with RLS + an auto-shadowban when 3+ distinct
 --      users report the same profile.
 --   3. Server-side 18+ age gate (CHECK constraint on profiles.birthdate).

@@ -1,8 +1,10 @@
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import { supabase } from '@/lib/supabase';
 import { acquireTypingChannel } from '@/lib/typing-channel';
+import { TIMINGS } from '@/lib/timings';
 import type { Message } from '@/types';
 import type { ReactionEmoji, ReactionsMap } from '@/constants/chat-reactions';
+import { getChatStoreState } from '@/store/chat.store';
 
 export type ChatTypingChannelRef = MutableRefObject<ReturnType<typeof supabase.channel> | null>;
 
@@ -17,10 +19,6 @@ export function useChatRealtime(params: {
   messagesIdSetRef: MutableRefObject<Set<string>>;
   peerTypingTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   typingChannelRef: ChatTypingChannelRef;
-  addMessage: (conversationId: string, message: Message) => void;
-  applyMessageUpdate: (conversationId: string, message: Message) => void;
-  removeMessage: (conversationId: string, messageId: string) => void;
-  markMessagesRead: (conversationId: string, userId: string) => Promise<void>;
   setPeerTyping: (value: boolean) => void;
   setReactions: Dispatch<SetStateAction<ReactionsMap>>;
 }): void {
@@ -30,10 +28,6 @@ export function useChatRealtime(params: {
     messagesIdSetRef,
     peerTypingTimerRef,
     typingChannelRef,
-    addMessage,
-    applyMessageUpdate,
-    removeMessage,
-    markMessagesRead,
     setPeerTyping,
     setReactions,
   } = params;
@@ -58,8 +52,8 @@ export function useChatRealtime(params: {
           if (newMsg.sender_id !== userId) {
             if (peerTypingTimerRef.current) clearTimeout(peerTypingTimerRef.current);
             setPeerTyping(false);
-            addMessage(conversationId, newMsg);
-            markMessagesRead(conversationId, userId);
+            getChatStoreState().addMessage(conversationId, newMsg);
+            void getChatStoreState().markMessagesRead(conversationId, userId);
           }
         },
       )
@@ -73,7 +67,7 @@ export function useChatRealtime(params: {
         },
         (payload) => {
           const updated = payload.new as Message;
-          applyMessageUpdate(conversationId, updated);
+          getChatStoreState().applyMessageUpdate(conversationId, updated);
         },
       )
       .on(
@@ -86,7 +80,7 @@ export function useChatRealtime(params: {
         },
         (payload) => {
           const deleted = payload.old as { id?: string } | undefined;
-          if (deleted?.id) removeMessage(conversationId, deleted.id);
+          if (deleted?.id) getChatStoreState().removeMessage(conversationId, deleted.id);
         },
       )
       .subscribe();
@@ -127,7 +121,7 @@ export function useChatRealtime(params: {
         if (!typingUserId || typingUserId === userId) return;
         setPeerTyping(true);
         if (peerTypingTimerRef.current) clearTimeout(peerTypingTimerRef.current);
-        peerTypingTimerRef.current = setTimeout(() => setPeerTyping(false), 3000);
+        peerTypingTimerRef.current = setTimeout(() => setPeerTyping(false), TIMINGS.typingTtlMs);
       },
     );
     typingChannelRef.current = typingChannel;
@@ -166,10 +160,6 @@ export function useChatRealtime(params: {
   }, [
     conversationId,
     userId,
-    addMessage,
-    applyMessageUpdate,
-    removeMessage,
-    markMessagesRead,
     messagesIdSetRef,
     peerTypingTimerRef,
     setPeerTyping,

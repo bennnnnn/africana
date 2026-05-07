@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
+import { TIMINGS } from '@/lib/timings';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -165,7 +166,7 @@ export default function ActivityScreen() {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const scheduleReload = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => void load(), 1500);
+      debounceTimer = setTimeout(() => void load(), TIMINGS.activityFeedReloadDebounceMs);
     };
 
     const channel = supabase

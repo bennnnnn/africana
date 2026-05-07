@@ -1,5 +1,5 @@
-import React, { useCallback } from 'react';
-import { Text, ScrollView, View } from 'react-native';
+import React, { useCallback, useEffect } from 'react';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/store/auth.store';
@@ -10,7 +10,6 @@ import {
   settingsStyles,
   SettingsSectionHeader,
 } from '@/components/settings/settings-shared';
-import { PushDiagnosticBanner } from '@/components/settings/PushDiagnosticBanner';
 import { registerForPushNotifications } from '@/lib/notifications';
 import { COLORS } from '@/constants';
 import type { UserSettings } from '@/types';
@@ -41,14 +40,21 @@ export default function NotificationsSettingsScreen() {
       if (v && user?.id) void registerForPushNotifications(user.id);
     };
 
+  // Keep device token + Android channels fresh when user opens this screen
+  // (replaces the removed diagnostic "Test push" path for permission/token recovery).
+  useEffect(() => {
+    if (!user?.id) return;
+    void registerForPushNotifications(user.id).then((r) => {
+      if (!r.ok && r.reason !== 'expo_go') {
+        console.warn('[push] register on notifications screen:', r.reason, r.detail ?? '');
+      }
+    });
+  }, [user?.id]);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
       <SettingsHeaderBar title="Notifications" titleAlign="leading" />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={settingsStyles.scrollContent}>
-        <Text style={settingsStyles.screenIntro}>
-          Choose what you want to hear about. Welcome, first message, first like, and away emails still send even if email updates are off.
-        </Text>
-
         <SettingsSectionHeader label="What to notify" first />
         <View style={settingsStyles.sectionBlock}>
           <SettingRow
@@ -93,9 +99,6 @@ export default function NotificationsSettingsScreen() {
             isLast
           />
         </View>
-
-        <SettingsSectionHeader label="Push delivery" />
-        <PushDiagnosticBanner userId={user?.id} />
       </ScrollView>
     </SafeAreaView>
   );

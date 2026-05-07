@@ -1,5 +1,5 @@
 import { File } from 'expo-file-system';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '@/lib/supabase';
 
@@ -35,6 +35,22 @@ export function imageContentType(uri: string, mimeType?: string | null): string 
   if (u.endsWith('.webp')) return 'image/webp';
   if (u.endsWith('.heic') || u.endsWith('.heif')) return 'image/heic';
   return 'image/jpeg';
+}
+
+/**
+ * Parses a public avatars URL into `bucketPath` for `storage.from('avatars').remove([path])`.
+ * Returns null if the URL is not from this project's public avatars path.
+ */
+export function publicAvatarsUrlToStoragePath(publicUrl: string): string | null {
+  const marker = '/object/public/avatars/';
+  const i = publicUrl.indexOf(marker);
+  if (i === -1) return null;
+  const path = publicUrl.slice(i + marker.length).split('?')[0];
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
 }
 
 export function imageExtensionForContentType(contentType: string): string {

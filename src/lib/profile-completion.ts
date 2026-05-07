@@ -1,3 +1,4 @@
+import type { Href } from 'expo-router';
 import type { User } from '@/types';
 import { isInterestedInProvided } from '@/lib/gender-match';
 
@@ -49,4 +50,23 @@ export function onboardingHrefFromSession(session: { user: { id: string; email?:
     pathname: '/(auth)/onboarding' as const,
     params: { userId: session.user.id, email: session.user.email ?? '' },
   };
+}
+
+/** Where to send a signed-in user: main app vs onboarding (single decision point). */
+export function postAuthHref(
+  user: User | null | undefined,
+  session: { user: { id: string; email?: string | null } },
+): Href {
+  if (isProfileCompleteForDiscover(user)) {
+    return '/(tabs)/discover';
+  }
+  return onboardingHrefFromSession(session);
+}
+
+export function redirectAfterAuth(
+  router: { replace: (href: Href) => void },
+  user: User | null | undefined,
+  session: { user: { id: string; email?: string | null } },
+) {
+  router.replace(postAuthHref(user, session));
 }

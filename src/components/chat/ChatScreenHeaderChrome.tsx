@@ -7,7 +7,7 @@ import type { User } from '@/types';
 import { COLORS } from '@/constants';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { formatLastSeen } from '@/lib/utils';
-import { chatScreenStyles as s } from '@/components/chat/chat-screen-styles';
+import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
 
 type SelectionProps = {
   mode: 'selection';

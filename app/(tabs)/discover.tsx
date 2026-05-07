@@ -16,7 +16,6 @@ import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { UserCard } from '@/components/discover/UserCard';
 import { FilterSheet } from '@/components/discover/FilterSheet';
 import { QuickPreviewModal } from '@/components/discover/QuickPreviewModal';
-import { ScreenTitle } from '@/components/ui/ScreenTitle';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { Image } from 'expo-image';
 import haptics from '@/lib/haptics';
@@ -29,7 +28,13 @@ import {
   type SkippedOnboardingHints,
 } from '@/lib/post-onboarding-nudges';
 
-const HEADER_HEIGHT = 64; // height of the header content row (excludes status bar)
+/** Discover title row — expanded vs compact (excludes status bar + filter chips). */
+const HEADER_EXPANDED = 64;
+const HEADER_COMPACT = 48;
+/** Scroll distance (px) over which the header eases from expanded → compact. */
+const COLLAPSE_SCROLL_RANGE = 56;
+
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
 
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
@@ -105,7 +110,7 @@ export default function DiscoverScreen() {
 
   useEffect(() => {
     if (!user) return;
-    fetchUsers(user.id, user.interested_in, true, agePref);
+    fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
     subscribeToOnlineStatus();
     return () => {
       unsubscribeFromOnlineStatus();
@@ -157,14 +162,14 @@ export default function DiscoverScreen() {
     if (!user) return;
     setRefreshing(true);
     try {
-      await fetchUsers(user.id, user.interested_in, true, agePref);
+      await fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
     } finally {
       setRefreshing(false);
     }
   }, [user, fetchUsers, agePref]);
 
   const handleLoadMore = useCallback(() => {
-    if (!isLoading && hasMore && user) void fetchUsers(user.id, user.interested_in, false, agePref);
+    if (!isLoading && hasMore && user) void fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: false, agePref });
   }, [isLoading, hasMore, user, fetchUsers, agePref]);
 
   const browseOrderIds = useMemo(() => users.map((u) => u.id), [users]);
@@ -197,19 +202,19 @@ export default function DiscoverScreen() {
   const handleApplyFilters = useCallback((next: FilterOptions) => {
     haptics.tapLight();
     setFilters(next);
-    if (user) fetchUsers(user.id, user.interested_in, true, agePref);
+    if (user) fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
   }, [setFilters, fetchUsers, user, agePref]);
 
   const handleResetFilters = useCallback(() => {
     resetFilters();
-    if (user) fetchUsers(user.id, user.interested_in, true, agePref);
+    if (user) fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
   }, [resetFilters, fetchUsers, user, agePref]);
 
   const handleChipClear = useCallback(
     (clear: () => void) => {
       haptics.tapLight();
       clear();
-      if (user) fetchUsers(user.id, user.interested_in, true, agePref);
+      if (user) fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
     },
     [user, fetchUsers, agePref],
   );
@@ -250,7 +255,24 @@ export default function DiscoverScreen() {
   }).current;
 
   const filterChipsHeight = activeFilterCount > 0 ? 44 : 0;
-  const totalHeaderHeight = insets.top + HEADER_HEIGHT + filterChipsHeight;
+  const totalHeaderExpanded = insets.top + HEADER_EXPANDED + filterChipsHeight;
+
+  const listPaddingTopAnim = useMemo(
+    () =>
+      scrollY.interpolate({
+        inputRange: [0, COLLAPSE_SCROLL_RANGE],
+        outputRange: [
+          insets.top + filterChipsHeight + 8 + HEADER_EXPANDED,
+          insets.top + filterChipsHeight + 8 + HEADER_COMPACT,
+        ],
+        extrapolate: 'clamp',
+      }),
+    [scrollY, insets.top, filterChipsHeight],
+  );
+
+  // Note: keep native-animated styles limited to transform/opacity. Layout props
+  // like padding/fontSize can trigger "not supported by native animated module"
+  // warnings in some runtimes.
   const screenWidth = Dimensions.get('window').width;
   const GRID_PADDING = 16;  // padding on each side of the list
   const GRID_GUTTER  = 16;  // gap between the two columns
@@ -266,16 +288,16 @@ export default function DiscoverScreen() {
   }, [users]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
+    <View style={s.screen}>
 
       {/* ── Full-screen scrollable grid ── */}
-      <View style={{ flex: 1 }}>
-        <FlashList
+      <View style={s.flex}>
+        <AnimatedFlashList
           data={rowPairs}
           keyExtractor={(_, index) => String(index)}
-          style={{ flex: 1 }}
+          style={s.flex}
           contentContainerStyle={{
-            paddingTop: totalHeaderHeight + 8,
+            paddingTop: listPaddingTopAnim,
             paddingHorizontal: GRID_PADDING,
             paddingBottom: tabBarHeight + 16,
           }}
@@ -291,7 +313,7 @@ export default function DiscoverScreen() {
               refreshing={refreshing}
               onRefresh={handleRefresh}
               tintColor={COLORS.primary}
-              progressViewOffset={totalHeaderHeight}
+              progressViewOffset={totalHeaderExpanded + 8}
             />
           }
           ListHeaderComponent={
@@ -306,8 +328,10 @@ export default function DiscoverScreen() {
               />
             ) : null
           }
-          renderItem={({ item: pair }) => (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+          renderItem={({ item }) => {
+            const pair = item as [User, User | null];
+            return (
+            <View style={s.gridRow}>
               <UserCard
                 user={pair[0]}
                 cardWidth={CARD_WIDTH}
@@ -324,54 +348,55 @@ export default function DiscoverScreen() {
                   onLongPress={handleLongPressUser}
                 />
               ) : (
-                <View style={{ width: CARD_WIDTH }} />
+                <View style={[s.gridRowSpacer, { width: CARD_WIDTH }]} />
               )}
             </View>
-          )}
+            );
+          }}
           ListEmptyComponent={
             isLoading && users.length === 0 ? (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+              <View style={s.skeletonGrid}>
                 {Array.from({ length: 8 }).map((_, i) => (
                   <SkeletonCard key={i} width={CARD_WIDTH} height={CARD_HEIGHT} radius={20} />
                 ))}
               </View>
             ) : fetchError ? (
-              <View style={{ alignItems: 'center', paddingTop: 48, paddingHorizontal: 32, gap: 14 }}>
+              <View style={s.emptyState}>
                 <Ionicons name="cloud-offline-outline" size={44} color={COLORS.textMuted} />
-                <Text style={{ fontSize: FONT.lg, fontWeight: FONT.extrabold, color: COLORS.text, textAlign: 'center' }}>
+                <Text style={s.emptyTitle}>
                   Could not load Discover
                 </Text>
-                <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
+                <Text style={s.emptyBody}>
                   {fetchError}
                 </Text>
                 <TouchableOpacity
                   onPress={() => {
                     clearFetchError();
-                    if (user) void fetchUsers(user.id, user.interested_in, true, agePref);
+                    if (user) void fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
                   }}
-                  style={{ marginTop: 4, backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.xxl }}
+                  style={s.primaryCta}
                 >
-                  <Text style={{ color: COLORS.white, fontWeight: FONT.bold, fontSize: 14 }}>Try again</Text>
+                  <Text style={s.primaryCtaText}>Try again</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={{ alignItems: 'center', paddingTop: 60, paddingHorizontal: 32, gap: 12 }}>
-                <Text style={{ fontSize: 48 }}>🌍</Text>
-                <Text style={{ fontSize: FONT.xl, fontWeight: FONT.extrabold, color: COLORS.text, textAlign: 'center' }}>
+              <View style={[s.emptyState, s.emptyStateTight]}>
+                <Text style={s.emptyEmoji}>🌍</Text>
+                <Text style={s.emptyTitle}>
                   No members found
                 </Text>
-                <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
+                <Text style={s.emptyBody}>
                   Try widening your filters and more Africana members will appear.
                 </Text>
                 {activeFilterCount > 0 && (
                   <TouchableOpacity
                     onPress={() => {
                       resetFilters();
-                      if (user) void fetchUsers(user.id, user.interested_in, true, agePref);
+                      if (user) void fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
                     }}
-                    style={{ marginTop: 8, backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.xxl }}
+                    style={s.primaryCta}
                   >
-                    <Text style={{ color: COLORS.white, fontWeight: FONT.bold, fontSize: 14 }}>Clear Filters</Text>
+                    <Text style={s.primaryCtaText}>Clear Filters</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -381,26 +406,26 @@ export default function DiscoverScreen() {
             users.length === 0 ? null : (
               <View>
                 {fetchError ? (
-                  <View style={{ paddingVertical: 16, paddingHorizontal: 16, marginBottom: 8, backgroundColor: COLORS.primarySurface, borderRadius: RADIUS.xl, gap: 10 }}>
-                    <Text style={{ fontSize: 13, color: COLORS.text, textAlign: 'center' }}>{fetchError}</Text>
+                  <View style={s.footerErrorCard}>
+                    <Text style={s.footerErrorText}>{fetchError}</Text>
                     <TouchableOpacity
                       onPress={() => {
                         clearFetchError();
-                        if (user) void fetchUsers(user.id, user.interested_in, true, agePref);
+                        if (user) void fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
                       }}
-                      style={{ alignSelf: 'center', backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: RADIUS.full }}
+                      style={s.footerRetryBtn}
                     >
-                      <Text style={{ color: COLORS.white, fontWeight: FONT.bold, fontSize: 13 }}>Retry</Text>
+                      <Text style={s.footerRetryText}>Retry</Text>
                     </TouchableOpacity>
                   </View>
                 ) : null}
                 {isLoading && hasMore ? (
-                  <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                  <View style={s.footerSpinner}>
                     <ActivityIndicator size="small" color={COLORS.primary} />
                   </View>
                 ) : !hasMore ? (
-                  <View style={{ paddingVertical: 28, alignItems: 'center', paddingHorizontal: 16 }}>
-                    <Text style={{ fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.textSecondary }}>
+                  <View style={s.footerEnd}>
+                    <Text style={s.footerEndText}>
                       All caught up
                     </Text>
                   </View>
@@ -416,11 +441,20 @@ export default function DiscoverScreen() {
         style={[s.header, {
           paddingTop: insets.top,
           transform: [{ translateY: headerTranslateY }],
-          shadowOpacity: headerShadowOpacity,
         }]}
       >
-        <View style={s.headerRow}>
-          <ScreenTitle>Discover</ScreenTitle>
+        <Animated.View style={s.headerRow}>
+          <Text
+            accessibilityRole="header"
+            style={{
+              fontFamily: FONT.displayFamily,
+              fontSize: FONT.xxl + 4,
+              color: COLORS.textStrong,
+              letterSpacing: 0.2,
+            }}
+          >
+            Discover
+          </Text>
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : 'Open filters'}
@@ -432,7 +466,7 @@ export default function DiscoverScreen() {
               Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
             </Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
         {activeFilterCount > 0 ? (
           <ScrollView
             horizontal
@@ -474,6 +508,102 @@ export default function DiscoverScreen() {
 }
 
 const s = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+  },
+  flex: {
+    flex: 1,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  gridRowSpacer: {
+    // width is provided dynamically based on card size
+  },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingTop: 48,
+    paddingHorizontal: 32,
+    gap: 14,
+  },
+  emptyStateTight: {
+    paddingTop: 60,
+    gap: 12,
+  },
+  emptyEmoji: {
+    fontSize: 48,
+  },
+  emptyTitle: {
+    fontSize: FONT.lg,
+    fontWeight: FONT.extrabold,
+    color: COLORS.text,
+    textAlign: 'center',
+  },
+  emptyBody: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  primaryCta: {
+    marginTop: 4,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: RADIUS.xxl,
+  },
+  primaryCtaText: {
+    color: COLORS.white,
+    fontWeight: FONT.bold,
+    fontSize: 14,
+  },
+  footerErrorCard: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: COLORS.primarySurface,
+    borderRadius: RADIUS.xl,
+    gap: 10,
+  },
+  footerErrorText: {
+    fontSize: 13,
+    color: COLORS.text,
+    textAlign: 'center',
+  },
+  footerRetryBtn: {
+    alignSelf: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+  },
+  footerRetryText: {
+    color: COLORS.white,
+    fontWeight: FONT.bold,
+    fontSize: 13,
+  },
+  footerSpinner: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  footerEnd: {
+    paddingVertical: 28,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  footerEndText: {
+    fontSize: FONT.md,
+    fontWeight: FONT.semibold,
+    color: COLORS.textSecondary,
+  },
   header: {
     position: 'absolute',
     top: 0,
@@ -491,7 +621,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 14,
   },
   filterBtn: {
     flexDirection: 'row',
@@ -499,7 +628,6 @@ const s = StyleSheet.create({
     gap: 6,
     backgroundColor: COLORS.savanna,
     paddingHorizontal: 14,
-    paddingVertical: 8,
     borderRadius: RADIUS.full,
   },
   filterBtnActive: {

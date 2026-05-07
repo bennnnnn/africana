@@ -2,7 +2,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
 import { COLORS } from '@/constants';
-import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
+import { postAuthHref } from '@/lib/profile-completion';
 
 export default function Index() {
   const { session, user, isInitialized } = useAuthStore();
@@ -22,9 +22,5 @@ export default function Index() {
     return <Redirect href="/(auth)/welcome" />;
   }
 
-  if (!isProfileCompleteForDiscover(user)) {
-    return <Redirect href={onboardingHrefFromSession(session)} />;
-  }
-
-  return <Redirect href="/(tabs)/discover" />;
+  return <Redirect href={postAuthHref(user, session)} />;
 }

@@ -13,7 +13,8 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/auth.store';
-import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
+import { uploadToAvatarsBucket, publicAvatarsUrlToStoragePath } from '@/lib/storage-image-upload';
+import { supabase } from '@/lib/supabase';
 import { COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
 import { appDialog } from '@/lib/app-dialog';
 import { UI_LABELS } from '@/constants/copy';
@@ -99,6 +100,11 @@ export default function PhotosScreen() {
           onPress: async () => {
             const updatedPhotos = photos.filter((p) => p !== photoUrl);
             try {
+              const path = publicAvatarsUrlToStoragePath(photoUrl);
+              if (path) {
+                const { error: rmErr } = await supabase.storage.from('avatars').remove([path]);
+                if (rmErr) console.warn('[photos] storage remove:', rmErr.message);
+              }
               await updateProfile({
                 profile_photos: updatedPhotos,
                 avatar_url: updatedPhotos[0] ?? null,

@@ -14,6 +14,7 @@ import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { fetchSymmetricBlockedPeerIds } from '@/lib/block-queries';
 import { useAuthStore } from '@/store/auth.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useChatStore } from '@/store/chat.store';
@@ -24,7 +25,8 @@ import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { UI_TOAST } from '@/constants/copy';
-import { getOnlineFreshnessCutoffISO, isUserEffectivelyOnline } from '@/lib/utils';
+import { getOnlineFreshnessCutoffISO, getEffectivePresence } from '@/lib/utils';
+import { TIMINGS } from '@/lib/timings';
 import haptics from '@/lib/haptics';
 
 const ROW_HEIGHT = 88; // 60 avatar + 14*2 padding = 88; marginBottom 10 below
@@ -126,12 +128,7 @@ export default function OnlineScreen() {
   const fetchOnlineUsers = async () => {
     if (!user) return;
 
-    const { data: blocks } = await supabase
-      .from('blocks')
-      .select('blocked_id, blocker_id')
-      .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
-
-    const blockedIds = blocks?.map((b) => (b.blocker_id === user.id ? b.blocked_id : b.blocker_id)) ?? [];
+    const blockedIds = await fetchSymmetricBlockedPeerIds(user.id);
 
     // Source of truth for "online" is a fresh `last_seen`, not the
     // `online_status` literal. Force-quits, crashes, network drops, and OS
@@ -177,14 +174,22 @@ export default function OnlineScreen() {
 
       const refreshTimer = setInterval(() => {
         void fetchOnlineUsers();
-      }, 30 * 1000);
+      }, TIMINGS.onlineRefreshMs);
 
       return () => clearInterval(refreshTimer);
     }, [user]),
   );
 
   const visibleOnlineUsers = useMemo(
-    () => onlineUsers.filter((u) => isUserEffectivelyOnline(u.online_status, u.last_seen)),
+    () =>
+      onlineUsers.filter(
+        (u) =>
+          getEffectivePresence({
+            online_visible: u.online_visible,
+            online_status: u.online_status,
+            last_seen: u.last_seen ?? '',
+          }) === 'online',
+      ),
     [onlineUsers],
   );
 

@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 import { Session } from '@supabase/supabase-js';
 import { User, UserSettings, type Gender } from '@/types';
-import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { supabase } from '@/lib/supabase';
-import { normalizeInterestedInFromDb } from '@/lib/gender-match';
 import { resetRateLimitWarnings } from '@/lib/rate-limit-warn';
+import {
+  fetchOrCreateSettingsRow,
+  fetchProfileRow,
+  withSessionEmail,
+} from '@/lib/auth-profile-settings';
 
 interface AuthState {
   session: Session | null;
@@ -21,6 +24,11 @@ interface AuthState {
   setInitialized: () => void;
   fetchProfile: (userId: string) => Promise<void>;
   fetchSettings: (userId: string) => Promise<void>;
+  /** Load profile + settings together (auth bootstrap, OAuth, login). */
+  hydrateUserFromServer: (
+    userId: string,
+    options?: { continueOnPartialFailure?: boolean },
+  ) => Promise<void>;
   updateProfile: (updates: Partial<User>) => Promise<void>;
   updateSettings: (
     updates: Partial<UserSettings>,
@@ -46,95 +54,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setInitialized: () => set({ isInitialized: true }),
 
   fetchProfile: async (userId) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select(PROFILE_LIST_SELECT as '*')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (error || !data) {
+    const row = await fetchProfileRow(userId);
+    if (!row) {
       set({ user: null });
       return;
     }
-
-    const today = new Date();
-    const bday  = data.birthdate
-      ? (() => {
-          const [y, m, d] = (data.birthdate as string).split('-').map(Number);
-          return new Date(y, m - 1, d); // local date — avoids UTC-midnight off-by-one
-        })()
-      : null;
-    const age   = bday
-      ? today.getFullYear() - bday.getFullYear()
-        - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
-      : undefined;
-
-    const rawGender = String(data.gender ?? '');
-    const gender: Gender =
-      rawGender === 'male' || rawGender === 'female' ? rawGender : 'female';
-
-    const interested_in = normalizeInterestedInFromDb(gender, data.interested_in as string | null | undefined);
-
-    const profileFix: { gender?: Gender; interested_in?: typeof interested_in } = {};
-    if (gender !== data.gender) profileFix.gender = gender;
-    if (interested_in !== data.interested_in) profileFix.interested_in = interested_in;
-    if (Object.keys(profileFix).length) {
-      void supabase.from('profiles').update(profileFix).eq('id', userId);
-    }
-
-    // Email is no longer stored on public.profiles (it would leak via the
-    // permissive SELECT policy). Pull it from the active session instead.
-    const sessionEmail = get().session?.user?.email ?? null;
-
-    set({
-      user: {
-        ...data,
-        email: sessionEmail,
-        gender,
-        interested_in,
-        age,
-        profile_photos: data.profile_photos ?? [],
-        languages: data.languages ?? [],
-        hobbies: data.hobbies ?? [],
-      },
-    });
+    set({ user: withSessionEmail(row, get().session) });
   },
 
   fetchSettings: async (userId) => {
-    const { data, error } = await supabase
-      .from('user_settings')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    const row = await fetchOrCreateSettingsRow(userId);
+    if (row) set({ settings: row });
+  },
 
-    if (!error && data) {
-      set({ settings: data });
-    } else {
-      // No settings row yet — create defaults
-      const defaults = {
-        user_id: userId,
-        receive_messages: true,
-        show_online_status: true,
-        profile_visible: true,
-        email_notifications: true,
-        notify_messages: true,
-        notify_likes: true,
-        notify_matches: true,
-        notify_views: false,
-        push_token: null,
-        likes_seen_at: null,
-        views_seen_at: null,
-        favourites_seen_at: null,
-        matches_seen_at: null,
-        sent_seen_at: null,
-      };
-      const { data: created } = await supabase
-        .from('user_settings')
-        .upsert(defaults, { onConflict: 'user_id' })
-        .select()
-        .single();
-      if (created) set({ settings: created });
+  hydrateUserFromServer: async (userId, options) => {
+    if (options?.continueOnPartialFailure) {
+      await Promise.all([
+        get().fetchProfile(userId).catch((e) => console.error('fetchProfile (auth change)', e)),
+        get().fetchSettings(userId).catch((e) => console.error('fetchSettings (auth change)', e)),
+      ]);
+      return;
     }
+    await Promise.all([get().fetchProfile(userId), get().fetchSettings(userId)]);
   },
 
   updateProfile: async (updates) => {

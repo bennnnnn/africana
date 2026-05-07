@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@/constants';
 import { UI_TOAST } from '@/constants/copy';
-import { chatScreenStyles as s } from '@/components/chat/chat-screen-styles';
+import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
 
 export type ChatComposerVariant = 'active' | 'outgoing-off' | 'blocked' | 'peer-off';
 

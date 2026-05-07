@@ -282,3 +282,14 @@ export function enqueueReplaceCachedMessages(conversationId: string, messages: M
     console.warn('[chat-cache] replaceCachedMessages failed:', e);
   });
 }
+
+/** Remove all cached conversations/messages on logout (shared-device privacy). */
+export async function clearAllChatCacheTables(): Promise<void> {
+  await runSerialized(async () => {
+    const db = await getDb();
+    if (!db) return;
+    await db.execAsync('DELETE FROM cached_messages');
+    await db.execAsync('DELETE FROM cached_conversations');
+    await db.execAsync('DELETE FROM cached_conversation_snapshots');
+  });
+}

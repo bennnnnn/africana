@@ -16,6 +16,7 @@ import { COLORS, FONT } from '@/constants';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { appDialog } from '@/lib/app-dialog';
 import { signInWithGoogle } from '@/lib/google-auth';
+import { signInWithApple } from '@/lib/apple-auth';
 
 /** Email/password sign-in adds an `email` identity; pure OAuth (e.g. Google) does not. */
 function hasEmailPasswordIdentity(identities: { provider?: string }[] | undefined): boolean {
@@ -24,6 +25,10 @@ function hasEmailPasswordIdentity(identities: { provider?: string }[] | undefine
 
 function hasGoogleIdentity(identities: { provider?: string }[] | undefined): boolean {
   return !!identities?.some((i) => i.provider === 'google');
+}
+
+function hasAppleIdentity(identities: { provider?: string }[] | undefined): boolean {
+  return !!identities?.some((i) => i.provider === 'apple');
 }
 
 export default function DeleteAccountScreen() {
@@ -38,11 +43,12 @@ export default function DeleteAccountScreen() {
     [session?.user?.identities],
   );
 
-  /** Google-only (or other OAuth without email identity): confirm by signing in with Google again. */
-  const needsGoogleReauth = useMemo(
-    () => !needsPasswordConfirmation && hasGoogleIdentity(session?.user?.identities),
-    [needsPasswordConfirmation, session?.user?.identities],
-  );
+  const reauthKind = useMemo(() => {
+    if (needsPasswordConfirmation) return 'password' as const;
+    if (hasAppleIdentity(session?.user?.identities)) return 'apple' as const;
+    if (hasGoogleIdentity(session?.user?.identities)) return 'google' as const;
+    return 'unsupported' as const;
+  }, [needsPasswordConfirmation, session?.user?.identities]);
 
   const doDelete = async () => {
     if (!user) return;
@@ -73,7 +79,31 @@ export default function DeleteAccountScreen() {
         });
         return;
       }
-    } else if (needsGoogleReauth) {
+    } else if (reauthKind === 'apple') {
+      const newSession = await signInWithApple();
+      if (!newSession?.user?.id) {
+        setLoading(false);
+        appDialog({
+          title: 'Sign-in cancelled',
+          message:
+            'We could not delete your account without confirming your Apple sign-in. Try again when you’re ready.',
+          icon: 'close-circle-outline',
+        });
+        return;
+      }
+      if (newSession.user.id !== profileUserId) {
+        setLoading(false);
+        await supabase.auth.signOut();
+        appDialog({
+          title: 'Different Apple account',
+          message:
+            'The Apple ID you used does not match this Africana profile. You have been signed out for your security.',
+          icon: 'alert-circle-outline',
+          actions: [{ label: 'OK', style: 'primary', onPress: () => router.replace('/(auth)/welcome') }],
+        });
+        return;
+      }
+    } else if (reauthKind === 'google') {
       const newSession = await signInWithGoogle();
       if (!newSession?.user?.id) {
         setLoading(false);
@@ -97,7 +127,7 @@ export default function DeleteAccountScreen() {
         });
         return;
       }
-    } else if (!needsPasswordConfirmation) {
+    } else if (reauthKind === 'unsupported') {
       setLoading(false);
       appDialog({
         title: 'Contact support',
@@ -199,11 +229,13 @@ export default function DeleteAccountScreen() {
           }}
         >
           <Text style={{ fontSize: FONT.sm, color: '#B91C1C', lineHeight: 18 }}>
-            {needsPasswordConfirmation
+            {reauthKind === 'password'
               ? '⚠️ Enter your password below to confirm account deletion.'
-              : needsGoogleReauth
-                ? '⚠️ You signed up with Google (no password on file). After you tap delete, you’ll sign in with Google once more to prove it’s you—then we remove your account.'
-                : '⚠️ Tap “Delete My Account Forever” below. If we can’t verify your sign-in automatically, we’ll ask you to contact support.'}
+              : reauthKind === 'apple'
+                ? '⚠️ You signed in with Apple (no password on file). After you tap delete, you’ll sign in with Apple once more—then we remove your account.'
+                : reauthKind === 'google'
+                  ? '⚠️ You signed up with Google (no password on file). After you tap delete, you’ll sign in with Google once more—then we remove your account.'
+                  : '⚠️ Tap “Delete My Account Forever” below. If we can’t verify your sign-in automatically, we’ll ask you to contact support.'}
           </Text>
         </View>
 

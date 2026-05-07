@@ -26,6 +26,13 @@ import { DatePicker } from '@/components/ui/DatePicker';
 import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
 import { SelectOption, SelectPicker } from '@/components/ui/SelectPicker';
 import { COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
+import {
+  ONBOARDING_TOTAL_STEPS as TOTAL_STEPS,
+  ONBOARDING_STEP_METAS as STEPS,
+  ONBOARDING_INTEREST_OPTIONS as INTEREST_OPTIONS,
+  ONBOARDING_GENDER_OPTIONS as GENDER_ONBOARD,
+  ONBOARDING_LOOKING_FOR_OPTIONS as LOOKING_FOR_OPTS,
+} from '@/constants/onboarding-screen-data';
 import { Gender, InterestedIn, LookingFor } from '@/types';
 import { validateFirstName, getValidationState } from '@/lib/validation';
 import { saveOnboardingSkippedHints } from '@/lib/post-onboarding-nudges';
@@ -35,67 +42,15 @@ import { ALL_COUNTRIES, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
 import { CultureOptionSet, getEthnicityOptions, getLanguageOptions } from '@/lib/cultural-data';
 import { detectCountryFromIp } from '@/lib/geo-country';
 import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
+import { MultiChipSelect } from '@/components/onboarding/MultiChipSelect';
 
 const { width } = Dimensions.get('window');
 
-// 6 data-collection steps; step 7 is the celebration screen
-const TOTAL_STEPS = 6;
-
-const STEPS = [
-  { emoji: '👤', title: "What's your name?",          subtitle: "This is how you'll appear to others on Africana.", bg: '#FFF3E0' },
-  { emoji: '📸', title: 'Add your photo',             subtitle: 'Profiles with a photo get 6× more matches.',       bg: '#FFF8E1' },
-  { emoji: '🎂', title: 'A bit about you',            subtitle: 'A few basics to help us find the right people.',   bg: '#E8F5E9' },
-  { emoji: '💞', title: 'What are you looking for?',  subtitle: "Be honest — the right match is out there.",        bg: '#FCE4EC' },
-  { emoji: '📍', title: 'Where do you live?',         subtitle: 'Your location helps people near you find you.',    bg: '#E0F7FA' },
-  { emoji: '🌍', title: 'Your roots',                 subtitle: 'Ethnicity and languages help us find your people.', bg: '#E8F5E9' },
-];
-
-const INTEREST_OPTIONS: { value: InterestedIn; label: string; emoji: string }[] = [
-  { value: 'women', label: 'Women', emoji: '👩' },
-  { value: 'men', label: 'Men', emoji: '👨' },
-];
-
-const GENDER_ONBOARD = [
-  { value: 'male' as const, label: 'Male', emoji: '👨' },
-  { value: 'female' as const, label: 'Female', emoji: '👩' },
-];
-
-const LOOKING_FOR_OPTS = [
-  { value: 'relationship', emoji: '💑', label: 'Relationship', desc: 'A deep, meaningful connection' },
-  { value: 'marriage',     emoji: '💍', label: 'Marriage',     desc: 'Serious, long-term commitment' },
-  { value: 'friendship',   emoji: '🤝', label: 'Friendship',   desc: 'Friends first, see what happens' },
-  { value: 'pen_pal',      emoji: '✉️', label: 'Pen Pal',      desc: 'Chat, share stories, connect' },
-];
-
-function MultiChipSelect({
-  label, options, values, onToggle,
-}: {
-  label: string;
-  options: string[];
-  values: string[];
-  onToggle: (v: string) => void;
-}) {
-  if (options.length === 0) return null;
-  return (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={s.label}>{label}</Text>
-      <View style={s.row}>
-        {options.map((opt) => {
-          const on = values.includes(opt);
-          return (
-            <Pressable key={opt} onPress={() => onToggle(opt)} style={[s.chip, on && s.chipOn]}>
-              <Text style={[s.chipTxt, on && s.chipTxtOn]}>{opt}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
+// Step 7 is the celebration screen; steps 1–6 are defined in ONBOARDING_STEP_METAS.
 
 export default function OnboardingScreen() {
   const params = useLocalSearchParams<{ userId: string; email: string }>();
-  const { fetchProfile, fetchSettings } = useAuthStore();
+  const { hydrateUserFromServer } = useAuthStore();
 
   const [step, setStep] = useState(1);
   const progressAnim = useRef(new Animated.Value((1 / TOTAL_STEPS) * 100)).current;
@@ -422,7 +377,7 @@ export default function OnboardingScreen() {
         moreDetails: skipCultureFields || !(savedEthnicity || savedLanguages.length > 0),
       });
 
-      await Promise.all([fetchProfile(params.userId), fetchSettings(params.userId)]);
+      await hydrateUserFromServer(params.userId);
       track(EVENTS.AUTH_SIGNUP_COMPLETE);
       setStep(7); // celebration
     } catch (e) {

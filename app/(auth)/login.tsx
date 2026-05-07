@@ -19,11 +19,11 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { COLORS } from '@/constants';
 import { getValidationState, validateEmail } from '@/lib/validation';
-import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
+import { redirectAfterAuth } from '@/lib/profile-completion';
 import { appDialog } from '@/lib/app-dialog';
 
 export default function LoginScreen() {
-  const { fetchProfile, fetchSettings } = useAuthStore();
+  const { hydrateUserFromServer } = useAuthStore();
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -63,14 +63,9 @@ export default function LoginScreen() {
       });
       return;
     }
-    await fetchProfile(session.user.id);
-    await fetchSettings(session.user.id);
+    await hydrateUserFromServer(session.user.id);
     const { user } = useAuthStore.getState();
-    if (isProfileCompleteForDiscover(user)) {
-      router.replace('/(tabs)/discover');
-    } else {
-      router.replace(onboardingHrefFromSession(session));
-    }
+    redirectAfterAuth(router, user, session);
   };
 
   const handleForgotPassword = () => {
@@ -82,14 +77,9 @@ export default function LoginScreen() {
     try {
       const session = await signInWithGoogle();
       if (session?.user) {
-        await fetchProfile(session.user.id);
-        await fetchSettings(session.user.id);
+        await hydrateUserFromServer(session.user.id);
         const { user } = useAuthStore.getState();
-        if (isProfileCompleteForDiscover(user)) {
-          router.replace('/(tabs)/discover');
-        } else {
-          router.replace(onboardingHrefFromSession(session));
-        }
+        redirectAfterAuth(router, user, session);
       }
     } catch (e: any) {
       if (e?.message !== 'User cancelled') {

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ChatStoreState } from '@/store/chat-store.types';
 import { Conversation, Message, User } from '@/types';
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { supabase } from '@/lib/supabase';
@@ -17,7 +18,23 @@ import { hasSymmetricBlockBetween } from '@/lib/block-queries';
 import { moderateMessage } from '@/lib/moderation';
 import { maybeWarnMessageQuota } from '@/lib/rate-limit-warn';
 import { track, EVENTS } from '@/lib/analytics';
-import { UI_TOAST } from '@/constants/copy';
+import { logError, logWarn } from '@/lib/logger';
+import {
+  mapMessagesInsertError,
+  ERROR_MESSAGE_RATE_LIMIT_HOUR,
+  ERROR_MESSAGE_RATE_LIMIT_DAY,
+  ERROR_MESSAGE_MODERATION,
+  ERROR_SENDER_MESSAGES_DISABLED,
+} from '@/lib/message-insert-errors';
+
+export {
+  ERROR_RECIPIENT_MESSAGES_DISABLED,
+  ERROR_SENDER_MESSAGES_DISABLED,
+  ERROR_MESSAGE_MODERATION,
+  ERROR_MESSAGE_RATE_LIMIT_HOUR,
+  ERROR_MESSAGE_RATE_LIMIT_DAY,
+  ERROR_MESSAGING_BLOCKED,
+} from '@/lib/message-insert-errors';
 
 /** Parallel callers await the same in-flight work (tab layout + messages tab + focus). */
 const fetchConversationsPending = new Map<string, Promise<void>>();
@@ -46,86 +63,9 @@ function tailForCache(messages: Message[]): Message[] {
     : messages;
 }
 
-/** Shown to the sender when the recipient has turned off receiving messages. */
-export const ERROR_RECIPIENT_MESSAGES_DISABLED =
-  'This person has turned off receiving messages in their settings.';
+export type { ChatStoreState } from '@/store/chat-store.types';
 
-/** Shown when your own Receive messages is off (nothing in or out until you turn it on). */
-export const ERROR_SENDER_MESSAGES_DISABLED =
-  'Your messages are turned off. Open Settings → Privacy and turn on Receive messages to send.';
-
-/** Shown when a message is flagged by the local moderation filter. */
-export const ERROR_MESSAGE_MODERATION =
-  'This message looks inappropriate. Please rephrase it.';
-
-/** Raised when the DB-level rate-limit trigger fires. */
-export const ERROR_MESSAGE_RATE_LIMIT_HOUR =
-  'You\u2019re sending messages too fast. Please wait a bit and try again.';
-export const ERROR_MESSAGE_RATE_LIMIT_DAY =
-  'You\u2019ve reached today\u2019s message limit. Please try again tomorrow.';
-
-/** Server or client guard: symmetric block between sender and recipient. */
-export const ERROR_MESSAGING_BLOCKED = UI_TOAST.openChatBlocked;
-
-function pgErrorBlob(err: { message?: string; details?: string; hint?: string } | null): string {
-  if (!err) return '';
-  return `${err.message ?? ''} ${err.details ?? ''} ${err.hint ?? ''}`.toLowerCase();
-}
-
-function isRecipientMessagesDisabledDbError(err: { message?: string; code?: string; details?: string; hint?: string } | null): boolean {
-  const b = pgErrorBlob(err);
-  return b.includes('recipient') && b.includes('not accept');
-}
-
-function isSenderMessagesDisabledDbError(err: { message?: string; code?: string; details?: string; hint?: string } | null): boolean {
-  const b = pgErrorBlob(err);
-  return b.includes('sender') && b.includes('not accept');
-}
-
-function isMessagingBlockedDbError(err: { message?: string; code?: string; details?: string; hint?: string } | null): boolean {
-  const b = pgErrorBlob(err);
-  return b.includes('messaging blocked between participants');
-}
-
-/** Maps raw PostgREST errors so the UI never shows a vague insert failure for prefs guards. */
-function mapMessagesInsertError(err: { message?: string; code?: string; details?: string; hint?: string } | null): string | null {
-  if (!err) return null;
-  if (isMessagingBlockedDbError(err)) return ERROR_MESSAGING_BLOCKED;
-  if (isRecipientMessagesDisabledDbError(err)) return ERROR_RECIPIENT_MESSAGES_DISABLED;
-  if (isSenderMessagesDisabledDbError(err)) return ERROR_SENDER_MESSAGES_DISABLED;
-  const blob = pgErrorBlob(err);
-  if (blob.includes('rate_limit:messages:hour')) return ERROR_MESSAGE_RATE_LIMIT_HOUR;
-  if (blob.includes('rate_limit:messages:day')) return ERROR_MESSAGE_RATE_LIMIT_DAY;
-  return null;
-}
-
-interface ChatState {
-  conversations: Conversation[];
-  messages: Record<string, Message[]>;
-  /** True while we still believe there are older messages on the server. */
-  hasMoreMessages: Record<string, boolean>;
-  /** True while a `loadOlderMessages` request is in flight for this conversation. */
-  loadingOlderMessages: Record<string, boolean>;
-  isLoading: boolean;
-  fetchConversations: (userId: string) => Promise<void>;
-  fetchMessages: (conversationId: string) => Promise<void>;
-  loadOlderMessages: (conversationId: string) => Promise<void>;
-  sendMessage: (conversationId: string, senderId: string, content: string, senderName?: string) => Promise<{ error: string | null }>;
-  deleteMessage: (conversationId: string, messageId: string) => Promise<void>;
-  /** Delete for me only (soft-delete via `messages.deleted_for`). Works for incoming + outgoing. */
-  softDeleteMessageForSelf: (conversationId: string, messageId: string) => Promise<void>;
-  deleteConversation: (conversationId: string) => Promise<void>;
-  getOrCreateConversation: (
-    userId: string,
-    otherUserId: string,
-  ) => Promise<{ ok: true; conversationId: string } | { ok: false; reason: 'blocked' | 'error' }>;
-  markMessagesRead: (conversationId: string, userId: string) => Promise<void>;
-  addMessage: (conversationId: string, message: Message) => void;
-  applyMessageUpdate: (conversationId: string, message: Message) => void;
-  removeMessage: (conversationId: string, messageId: string) => void;
-}
-
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatStoreState>((set, get) => ({
   conversations: [],
   messages: {},
   hasMoreMessages: {},
@@ -148,21 +88,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       try {
-        const { data, error } = await supabase
-          .from('conversations')
-          .select('*')
-          .contains('participant_ids', [userId])
-          .order('last_message_at', { ascending: false, nullsFirst: false });
+        const [{ data, error }, hiddenRes] = await Promise.all([
+          supabase
+            .from('conversations')
+            .select('*')
+            .contains('participant_ids', [userId])
+            .order('last_message_at', { ascending: false, nullsFirst: false }),
+          supabase.from('conversation_hidden').select('conversation_id').eq('user_id', userId),
+        ]);
 
         if (error) {
-          console.error('[fetchConversations] failed to load conversations:', error.message);
+          logError('[fetchConversations] failed to load conversations', error);
           // Keep whatever was already in state (cache-seeded or stale); just hide the spinner.
           // Callers can show their own refresh-to-retry UI using the exposed isLoading flag.
         } else if (data) {
-          const conversationIds = data.map((conv) => conv.id);
+          const hiddenIds = new Set((hiddenRes.data ?? []).map((r) => r.conversation_id));
+          const visible = data.filter((c) => !hiddenIds.has(c.id));
+          const conversationIds = visible.map((conv) => conv.id);
           const otherUserIds = Array.from(
             new Set(
-              data
+              visible
                 .map((conv) => conv.participant_ids.find((id: string) => id !== userId))
                 .filter(Boolean)
             )
@@ -190,7 +135,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             unreadCounts.set(row.conversation_id, (unreadCounts.get(row.conversation_id) ?? 0) + 1);
           }
 
-          const conversationsWithUsers = data.map((conv) => {
+          const conversationsWithUsers = visible.map((conv) => {
             const otherUserId = conv.participant_ids.find((id: string) => id !== userId);
             return {
               ...conv,
@@ -203,7 +148,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           try {
             await replaceCachedConversations(userId, conversationsWithUsers);
           } catch (e) {
-            console.warn('[chat-cache] replaceCachedConversations failed:', e);
+            logWarn('[chat-cache] replaceCachedConversations failed', e);
           }
 
           // Pre-warm the per-conversation message cache in the background so
@@ -286,7 +231,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const cachedMessages = await cachedPromise;
 
       if (error) {
-        console.error('[fetchMessages]', conversationId, error.message);
+        logError('[fetchMessages] failed', { conversationId, error });
         if (cachedMessages.length > 0 && (get().messages[conversationId]?.length ?? 0) === 0) {
           set((state) => ({
             messages: { ...state.messages, [conversationId]: cachedMessages },
@@ -323,7 +268,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         try {
           await replaceCachedMessages(conversationId, tailForCache(merged));
         } catch (e) {
-          console.warn('[chat-cache] fetchMessages persist failed:', e);
+          logWarn('[chat-cache] fetchMessages persist failed', e);
         }
       }
     };
@@ -366,7 +311,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           .limit(MESSAGE_PAGE_SIZE);
 
         if (error) {
-          console.error('[loadOlderMessages]', conversationId, error.message);
+          logError('[loadOlderMessages] failed', { conversationId, error });
           return;
         }
         const rawOlder = ((data ?? []) as Message[]).slice().reverse();
@@ -394,7 +339,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         try {
           await replaceCachedMessages(conversationId, tailForCache(next));
         } catch (e) {
-          console.warn('[chat-cache] loadOlderMessages persist failed:', e);
+          logWarn('[chat-cache] loadOlderMessages persist failed', e);
         }
       } finally {
         set((state) => ({
@@ -455,9 +400,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
     enqueueReplaceCachedMessages(conversationId, tailForCache(get().messages[conversationId] ?? []));
 
-    // ── Pre-flight checks (still validate, but no longer on the hot path) ──
-    let recipientId = get().conversations.find((c) => c.id === conversationId)?.participant_ids
-      ?.find((pid) => pid !== senderId);
+    let recipientId = get().conversations.find((c) => c.id === conversationId)?.participant_ids?.find(
+      (pid) => pid !== senderId,
+    );
     if (!recipientId) {
       const { data: convRow } = await supabase
         .from('conversations')
@@ -467,47 +412,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       recipientId = convRow?.participant_ids?.find((pid: string) => pid !== senderId);
     }
 
-    if (recipientId) {
-      const { data: recipientProfile } = await supabase
-        .from('profiles')
-        .select('accepts_messages')
-        .eq('id', recipientId)
-        .maybeSingle();
-      if (recipientProfile && recipientProfile.accepts_messages === false) {
-        // Roll back optimistic message + last_message
-        set((state) => ({
-          messages: {
-            ...state.messages,
-            [conversationId]: (state.messages[conversationId] ?? []).filter((m) => m.id !== tempId),
-          },
-          conversations: state.conversations.map((c) =>
-            c.id === conversationId
-              ? { ...c, last_message: previousConvLastMessage, last_message_at: previousConvLastMessageAt }
-              : c
-          ),
-        }));
-        enqueueReplaceCachedMessages(conversationId, tailForCache((get().messages[conversationId] ?? []).filter((m) => m.id !== tempId)));
-        return { error: ERROR_RECIPIENT_MESSAGES_DISABLED };
-      }
-    }
-
-    if (recipientId && (await hasSymmetricBlockBetween(senderId, recipientId))) {
-      // Roll back optimistic message + last_message
-      set((state) => ({
-        messages: {
-          ...state.messages,
-          [conversationId]: (state.messages[conversationId] ?? []).filter((m) => m.id !== tempId),
-        },
-        conversations: state.conversations.map((c) =>
-          c.id === conversationId
-            ? { ...c, last_message: previousConvLastMessage, last_message_at: previousConvLastMessageAt }
-            : c
-        ),
-      }));
-      enqueueReplaceCachedMessages(conversationId, tailForCache((get().messages[conversationId] ?? []).filter((m) => m.id !== tempId)));
-      return { error: ERROR_MESSAGING_BLOCKED };
-    }
-
     const { data, error } = await supabase
       .from('messages')
       .insert({ conversation_id: conversationId, sender_id: senderId, content })
@@ -515,7 +419,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .single();
 
     if (error || !data) {
-      console.error('[sendMessage] insert failed:', error?.message, '| code:', error?.code, '| details:', error?.details, '| hint:', error?.hint);
+      logError('[sendMessage] insert failed', error);
       // Roll back optimistic message AND last_message preview in inbox
       set((state) => ({
         messages: {
@@ -553,12 +457,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
     enqueueReplaceCachedMessages(conversationId, tailForCache(get().messages[conversationId] ?? []));
 
-    // Update conversation last_message (participants can update — see migration)
-    const { error: convErr } = await supabase
-      .from('conversations')
-      .update({ last_message: content, last_message_at: data.created_at })
-      .eq('id', conversationId);
-    if (convErr) console.error('[sendMessage] conversation update:', convErr.message);
+    // DB trigger `sync_conversation_last_message` keeps `conversations.last_message*` in sync.
 
     if (recipientId) {
       void notifyUser({ type: 'message', recipientId, senderId, senderName, extra: { conversationId } });
@@ -624,24 +523,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
         await deleteCachedConversation(userId, conversationId);
       }
     } catch (e) {
-      console.warn('[chat-cache] delete cache failed:', e);
+      logWarn('[chat-cache] delete cache failed', e);
     }
 
-    // Delete messages first (FK constraint), then conversation
-    const { error: msgErr } = await supabase.from('messages').delete().eq('conversation_id', conversationId);
-    if (msgErr) {
-      console.error('[deleteConversation] Failed to delete messages:', msgErr);
-      // Roll back local state
+    if (!userId) {
       set({ conversations: previousConversations, messages: previousMessages });
-      throw msgErr;
+      throw new Error('Not authenticated');
     }
 
-    const { error: convErr } = await supabase.from('conversations').delete().eq('id', conversationId);
-    if (convErr) {
-      console.error('[deleteConversation] Failed to delete conversation:', convErr);
-      // Roll back local state
+    const { error: hideErr } = await supabase.from('conversation_hidden').upsert(
+      { user_id: userId, conversation_id: conversationId },
+      { onConflict: 'user_id,conversation_id' },
+    );
+    if (hideErr) {
+      logError('[deleteConversation] Failed to hide conversation', hideErr);
       set({ conversations: previousConversations, messages: previousMessages });
-      throw convErr;
+      throw hideErr;
     }
   },
 
@@ -753,7 +650,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       try {
         await replaceCachedConversations(userId, currentSnapshot);
       } catch (e) {
-        console.warn('[chat-cache] markMessagesRead persist failed:', e);
+        logWarn('[chat-cache] markMessagesRead persist failed', e);
       }
     }
     await supabase
@@ -793,7 +690,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       let changed = false;
       const next = list.map((m) => {
         if (m.id !== message.id) return m;
-        if (m.read_at === message.read_at && m.content === message.content) return m;
+        const sameDeleted =
+          JSON.stringify(m.deleted_for ?? []) === JSON.stringify(message.deleted_for ?? []);
+        if (m.read_at === message.read_at && m.content === message.content && sameDeleted) return m;
         changed = true;
         return { ...m, ...message };
       });
@@ -836,6 +735,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
 }));
 
 /** Read chat state outside of render (layout effects, async). Not a hook — avoids `useChatStore` being mistaken for a hook call mid-file. */
-export function getChatStoreState(): ChatState {
+export function getChatStoreState(): ChatStoreState {
   return useChatStore.getState();
+}
+
+/** Clears module-level dedupe maps and in-memory chat state on logout. */
+export function resetChatModuleStateAtLogout(): void {
+  fetchConversationsPending.clear();
+  fetchMessagesPending.clear();
+  loadOlderPending.clear();
+  messageIdSets.clear();
+  useChatStore.setState({
+    conversations: [],
+    messages: {},
+    hasMoreMessages: {},
+    loadingOlderMessages: {},
+    isLoading: false,
+  });
 }

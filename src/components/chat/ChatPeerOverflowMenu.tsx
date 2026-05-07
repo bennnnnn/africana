@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@/constants';
-import { chatScreenStyles as s } from '@/components/chat/chat-screen-styles';
+import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
 
 type Props = {
   bodyTopInset: number;

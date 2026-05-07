@@ -8,6 +8,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "test": "jest",
+    "test:watch": "jest --watch",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write \"**/*.{ts,tsx,json}\"",
@@ -22,6 +24,7 @@
     "@react-native-ml-kit/face-detection": "^2.0.1",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/native": "^7.1.33",
+    "@sentry/react-native": "^8.10.0",
     "@shopify/flash-list": "^2.3.1",
     "@supabase/supabase-js": "^2.101.1",
     "babel-preset-expo": "~54.0.10",
@@ -62,6 +65,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "@types/jest": "^30.0.0",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.59.0",
     "babel-plugin-module-resolver": "^5.0.3",
@@ -71,6 +75,8 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-native": "^5.0.0",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.2.6",
     "prettier": "^3.8.3",
     "typescript": "~5.8.3"
   },

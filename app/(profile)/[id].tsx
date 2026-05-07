@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   Modal,
-  ActivityIndicator,
   Animated,
   StyleSheet,
   Pressable,
@@ -50,7 +49,7 @@ import { MatchModal } from '@/components/ui/MatchModal';
 import {
   getProfileStrength,
   isProfileCompleteForDiscover,
-  onboardingHrefFromSession,
+  postAuthHref,
 } from '@/lib/profile-completion';
 import { ProfileCompletionNudgeBanner } from '@/components/profile/ProfileCompletionNudgeBanner';
 import { useDialog } from '@/components/ui/DialogProvider';
@@ -58,254 +57,23 @@ import { ReportUserModal } from '@/components/ui/ReportUserModal';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { SkeletonProfile } from '@/components/ui/Skeleton';
 import { track, EVENTS } from '@/lib/analytics';
-import { addFavourite, hasExistingReport, isBlockedRelationship } from '@/lib/social-actions';
+import { addFavourite, blockUser, isBlockedRelationship } from '@/lib/social-actions';
 import { recordProfileShareEvent, SHARE_REWARD_TOAST } from '@/lib/share-reward';
 import { getProfileSeed } from '@/lib/profile-seed-cache';
-import { isUserEffectivelyOnline, isUuidString } from '@/lib/utils';
+import { normalizeRouteParam } from '@/lib/chat-route-utils';
+import {
+  profileGalleryCache,
+  buildFallbackPhotoList,
+  warmPhotoUris,
+  loadProfilePhotoList,
+} from '@/lib/profile-gallery-cache';
+import { ProfilePhotoGalleryPage } from '@/components/profile/ProfilePhotoGalleryPage';
+import { ProfileReadOnlyFieldRow } from '@/components/profile/ProfileReadOnlyFieldRow';
+import { ProfileDiscoverGateModal } from '@/components/profile/ProfileDiscoverGateModal';
+import { pr } from '@/components/profile/profile-view-styles';
+import { GENDER_LABEL, FLOAT_ACTION_SIZE, floatingActionCircle } from '@/components/profile/profile-view-constants';
+import { getEffectivePresence, isUserEffectivelyOnline, isUuidString } from '@/lib/utils';
 import { SPRING, SNAP_IN } from '@/lib/motion';
-
-const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female' };
-const profileGalleryCache = new Map<string, string[]>();
-const prefetchedPhotoUris = new Set<string>();
-
-const FLOAT_ACTION_SIZE = 56;
-const floatingActionCircle = {
-  width: FLOAT_ACTION_SIZE,
-  height: FLOAT_ACTION_SIZE,
-  borderRadius: FLOAT_ACTION_SIZE / 2,
-  backgroundColor: COLORS.white,
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-  ...SHADOWS.md,
-};
-
-function normalizeParam(value: string | string[] | undefined): string | undefined {
-  if (typeof value === 'string' && value.length > 0) return value.trim();
-  if (Array.isArray(value) && typeof value[0] === 'string' && value[0].length > 0) return value[0].trim();
-  return undefined;
-}
-
-function buildFallbackPhotoList(fullName?: string | null, avatarUrl?: string | null): string[] {
-  return avatarUrl
-    ? [avatarUrl]
-    : [`${DEFAULT_AVATAR}${encodeURIComponent((fullName ?? '?').charAt(0))}`];
-}
-
-async function warmPhotoUris(uris: string[]) {
-  const nextUris = uris.filter((uri) => !!uri && !prefetchedPhotoUris.has(uri));
-  if (nextUris.length === 0) return;
-  nextUris.forEach((uri) => prefetchedPhotoUris.add(uri));
-  await Promise.allSettled(nextUris.map((uri) => Image.prefetch(uri)));
-}
-
-async function loadProfilePhotoList(userId: string): Promise<string[]> {
-  const cached = profileGalleryCache.get(userId);
-  if (cached) return cached;
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('profile_photos, avatar_url, full_name')
-    .eq('id', userId)
-    .maybeSingle();
-  if (error || !data) return [];
-  const photos = data.profile_photos ?? [];
-  const list = photos.length > 0 ? photos : buildFallbackPhotoList(data.full_name, data.avatar_url);
-
-  profileGalleryCache.set(userId, list);
-  void warmPhotoUris(list.slice(0, 4));
-  return list;
-}
-
-function useProfileGalleryPhotos(userId: string | null) {
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [loading, setLoading] = useState(!!userId);
-
-  useEffect(() => {
-    if (!userId) {
-      setPhotos([]);
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    const cached = profileGalleryCache.get(userId);
-    if (cached && cached.length > 0) {
-      setPhotos(cached);
-      setLoading(false);
-      void warmPhotoUris(cached.slice(0, 4));
-      return;
-    }
-
-    setLoading(true);
-    void supabase
-      .from('profiles')
-      .select('profile_photos, avatar_url, full_name')
-      .eq('id', userId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error || !data) {
-          setPhotos([]);
-          setLoading(false);
-          return;
-        }
-        const p = data.profile_photos ?? [];
-        const list =
-          p.length > 0
-            ? p
-            : data.avatar_url
-              ? [data.avatar_url]
-              : [`${DEFAULT_AVATAR}${encodeURIComponent((data.full_name ?? '?').charAt(0))}`];
-        profileGalleryCache.set(userId, list);
-        setPhotos(list);
-        setLoading(false);
-        void warmPhotoUris(list.slice(0, 4));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
-
-  return { photos, loading };
-}
-
-function ProfilePhotoGalleryPage({
-  userId,
-  winWidth,
-  winHeight,
-  activePhotoIndex,
-  dotBottom,
-  onHorizontalIndexChange,
-}: {
-  userId: string;
-  winWidth: number;
-  winHeight: number;
-  activePhotoIndex: number;
-  dotBottom: number;
-  onHorizontalIndexChange: (i: number) => void;
-}) {
-  const { photos, loading } = useProfileGalleryPhotos(userId);
-  const listRef = useRef<FlatList<string>>(null);
-  const scrollSyncedRef = useRef<{ userId: string; index: number } | null>(null);
-  const clampedIndex = Math.min(activePhotoIndex, Math.max(photos.length - 1, 0));
-
-  useEffect(() => {
-    if (loading) return;
-    if (clampedIndex !== activePhotoIndex) {
-      onHorizontalIndexChange(clampedIndex);
-    }
-  }, [activePhotoIndex, clampedIndex, loading, onHorizontalIndexChange]);
-
-  useEffect(() => {
-    if (loading || photos.length === 0) return;
-    const idx = Math.min(activePhotoIndex, photos.length - 1);
-    const s = scrollSyncedRef.current;
-    if (s?.userId === userId && s.index === idx) return;
-    scrollSyncedRef.current = { userId, index: idx };
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToIndex({ index: idx, animated: false });
-    });
-  }, [loading, photos.length, userId, activePhotoIndex]);
-
-  if (loading) {
-    return (
-      <View style={{ width: winWidth, height: winHeight, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator color="#FFF" />
-      </View>
-    );
-  }
-  if (photos.length === 0) {
-    return <View style={{ width: winWidth, height: winHeight, backgroundColor: '#000' }} />;
-  }
-
-  return (
-    <View style={{ width: winWidth, height: winHeight, backgroundColor: '#000' }}>
-      <FlatList
-        ref={listRef}
-        data={photos}
-        keyExtractor={(uri, i) => `${uri}-${i}`}
-        horizontal
-        pagingEnabled
-        nestedScrollEnabled
-        showsHorizontalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        removeClippedSubviews={false}
-        initialScrollIndex={Math.min(activePhotoIndex, photos.length - 1)}
-        getItemLayout={(_, index) => ({
-          length: winWidth,
-          offset: winWidth * index,
-          index,
-        })}
-        onMomentumScrollEnd={(e) => {
-          const i = Math.round(e.nativeEvent.contentOffset.x / winWidth);
-          const next = Math.max(0, Math.min(i, photos.length - 1));
-          scrollSyncedRef.current = { userId, index: next };
-          if (next !== activePhotoIndex) {
-            onHorizontalIndexChange(next);
-          }
-        }}
-        onScrollToIndexFailed={(info) => {
-          requestAnimationFrame(() => {
-            listRef.current?.scrollToIndex({ index: info.index, animated: false });
-          });
-        }}
-        renderItem={({ item: uri }) => (
-          <View style={{ width: winWidth, height: winHeight }}>
-            <Image
-              source={{ uri }}
-              style={{ width: winWidth, height: winHeight }}
-              contentFit="contain"
-              transition={180}
-            />
-          </View>
-        )}
-      />
-      {photos.length > 1 ? (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            bottom: dotBottom,
-            left: 0,
-            right: 0,
-            flexDirection: 'row',
-            justifyContent: 'center',
-            gap: 6,
-          }}
-        >
-          {photos.map((_, i) => (
-            <View
-              key={i}
-              style={{
-                width: i === clampedIndex ? 22 : 7,
-                height: 7,
-                borderRadius: 3.5,
-                backgroundColor: i === clampedIndex ? '#FFF' : 'rgba(255,255,255,0.45)',
-              }}
-            />
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function ReadOnlyRow({ icon, label, value, isLast }: {
-  icon: keyof typeof Ionicons.glyphMap; label: string; value: string | null | undefined; isLast?: boolean;
-}) {
-  if (!value) return null;
-  return (
-    <View style={[pr.fieldRow, isLast && pr.fieldRowLast]}>
-      <View style={pr.fieldIcon}>
-        <Ionicons name={icon} size={16} color={COLORS.textStrong} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={pr.fieldLabel}>{label}</Text>
-        <Text style={pr.fieldValue}>{value}</Text>
-      </View>
-    </View>
-  );
-}
-
 
 export default function ProfileViewScreen() {
   const {
@@ -313,10 +81,10 @@ export default function ProfileViewScreen() {
     viewer: rawViewer,
     photo: rawPhoto,
   } = useLocalSearchParams<{ id: string | string[]; viewer?: string | string[]; photo?: string | string[] }>();
-  const idCandidate = normalizeParam(rawId);
-  const id = idCandidate && isUuidString(idCandidate) ? idCandidate.trim() : undefined;
-  const viewerParam = normalizeParam(rawViewer);
-  const photoParam = normalizeParam(rawPhoto);
+  const idCandidate = normalizeRouteParam(rawId);
+  const id = idCandidate && isUuidString(idCandidate) ? idCandidate : undefined;
+  const viewerParam = normalizeRouteParam(rawViewer);
+  const photoParam = normalizeRouteParam(rawPhoto);
   const routeWantsPhotoViewer = viewerParam === '1';
   const routePhotoIndex = Math.max(0, Number.parseInt(photoParam ?? '0', 10) || 0);
   const { user: currentUser, session } = useAuthStore(
@@ -1046,12 +814,16 @@ export default function ProfileViewScreen() {
   const isVerified = profile.verified === true || profile.verification_status === 'approved';
   const isLiked = likedUserIds.has(profile.id);
   const isOwnProfile = currentUser?.id === profile.id;
-  const displayOnlineStatus: 'online' | 'offline' =
-    !isOwnProfile && profile.online_visible === false
-      ? 'offline'
-      : isUserEffectivelyOnline(profile.online_status, profile.last_seen)
-        ? 'online'
-        : 'offline';
+  /** Viewers respect `online_visible`; your own card uses freshness only (matches previous behavior). */
+  const displayOnlineStatus: 'online' | 'offline' = isOwnProfile
+    ? isUserEffectivelyOnline(profile.online_status, profile.last_seen)
+      ? 'online'
+      : 'offline'
+    : getEffectivePresence({
+        online_visible: profile.online_visible,
+        online_status: profile.online_status,
+        last_seen: profile.last_seen ?? '',
+      });
 
   const recipientMessagesPaused = !isOwnProfile && profile.accepts_messages === false;
 
@@ -1255,32 +1027,20 @@ export default function ProfileViewScreen() {
     });
   };
 
-  const handleReport = async () => {
+  const handleReport = () => {
     if (!currentUser || !profile) return;
-    try {
-      if (await hasExistingReport(currentUser.id, profile.id)) {
-        showToast({ message: UI_TOAST.reportExists, icon: 'information-circle-outline' });
-        return;
-      }
-    } catch {
-      showToast({ message: UI_TOAST.reportCheckFailed, icon: 'alert-circle-outline' });
-      return;
-    }
     setReportPromptVisible(true);
   };
 
   const confirmBlockUser = async () => {
     if (!currentUser || !profile) return;
-    const { error } = await supabase.from('blocks').insert({
-      blocker_id: currentUser.id,
-      blocked_id: profile.id,
-    });
-    if (error) {
+    try {
+      await blockUser(currentUser.id, profile.id);
+      showToast({ icon: 'ban-outline', message: UI_TOAST.blocked });
+      setTimeout(() => router.back(), 1300);
+    } catch {
       showToast({ icon: 'alert-circle-outline', message: UI_TOAST.blockFailed });
-      return;
     }
-    showToast({ icon: 'ban-outline', message: UI_TOAST.blocked });
-    setTimeout(() => router.back(), 1300);
   };
 
   return (
@@ -1692,19 +1452,19 @@ export default function ProfileViewScreen() {
 
         {detailsExpanded ? (
         <>
-        {/* Personal — identity basics. ReadOnlyRow auto-hides null fields.
+        {/* Personal — identity basics. ProfileReadOnlyFieldRow auto-hides null fields.
             Location / Languages / Ethnicity / Occupation / Looking-for live in
             Quick Facts above, so they're not duplicated here. */}
         <View>
         <View style={pr.sectionCard}>
           <Text style={pr.sectionTitle}>Personal</Text>
-          <ReadOnlyRow icon="person-outline"   label="Gender"        value={GENDER_LABEL[profile.gender] ?? profile.gender} />
-          <ReadOnlyRow icon="calendar-outline" label="Age"           value={profile.age ? `${profile.age} years old` : null} />
-          <ReadOnlyRow icon="search-outline"   label="Interested in" value={interestedInLabel} />
+          <ProfileReadOnlyFieldRow icon="person-outline"   label="Gender"        value={GENDER_LABEL[profile.gender] ?? profile.gender} />
+          <ProfileReadOnlyFieldRow icon="calendar-outline" label="Age"           value={profile.age ? `${profile.age} years old` : null} />
+          <ProfileReadOnlyFieldRow icon="search-outline"   label="Interested in" value={interestedInLabel} />
           {showHeritage ? (
-            <ReadOnlyRow icon="flag-outline"   label="Origin"        value={heritageLine} />
+            <ProfileReadOnlyFieldRow icon="flag-outline"   label="Origin"        value={heritageLine} />
           ) : null}
-          <ReadOnlyRow icon="sunny-outline"    label="Religion"      value={religionLabel} isLast />
+          <ProfileReadOnlyFieldRow icon="sunny-outline"    label="Religion"      value={religionLabel} isLast />
         </View>
         </View>
 
@@ -1717,14 +1477,14 @@ export default function ProfileViewScreen() {
           <View>
           <View style={pr.sectionCard}>
             <Text style={pr.sectionTitle}>Physical</Text>
-            <ReadOnlyRow
+            <ProfileReadOnlyFieldRow
               icon="resize-outline"
               label="Height"
               value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null}
               isLast={hasH && !hasB && !hasW}
             />
-            <ReadOnlyRow icon="body-outline" label="Body type" value={bodyTypeLabel} isLast={hasB && !hasW} />
-            <ReadOnlyRow
+            <ProfileReadOnlyFieldRow icon="body-outline" label="Body type" value={bodyTypeLabel} isLast={hasB && !hasW} />
+            <ProfileReadOnlyFieldRow
               icon="barbell-outline"
               label="Weight"
               value={profile.weight_kg != null ? `${profile.weight_kg} kg` : null}
@@ -1745,19 +1505,19 @@ export default function ProfileViewScreen() {
           <View>
           <View style={pr.sectionCard}>
             <Text style={pr.sectionTitle}>Family</Text>
-            <ReadOnlyRow
+            <ProfileReadOnlyFieldRow
               icon="heart-outline"
               label="Marital status"
               value={maritalLabel}
               isLast={hasM && !hasHasK && !hasWantK}
             />
-            <ReadOnlyRow
+            <ProfileReadOnlyFieldRow
               icon="people-outline"
               label="Has children"
               value={profile.has_children == null ? null : profile.has_children ? 'Yes' : 'No'}
               isLast={hasHasK && !hasWantK}
             />
-            <ReadOnlyRow
+            <ProfileReadOnlyFieldRow
               icon="happy-outline"
               label="Wants children"
               value={wantChildLabel}
@@ -1773,7 +1533,7 @@ export default function ProfileViewScreen() {
           <View>
           <View style={pr.sectionCard}>
             <Text style={pr.sectionTitle}>Education</Text>
-            <ReadOnlyRow icon="school-outline" label="Education" value={educationLabel} isLast />
+            <ProfileReadOnlyFieldRow icon="school-outline" label="Education" value={educationLabel} isLast />
           </View>
           </View>
         )}
@@ -2221,442 +1981,12 @@ export default function ProfileViewScreen() {
         />
       ) : null}
 
-      <Modal visible={needsDiscoverGate} transparent animationType="fade"
-        onRequestClose={() => router.back()}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(17,17,17,0.5)', justifyContent: 'center', padding: 24 }}>
-          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22 }}>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', lineHeight: 27 }}>
-              Finish your profile
-            </Text>
-            <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 22, color: '#555555' }}>
-              Add your basics (name, birthday, gender, and country) before browsing others. Who you see is based on your gender.
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => router.back()}
-                style={{
-                  flex: 1,
-                  minHeight: 50,
-                  borderRadius: 16,
-                  borderWidth: 1,
-                  borderColor: '#E7E1DC',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#FFFFFF',
-                }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>Go back</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => {
-                  if (session) router.replace(onboardingHrefFromSession(session));
-                }}
-                style={{
-                  flex: 1,
-                  minHeight: 50,
-                  borderRadius: 16,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: COLORS.primary,
-                }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Continue setup</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ProfileDiscoverGateModal
+        visible={needsDiscoverGate}
+        onContinueSetup={() => {
+          if (session && currentUser) router.replace(postAuthHref(currentUser, session));
+        }}
+      />
     </View>
   );
 }
-
-// ── Styles ─────────────────────────────────────────────────
-
-const pr = StyleSheet.create({
-  identityCard: {
-    marginTop: 0,
-    marginHorizontal: 16,
-    marginBottom: 4,
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.xl,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 20,
-    ...SHADOWS.md,
-  },
-  identityHeaderBlock: {
-    gap: 6,
-  },
-  identityTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  identityNameWrap: {
-    flex: 1,
-    minWidth: 140,
-  },
-  displayName: {
-    fontSize: FONT.xxl,
-    fontWeight: FONT.extrabold,
-    color: COLORS.textStrong,
-    lineHeight: 32,
-    letterSpacing: 0.1,
-  },
-  displayAge: {
-    fontSize: FONT.xl,
-    fontWeight: FONT.medium,
-    color: COLORS.textSecondary,
-  },
-  verifiedInlineIcon: {
-    marginTop: 2,
-  },
-  identitySubRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  identityLocationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  identityLocationText: {
-    flexShrink: 1,
-    fontSize: FONT.sm,
-    color: COLORS.textSecondary,
-    fontWeight: FONT.semibold,
-  },
-  identityStatusInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    flexShrink: 0,
-  },
-  chipHobby: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.savanna,
-    borderWidth: 1,
-    borderColor: `${COLORS.earth}35`,
-  },
-  chipHobbyText: { fontSize: FONT.sm, color: COLORS.earth, fontWeight: FONT.semibold },
-  frostedCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.18)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  collapsedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 20,
-    backgroundColor: COLORS.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: COLORS.border,
-    ...SHADOWS.sm,
-  },
-  collapsedHeaderInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    minHeight: 56,
-  },
-  collapsedBackBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  collapsedAvatarWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: 'visible',
-    marginLeft: 2,
-  },
-  collapsedAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.savanna,
-  },
-  collapsedOnlineDot: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    backgroundColor: COLORS.online,
-    borderWidth: 2,
-    borderColor: COLORS.white,
-  },
-  collapsedName: {
-    fontSize: 15,
-    fontWeight: FONT.extrabold,
-    color: COLORS.textStrong,
-    letterSpacing: 0.1,
-  },
-  collapsedAge: {
-    fontWeight: FONT.bold,
-    color: COLORS.textSecondary,
-  },
-  collapsedStatus: {
-    fontSize: 12,
-    fontWeight: FONT.semibold,
-    marginTop: 1,
-  },
-  collapsedMenuBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sharedBlock: {
-    marginTop: 16,
-    paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: COLORS.border,
-  },
-  sharedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 10,
-  },
-  sharedHeaderText: {
-    fontSize: 11,
-    fontWeight: FONT.extrabold,
-    color: COLORS.primary,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  sharedChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  sharedChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: RADIUS.full,
-    backgroundColor: `${COLORS.primary}12`,
-    borderWidth: 1,
-    borderColor: `${COLORS.primary}30`,
-  },
-  sharedChipLang: {
-    backgroundColor: COLORS.savanna,
-    borderColor: `${COLORS.earth}30`,
-  },
-  sharedChipText: {
-    fontSize: 12,
-    color: COLORS.earth,
-    fontWeight: FONT.semibold,
-  },
-  aboutBlock: { flexDirection: 'row', marginTop: 18, alignItems: 'flex-start' },
-  aboutAccent: {
-    width: 4,
-    marginTop: 4,
-    minHeight: 52,
-    borderRadius: 2,
-    backgroundColor: COLORS.textStrong,
-    marginRight: 14,
-  },
-  aboutLabel: {
-    fontSize: FONT.sm,
-    fontWeight: FONT.extrabold,
-    color: COLORS.textStrong,
-    marginBottom: 8,
-  },
-  aboutBody: {
-    fontSize: FONT.md,
-    color: COLORS.text,
-    lineHeight: 24,
-    fontWeight: FONT.medium,
-  },
-  sectionCard: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-    ...SHADOWS.sm,
-  },
-  heroDotsRow: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 18,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 7,
-  },
-  heroDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.48)',
-  },
-  heroDotActive: {
-    width: 22,
-    backgroundColor: '#FFF',
-  },
-  quickFactsBlock: {
-    marginTop: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: COLORS.border,
-    paddingTop: 4,
-  },
-  detailsToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginHorizontal: 16,
-    marginTop: 4,
-    marginBottom: 12,
-    paddingVertical: 14,
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLORS.border,
-    ...SHADOWS.sm,
-  },
-  detailsToggleLabel: {
-    fontSize: FONT.md,
-    fontWeight: FONT.extrabold,
-    color: COLORS.textStrong,
-    letterSpacing: 0.2,
-  },
-  upNextFooter: {
-    paddingTop: 28,
-    paddingBottom: 56,
-    alignItems: 'center',
-    gap: 10,
-  },
-  upNextHandle: {
-    width: 44,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: COLORS.borderStrong,
-  },
-  quickFactRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-  },
-  quickFactRowDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: COLORS.border,
-  },
-  quickFactIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.savanna,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickFactLabel: {
-    fontSize: 11,
-    fontWeight: FONT.extrabold,
-    color: COLORS.textMuted,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
-  quickFactValue: {
-    fontSize: FONT.md,
-    fontWeight: FONT.semibold,
-    color: COLORS.textStrong,
-    lineHeight: 20,
-  },
-  sectionTitle: {
-    fontSize: FONT.xs,
-    fontWeight: FONT.extrabold,
-    color: COLORS.earth,
-    letterSpacing: 1,
-    marginBottom: 12,
-    textTransform: 'uppercase',
-  },
-  onlineBadgeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  onlineBadgeText: {
-    fontSize: 11,
-    fontWeight: FONT.regular,
-    letterSpacing: 0.1,
-  },
-  messagePausedNote: {
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: RADIUS.full,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    ...SHADOWS.sm,
-  },
-  messagePausedNoteText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    fontWeight: FONT.medium,
-  },
-  fieldRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: `${COLORS.border}CC`,
-  },
-  fieldRowLast: { borderBottomWidth: 0 },
-  fieldIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.savanna,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fieldIconEmpty: {
-    backgroundColor: COLORS.emptyFieldSurface,
-    borderWidth: 1,
-    borderColor: COLORS.emptyFieldBorder,
-  },
-  fieldLabel: { fontSize: FONT.xs, color: COLORS.textSecondary, fontWeight: FONT.semibold, marginBottom: 2 },
-  fieldValue: { fontSize: FONT.md, color: COLORS.textStrong, fontWeight: FONT.semibold },
-  fieldValueEmpty: {
-    fontSize: FONT.md,
-    color: COLORS.emptyField,
-    fontWeight: FONT.semibold,
-    fontStyle: 'italic',
-  },
-});

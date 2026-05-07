@@ -63,7 +63,7 @@ async function setupAndroidChannels() {
       sound: 'default',
       vibrationPattern: [0, 200, 100, 200],
       enableVibrate: true,
-      lightColor: '#C84B31',
+      lightColor: '#0E9F6E',
     });
     await Notifications.setNotificationChannelAsync('like', {
       name: 'Likes',
@@ -75,17 +75,17 @@ async function setupAndroidChannels() {
     });
     await Notifications.setNotificationChannelAsync('match', {
       name: 'Matches 🔥',
-      importance: Notifications.AndroidImportance.MAX,
+      importance: Notifications.AndroidImportance.HIGH,
       sound: 'default',
       vibrationPattern: [0, 300, 150, 300, 150, 300],
       enableVibrate: true,
-      lightColor: '#C84B31',
+      lightColor: '#0E9F6E',
     });
     await Notifications.setNotificationChannelAsync('view', {
       name: 'Profile Views',
       importance: Notifications.AndroidImportance.LOW,
       vibrationPattern: [],
-      lightColor: '#C84B31',
+      lightColor: '#0E9F6E',
     });
     await Notifications.setNotificationChannelAsync('favourite', {
       name: 'Stars',
@@ -101,10 +101,8 @@ async function setupAndroidChannels() {
 /**
  * Result of attempting to register the device for push.
  *
- * The Settings screen surfaces this so users can self-diagnose. The previous
- * implementation was a `Promise<void>` with `try/catch {}` swallowing
- * everything — which is exactly how the production build ended up with zero
- * tokens saved across every signup.
+ * Call sites log failures instead of swallowing errors — that visibility is
+ * how we avoid silent "zero push tokens saved" production regressions.
  */
 export type PushRegistrationResult =
   | { ok: true;  token: string }
@@ -217,12 +215,7 @@ export async function notifyUser(params: {
   extra?: Record<string, string>;
 }): Promise<void> {
   try {
-    // Use functions.invoke so the SDK attaches BOTH the user JWT (Authorization)
-    // and the project apikey header — bare fetch was missing apikey, which is
-    // why every notify call was returning 401 at the gateway.
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
+    // `invoke` attaches the session JWT; Edge Function verifies senderId === caller.
     await supabase.functions.invoke('notify', { body: params });
   } catch {
     // Non-critical — best effort
@@ -236,9 +229,6 @@ export async function notifyLifecycleEmail(params: {
   extra?: Record<string, string>;
 }): Promise<void> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
     await supabase.functions.invoke('notify', {
       body: {
         kind: 'campaign',

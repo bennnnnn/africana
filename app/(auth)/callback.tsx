@@ -2,10 +2,11 @@ import { useEffect } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { createSessionFromUrl } from '@/lib/google-auth';
 import { useAuthStore } from '@/store/auth.store';
+import { redirectAfterAuth } from '@/lib/profile-completion';
 
 export default function AuthCallback() {
   const params = useLocalSearchParams();
-  const { fetchProfile, fetchSettings, setSession } = useAuthStore();
+  const { hydrateUserFromServer, setSession } = useAuthStore();
 
   useEffect(() => {
     const url = params?.url as string | undefined;
@@ -19,9 +20,9 @@ export default function AuthCallback() {
         try {
           if (session?.user) {
             setSession(session);
-            await fetchProfile(session.user.id);
-            await fetchSettings(session.user.id);
-            router.replace('/(tabs)/discover');
+            await hydrateUserFromServer(session.user.id);
+            const { user } = useAuthStore.getState();
+            redirectAfterAuth(router, user, session);
           } else {
             router.replace('/(auth)/welcome');
           }

@@ -25,7 +25,6 @@ import { SliderPicker } from '@/components/ui/SliderPicker';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
 import * as ImagePicker from 'expo-image-picker';
-import { getEthnicityOptions, getLanguageOptions } from '@/lib/cultural-data';
 import { resolveCountryFromStored, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
 import { getProfileStrength } from '@/lib/profile-completion';
 import { oppositeInterestedIn } from '@/lib/gender-match';
@@ -36,6 +35,7 @@ import { appDialog } from '@/lib/app-dialog';
 import { UI_LABELS } from '@/constants/copy';
 import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
 import { EditModal, FieldRow, HOBBY_OPTIONS, em } from '@/components/me/MyProfileEditPrimitives';
+import { useMeProfileCultureData } from '@/hooks/use-me-profile-culture-data';
 
 const { width } = Dimensions.get('window');
 // Self-profile hero height. Shorter than a typical portrait dating photo so
@@ -53,6 +53,8 @@ export default function MyProfileScreen() {
       fetchProfile: s.fetchProfile,
     })),
   );
+  const { cultureEthnicityOpts, cultureLanguageOpts, cultureLoading, loadCultureData } =
+    useMeProfileCultureData(user ?? null);
   const scrollRef = useRef<ScrollView>(null);
   const heroPhotoScrollRef = useRef<ScrollView>(null);
   const sectionY = useRef<Record<string, number>>({});
@@ -71,11 +73,6 @@ export default function MyProfileScreen() {
   const [editOriginLocation, setEditOriginLocation] = useState<Partial<LocationValue>>({});
   const [photoUploading, setPhotoUploading] = useState(false);
   const [heroPage, setHeroPage] = useState(0);
-
-  // Cultural data for ethnicity + languages
-  const [cultureEthnicityOpts, setCultureEthnicityOpts] = useState<string[]>([]);
-  const [cultureLanguageOpts, setCultureLanguageOpts]   = useState<{ suggested: string[]; all: string[] }>({ suggested: [], all: [] });
-  const [cultureLoading, setCultureLoading] = useState(false);
 
   // Search within long lists
   const [listSearch, setListSearch] = useState('');
@@ -131,46 +128,6 @@ export default function MyProfileScreen() {
       <Text style={{ marginTop: 12, fontSize: 14, color: COLORS.textSecondary }}>Loading profile…</Text>
     </SafeAreaView>
   );
-
-  // ── Cultural data loader (mirrors onboarding logic) ────────────────────────
-  const loadCultureData = async () => {
-    const livingCountryData = resolveCountryFromStored(user.country ?? '');
-    const livesInAfrica = livingCountryData ? AFRICAN_COUNTRY_CODES.has(livingCountryData.code) : false;
-
-    let countryCode: string | undefined;
-    let subdivision: string;
-    let city: string;
-
-    if (livesInAfrica) {
-      countryCode = livingCountryData?.code;
-      subdivision  = user.state  ?? '';
-      city         = user.city   ?? '';
-    } else {
-      // Diaspora — try origin country first
-      const originData = resolveCountryFromStored((user as any).origin_country ?? '');
-      if (originData && AFRICAN_COUNTRY_CODES.has(originData.code)) {
-        countryCode = originData.code;
-        subdivision  = (user as any).origin_state ?? '';
-        city         = (user as any).origin_city  ?? '';
-      } else {
-        countryCode = livingCountryData?.code;
-        subdivision  = user.state ?? '';
-        city         = user.city  ?? '';
-      }
-    }
-    if (!countryCode) return;
-
-    setCultureLoading(true);
-    try {
-      const [ethOpts, langOpts] = await Promise.all([
-        getEthnicityOptions(countryCode, subdivision, city),
-        getLanguageOptions(countryCode, user.ethnicity ?? null, subdivision, city),
-      ]);
-      setCultureEthnicityOpts(ethOpts?.all ?? []);
-      setCultureLanguageOpts({ suggested: langOpts?.suggested ?? [], all: langOpts?.all ?? [] });
-    } catch {}
-    setCultureLoading(false);
-  };
 
   // ── Open helpers ───────────────────────────────────────────────────────────
   const close = () => { setEditing(null); setListSearch(''); };

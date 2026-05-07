@@ -149,4 +149,5 @@ export const EVENTS = {
   RATE_LIMIT_HIT: 'rate_limit_hit',
   VERIFICATION_COMPLETE: 'verification_complete',
   FAVOURITE_ADDED: 'favourite_added',
+  BLOCK_REMOVED: 'block_removed',
 } as const;

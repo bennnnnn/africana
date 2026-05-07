@@ -238,6 +238,9 @@ export const WANT_CHILDREN_YES_NO = [
   { value: 'no',  label: 'No' },
 ];
 
+/** Prefer this name; `WANT_CHILDREN_YES_NO` is kept for backwards compatibility. */
+export const WANT_CHILDREN_OPTIONS = WANT_CHILDREN_YES_NO;
+
 export const LOOKING_FOR_OPTIONS = [
   { value: 'relationship', label: 'Relationship' },
   { value: 'marriage', label: 'Marriage' },

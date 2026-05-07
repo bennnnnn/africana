@@ -2,6 +2,7 @@ import { useEffect, type MutableRefObject } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { LikesTab } from '@/constants/likes-screen';
 import { LIKES_TAB_ORDER } from '@/constants/likes-screen';
+import { TIMINGS } from '@/lib/timings';
 
 type LoadTabFn = (t: LikesTab, force: boolean, isLoadMore?: boolean) => Promise<void>;
 
@@ -26,33 +27,46 @@ export function useLikesLiveChannel(
       if (countDebounce) clearTimeout(countDebounce);
       countDebounce = setTimeout(() => {
         void fetchActivityCountsRef.current();
-      }, 280);
+      }, TIMINGS.likesHubCountDebounceMs);
       for (const t of LIKES_TAB_ORDER) tabFetchedAtRef.current[t] = 0;
       if (reloadDebounce) clearTimeout(reloadDebounce);
       reloadDebounce = setTimeout(() => {
         void loadTabRef.current(activeTabRef.current, true);
-      }, 200);
+      }, TIMINGS.likesHubReloadDebounceMs);
     };
 
     const channel = supabase
       .channel(`likes-live:${userId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'likes' }, (payload) => {
-        const row = payload.new as { from_user_id?: string; to_user_id?: string };
-        if (!row.from_user_id || !row.to_user_id) return;
-        if (row.to_user_id === userId) {
-          scheduleReloadAll();
-        }
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'profile_views' }, (payload) => {
-        const row = payload.new as { viewed_id?: string };
-        if (row.viewed_id !== userId) return;
-        scheduleReloadAll();
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'favourites' }, (payload) => {
-        const row = payload.new as { favourited_id?: string };
-        if (row.favourited_id !== userId) return;
-        scheduleReloadAll();
-      })
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'likes',
+          filter: `to_user_id=eq.${userId}`,
+        },
+        () => scheduleReloadAll(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'profile_views',
+          filter: `viewed_id=eq.${userId}`,
+        },
+        () => scheduleReloadAll(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'favourites',
+          filter: `favourited_id=eq.${userId}`,
+        },
+        () => scheduleReloadAll(),
+      )
       .subscribe();
 
     return () => {

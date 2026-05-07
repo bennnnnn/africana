@@ -63,12 +63,13 @@ export default function RegisterScreen() {
         });
       } else if (error.message.includes('already')) {
         appDialog({
-          title: 'Account exists',
-          message: 'An account with this email already exists. Try signing in instead.',
+          title: 'Couldn’t create account',
+          message:
+            'This email may already be in use. Try signing in, or use Forgot password on the sign-in screen.',
           icon: 'person-outline',
           actions: [
-            { label: 'Sign in', style: 'primary', onPress: () => router.replace('/(auth)/login') },
-            { label: 'Cancel', style: 'cancel' },
+            { label: 'Go to sign in', style: 'primary', onPress: () => router.replace('/(auth)/login') },
+            { label: 'Close', style: 'cancel' },
           ],
         });
       } else {

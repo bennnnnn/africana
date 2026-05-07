@@ -11,10 +11,22 @@ import { useChatStore } from '@/store/chat.store';
 import { COLORS } from '@/constants';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useActivityStore, selectLikesTabBadge } from '@/store/activity.store';
-import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
+import { isProfileCompleteForDiscover, postAuthHref } from '@/lib/profile-completion';
 import haptics from '@/lib/haptics';
 import { isViewingConversation } from '@/lib/active-chat';
 import { sendLocalNotification } from '@/lib/notifications';
+import { TIMINGS } from '@/lib/timings';
+
+/**
+ * Supabase reuses `client.channel(topic)` if that topic still exists. `removeChannel`
+ * is async, so remounting tabs can recreate `...:1` while the old channel is still
+ * in the client → first `.on()` throws "after subscribe". UUID avoids collisions.
+ */
+function realtimeUniqueSuffix(): string {
+  const c = globalThis.crypto as { randomUUID?: () => string } | undefined;
+  if (c?.randomUUID) return c.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
 
 function TabIcon({
   name,
@@ -60,10 +72,9 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { session, user, isInitialized } = useAuthStore();
-  const { conversations, fetchConversations } = useChatStore(
+  const { conversations } = useChatStore(
     useShallow((s) => ({
       conversations: s.conversations,
-      fetchConversations: s.fetchConversations,
     })),
   );
   const [unreadMessages, setUnreadMessages] = useState(0);
@@ -84,7 +95,7 @@ export default function TabLayout() {
   useEffect(() => {
     if (!isInitialized || !session?.user) return;
     if (!isProfileCompleteForDiscover(user)) {
-      router.replace(onboardingHrefFromSession(session));
+      router.replace(postAuthHref(user, session));
     }
   }, [isInitialized, session, user, router]);
 
@@ -99,36 +110,32 @@ export default function TabLayout() {
   useEffect(() => {
     if (!user) return;
 
+    const uid = user.id;
+
     // Initial inbox load.
-    fetchConversations(user.id);
+    useChatStore.getState().fetchConversations(uid);
 
     const scheduleConvRefresh = () => {
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
       // Use store getState() to avoid any stale closure issues.
-      refreshTimeoutRef.current = setTimeout(() => useChatStore.getState().fetchConversations(user.id), 120);
+      refreshTimeoutRef.current = setTimeout(
+        () => useChatStore.getState().fetchConversations(uid),
+        TIMINGS.realtimeRefreshDebounceMs,
+      );
     };
 
-    channelRef.current = supabase
-      .channel(`tab-conversations:${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+    const ch = supabase.channel(`tab-conversations:${uid}:${realtimeUniqueSuffix()}`);
+    channelRef.current = ch;
+
+    ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const message = payload.new as {
           sender_id?: string;
           conversation_id?: string;
           content?: string;
         };
-        if (message.sender_id === user.id) return;
+        if (message.sender_id === uid) return;
         scheduleConvRefresh();
-        // Foreground ping. We deliberately fire this on every incoming
-        // message that ISN'T already on screen — even when the OS push from
-        // the `notify` Edge Function is also delivering one — because:
-        //
-        //   1. Realtime arrives in <1s; OS push is regularly 2–10s late.
-        //   2. Many EAS builds have FCM/APNs misconfigured, in which case
-        //      this is the ONLY audible cue the user gets.
-        //
-        // The duplicate sound risk (push + local) is preferred over silence.
-        // If the user is actively viewing this conversation, we skip both
-        // sound and haptic because the message is appearing inline anyway.
+        // Foreground ping rationale: see docs/foreground-notifications.md
         if (isViewingConversation(message.conversation_id)) return;
         haptics.tapMedium();
         // Pull the sender name from the chat store directly via getState() so
@@ -147,32 +154,26 @@ export default function TabLayout() {
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, (payload) => {
         const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
-        if (ids.includes(user.id)) scheduleConvRefresh();
+        if (ids.includes(uid)) scheduleConvRefresh();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, (payload) => {
         const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
-        if (ids.includes(user.id)) scheduleConvRefresh();
+        if (ids.includes(uid)) scheduleConvRefresh();
       })
       .subscribe((status) => {
         // In dev / Expo Go, the realtime websocket can silently time out.
-        // A light poll ensures the inbox still updates even if the channel drops.
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           scheduleConvRefresh();
         }
       });
 
-    // Fallback: periodic refresh so the inbox stays live even if Realtime drops.
-    // `fetchConversations` is internally deduped by `fetchConversationsPending`.
-    const poll = setInterval(() => {
-      useChatStore.getState().fetchConversations(user.id).catch(() => {});
-    }, 4000);
-
     return () => {
-      clearInterval(poll);
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      const toRemove = channelRef.current;
+      channelRef.current = null;
+      if (toRemove) void supabase.removeChannel(toRemove);
     };
-  }, [fetchConversations, user?.id]);
+  }, [user?.id]);
 
   // Activity badge for the Likes tab — aggregates unseen likes / matches /
   // views / stars so the user sees a red dot on the heart icon the moment
@@ -200,36 +201,66 @@ export default function TabLayout() {
 
     const scheduleRefetch = () => {
       if (activityRefreshTimeoutRef.current) clearTimeout(activityRefreshTimeoutRef.current);
-      activityRefreshTimeoutRef.current = setTimeout(() => void fetchCounts(), 240);
+      activityRefreshTimeoutRef.current = setTimeout(
+        () => void fetchCounts(),
+        TIMINGS.activityCountDebounceMs,
+      );
     };
 
-    activityChannelRef.current = supabase
-      .channel(`tab-activity:${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'likes' }, (payload) => {
-        const row = payload.new as { to_user_id?: string };
-        if (row.to_user_id === user.id) scheduleRefetch();
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'favourites' }, (payload) => {
-        const row = payload.new as { favourited_id?: string };
-        if (row.favourited_id === user.id) scheduleRefetch();
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'profile_views' }, (payload) => {
-        const row = payload.new as { viewed_id?: string };
-        if (row.viewed_id === user.id) scheduleRefetch();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_settings' }, (payload) => {
-        // Marking tabs as seen inside the Likes screen updates `*_seen_at`
-        // on user_settings. Re-fetch so the badge clears in the bottom bar.
-        const row = payload.new as { user_id?: string };
-        if (row.user_id === user.id) scheduleRefetch();
-      })
+    const aid = user.id;
+    const ach = supabase.channel(`tab-activity:${aid}:${realtimeUniqueSuffix()}`);
+    activityChannelRef.current = ach;
+
+    ach
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'likes',
+          filter: `to_user_id=eq.${aid}`,
+        },
+        () => scheduleRefetch(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'favourites',
+          filter: `favourited_id=eq.${aid}`,
+        },
+        () => scheduleRefetch(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'profile_views',
+          filter: `viewed_id=eq.${aid}`,
+        },
+        () => scheduleRefetch(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'user_settings',
+          filter: `user_id=eq.${aid}`,
+        },
+        () => scheduleRefetch(),
+      )
       .subscribe();
 
     return () => {
       if (activityRefreshTimeoutRef.current) clearTimeout(activityRefreshTimeoutRef.current);
-      if (activityChannelRef.current) supabase.removeChannel(activityChannelRef.current);
+      const toRemove = activityChannelRef.current;
+      activityChannelRef.current = null;
+      if (toRemove) void supabase.removeChannel(toRemove);
     };
-  }, [user?.id, setActivityCounts, clearActivityCounts]);
+  }, [user?.id]);
   // On Android with edgeToEdgeEnabled, insets.bottom is the system nav bar height
   const tabBarHeight = 56 + insets.bottom;
   const tabBarPaddingBottom = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 20 : 8);

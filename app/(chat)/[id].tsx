@@ -24,20 +24,20 @@ import { useDiscoverStore } from '@/store/discover.store';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { ReportUserModal } from '@/components/ui/ReportUserModal';
 import { ChatMessageRow } from '@/components/chat/ChatMessageRow';
-import { chatScreenStyles as s } from '@/components/chat/chat-screen-styles';
+import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
 import { DeleteForEveryoneConfirmContent } from '@/components/chat/DeleteForEveryoneConfirmContent';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { ChatComposerArea, type ChatComposerVariant } from '@/components/chat/ChatComposerArea';
 import { ChatPeerOverflowMenu } from '@/components/chat/ChatPeerOverflowMenu';
 import { ChatReactionPickerOverlay } from '@/components/chat/ChatReactionPickerOverlay';
 import { ChatScreenHeaderChrome } from '@/components/chat/ChatScreenHeaderChrome';
-import { addFavourite, hasExistingReport } from '@/lib/social-actions';
-import { User, Message } from '@/types';
+import { addFavourite, blockUser } from '@/lib/social-actions';
+import { User } from '@/types';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
 import { EMPTY_REACTION_LIST, type ReactionEmoji, type ReactionsMap } from '@/constants/chat-reactions';
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { UI_LABELS, UI_TOAST } from '@/constants/copy';
-import { isUserEffectivelyOnline } from '@/lib/utils';
+import { getEffectivePresence } from '@/lib/utils';
 import { useKeyboardHeight } from '@/hooks/use-keyboard-height';
 import { useChatRealtime } from '@/hooks/use-chat-realtime';
 import { useChatVisibilitySync } from '@/hooks/use-chat-visibility-sync';
@@ -47,6 +47,7 @@ import * as Clipboard from 'expo-clipboard';
 import { normalizeRouteParam } from '@/lib/chat-route-utils';
 import { peerSnapshotByConversationId, getLastChatRouteKey, setLastChatRouteKey } from '@/lib/chat-peer-session';
 import { buildChatListItems, type ChatListItem } from '@/lib/chat-list-build';
+import { logError, logWarn } from '@/lib/logger';
 
 export default function ChatScreen() {
   const { id: rawConversationId, otherUserId: otherUserIdRaw } = useLocalSearchParams<{
@@ -67,7 +68,7 @@ export default function ChatScreen() {
     useShallow((s) => ({ user: s.user, settings: s.settings })),
   );
   const outgoingMessagingDisabled = settings?.receive_messages === false;
-  const { messages, conversations, fetchMessages, sendMessage, deleteMessage, softDeleteMessageForSelf, markMessagesRead, addMessage, applyMessageUpdate, removeMessage } = useChatStore(
+  const { messages, conversations, fetchMessages, sendMessage, deleteMessage, softDeleteMessageForSelf, markMessagesRead } = useChatStore(
     useShallow((s) => ({
       messages: s.messages,
       conversations: s.conversations,
@@ -76,9 +77,6 @@ export default function ChatScreen() {
       deleteMessage: s.deleteMessage,
       softDeleteMessageForSelf: s.softDeleteMessageForSelf,
       markMessagesRead: s.markMessagesRead,
-      addMessage: s.addMessage,
-      applyMessageUpdate: s.applyMessageUpdate,
-      removeMessage: s.removeMessage,
     })),
   );
   // `conversationId` is `string | undefined` until the route param resolves;
@@ -366,12 +364,11 @@ export default function ChatScreen() {
         // We used to do an extra .select() here on every chat open — that was
         // a full network round-trip blocking the perceived "messages appearing".
         const peerSeed = seeded.other_user;
-        const effectiveOnline =
-          peerSeed.online_visible === false
-            ? 'offline'
-            : isUserEffectivelyOnline(peerSeed.online_status, peerSeed.last_seen)
-              ? 'online'
-              : 'offline';
+        const effectiveOnline = getEffectivePresence({
+          online_visible: peerSeed.online_visible,
+          online_status: peerSeed.online_status,
+          last_seen: peerSeed.last_seen ?? '',
+        });
         setOtherUser({ ...peerSeed, online_status: effectiveOnline });
         if (peerSeed.accepts_messages === false) setMessagingDisabled(true);
         if (await hasSymmetricBlockBetween(user.id, peerSeed.id)) {
@@ -397,12 +394,11 @@ export default function ChatScreen() {
           .eq('id', peerFromRoute)
           .maybeSingle();
         if (raw) {
-          const effectiveOnline =
-            raw.online_visible === false
-              ? 'offline'
-              : isUserEffectivelyOnline(raw.online_status, raw.last_seen)
-                ? 'online'
-                : 'offline';
+          const effectiveOnline = getEffectivePresence({
+            online_visible: raw.online_visible,
+            online_status: raw.online_status,
+            last_seen: raw.last_seen ?? '',
+          });
           setOtherUser({ ...raw, online_status: effectiveOnline });
           if (raw.accepts_messages === false) setMessagingDisabled(true);
           if (await hasSymmetricBlockBetween(user.id, peerFromRoute)) {
@@ -432,12 +428,11 @@ export default function ChatScreen() {
             .eq('id', otherId)
             .maybeSingle();
           if (raw) {
-            const effectiveOnline =
-              raw.online_visible === false
-                ? 'offline'
-                : isUserEffectivelyOnline(raw.online_status, raw.last_seen)
-                  ? 'online'
-                  : 'offline';
+            const effectiveOnline = getEffectivePresence({
+              online_visible: raw.online_visible,
+              online_status: raw.online_status,
+              last_seen: raw.last_seen ?? '',
+            });
             setOtherUser({ ...raw, online_status: effectiveOnline });
             if (raw.accepts_messages === false) setMessagingDisabled(true);
             if (await hasSymmetricBlockBetween(user.id, otherId)) {
@@ -457,10 +452,6 @@ export default function ChatScreen() {
     messagesIdSetRef,
     peerTypingTimerRef,
     typingChannelRef,
-    addMessage,
-    applyMessageUpdate,
-    removeMessage,
-    markMessagesRead,
     setPeerTyping,
     setReactions,
   });
@@ -507,7 +498,7 @@ export default function ChatScreen() {
         toastMessage = 'Message failed to send. Please try again.';
       }
       showToast({ message: toastMessage });
-      console.error('[Chat] send error:', error);
+      logError('[Chat] send error', error);
     }
   };
 
@@ -585,7 +576,7 @@ export default function ChatScreen() {
         if (error) throw error;
       }
     } catch (err) {
-      console.warn('[Chat] reaction write failed', err);
+      logWarn('[Chat] reaction write failed', err);
       // Roll back on failure.
       setReactions((prev) => {
         const next = { ...(prev[messageId] ?? {}) };
@@ -738,18 +729,9 @@ export default function ChatScreen() {
     }
   };
 
-  const handleReport = async () => {
+  const handleReport = () => {
     closeMenu();
     if (!user || !peer) return;
-    try {
-      if (await hasExistingReport(user.id, peer.id)) {
-        showToast({ message: UI_TOAST.reportExists, icon: 'information-circle-outline' });
-        return;
-      }
-    } catch {
-      showToast({ message: UI_TOAST.reportCheckFailed, icon: 'alert-circle-outline' });
-      return;
-    }
     setReportModalVisible(true);
   };
 
@@ -766,13 +748,13 @@ export default function ChatScreen() {
       actions: [
         { label: UI_LABELS.cancel, style: 'cancel' },
         { label: UI_LABELS.block, style: 'destructive', onPress: async () => {
-          const { error: blockErr } = await supabase.from('blocks').insert({ blocker_id: user.id, blocked_id: peer.id });
-          if (blockErr) {
+          try {
+            await blockUser(user.id, peer.id);
+            setBlockRelationshipActive(true);
+            router.back();
+          } catch {
             showToast({ message: 'Failed to block user. Please try again.', icon: 'alert-circle-outline' });
-            return;
           }
-          setBlockRelationshipActive(true);
-          router.back();
         }},
       ],
     });
@@ -826,7 +808,7 @@ export default function ChatScreen() {
           payload: { userId: user.id },
         })
         .catch((e: unknown) => {
-          console.warn('[Chat] typing send failed', e);
+          logWarn('[Chat] typing send failed', e);
         });
     },
     [user],

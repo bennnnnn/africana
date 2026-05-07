@@ -1,8 +1,30 @@
 import { supabase } from '@/lib/supabase';
+import { logWarn } from '@/lib/logger';
 
 export function isDuplicateSocialError(message?: string | null) {
-  return typeof message === 'string' &&
-    (message.includes('duplicate key') || message.includes('23505'));
+  return (
+    typeof message === 'string' &&
+    (message.includes('duplicate key') || message.includes('23505'))
+  );
+}
+
+/** Hide shared 1:1 threads from both users' inboxes after a block (idempotent). */
+export async function hideSharedConversationsForBlock(blockerId: string, blockedId: string) {
+  const { data: convs, error } = await supabase
+    .from('conversations')
+    .select('id')
+    .contains('participant_ids', [blockerId, blockedId]);
+
+  if (error || !convs?.length) return;
+
+  const rows = convs.flatMap((c) => [
+    { user_id: blockerId, conversation_id: c.id },
+    { user_id: blockedId, conversation_id: c.id },
+  ]);
+
+  await supabase.from('conversation_hidden').upsert(rows, {
+    onConflict: 'user_id,conversation_id',
+  });
 }
 
 export async function isBlockedRelationship(userAId: string, userBId: string) {
@@ -14,8 +36,6 @@ export async function isBlockedRelationship(userAId: string, userBId: string) {
     )
     .maybeSingle();
 
-  // If the query fails we must NOT silently return false (= "not blocked"),
-  // because that would let messages/favourites slip through to blocked users.
   if (error) throw error;
   return !!data;
 }
@@ -44,47 +64,47 @@ export async function removeFavourite(userId: string, favouritedId: string) {
   if (error) throw error;
 }
 
-export async function hasExistingReport(reporterId: string, reportedId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('reports')
-    .select('id')
-    .eq('reporter_id', reporterId)
-    .eq('reported_id', reportedId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return !!data;
-}
-
+/**
+ * One round-trip: rely on UNIQUE(reporter_id, reported_id) for idempotency.
+ * Also blocks the pair and hides shared conversations (safety UX).
+ */
 export async function reportUser(reporterId: string, reportedId: string, reason: string) {
-  const { data: existingReport, error: existingError } = await supabase
-    .from('reports')
-    .select('id')
-    .eq('reporter_id', reporterId)
-    .eq('reported_id', reportedId)
-    .maybeSingle();
+  const { error } = await supabase.from('reports').insert({
+    reporter_id: reporterId,
+    reported_id: reportedId,
+    reason,
+  });
 
-  if (existingError) {
-    throw existingError;
+  if (!error) {
+    try {
+      await blockUser(reporterId, reportedId);
+    } catch (e) {
+      logWarn('reportUser: auto-block failed', e);
+    }
+    return 'inserted' as const;
   }
-
-  if (existingReport) return 'exists' as const;
-
-  const { error } = await supabase
-    .from('reports')
-    .insert({ reporter_id: reporterId, reported_id: reportedId, reason });
-
-  if (!error) return 'inserted' as const;
   if (isDuplicateSocialError(error.message)) return 'exists' as const;
   throw error;
 }
 
 export async function blockUser(blockerId: string, blockedId: string) {
-  const { error } = await supabase
-    .from('blocks')
-    .insert({ blocker_id: blockerId, blocked_id: blockedId });
+  const { error } = await supabase.from('blocks').insert({
+    blocker_id: blockerId,
+    blocked_id: blockedId,
+  });
 
-  if (!error) return 'inserted' as const;
-  if (isDuplicateSocialError(error.message)) return 'exists' as const;
+  if (!error) {
+    await hideSharedConversationsForBlock(blockerId, blockedId);
+    return 'inserted' as const;
+  }
+  if (isDuplicateSocialError(error.message)) {
+    await hideSharedConversationsForBlock(blockerId, blockedId);
+    return 'exists' as const;
+  }
   throw error;
+}
+
+export async function unblockUser(blockId: string) {
+  const { error } = await supabase.from('blocks').delete().eq('id', blockId);
+  if (error) throw error;
 }

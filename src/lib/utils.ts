@@ -75,6 +75,18 @@ export function isUserEffectivelyOnline(
   return Date.now() - seenAt <= freshnessMinutes * 60 * 1000;
 }
 
+type PresenceInput = {
+  online_visible?: boolean | null;
+  online_status?: string | null;
+  last_seen?: string | null;
+};
+
+/** Normalizes DB presence fields to the string the UI expects (`online` | `offline`). */
+export function getEffectivePresence(user: PresenceInput): 'online' | 'offline' {
+  if (user.online_visible === false) return 'offline';
+  return isUserEffectivelyOnline(user.online_status, user.last_seen) ? 'online' : 'offline';
+}
+
 export function getEffectiveAgePreferenceRange(
   minAge: number | null | undefined,
   maxAge: number | null | undefined,
@@ -84,6 +96,9 @@ export function getEffectiveAgePreferenceRange(
 
   // Treat older implicit defaults as "not explicitly set" so the app shows
   // the current product default unless the user chose something themselves.
+  //
+  // TODO(2026-07-01): delete once all persisted defaults are migrated off
+  // (min=DEFAULT_MIN_AGE_PREFERENCE and max=40/60).
   const looksLikeLegacyDefault =
     normalizedMin === DEFAULT_MIN_AGE_PREFERENCE &&
     (normalizedMax === 40 || normalizedMax === 60);

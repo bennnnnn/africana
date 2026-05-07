@@ -10,10 +10,11 @@ import { setProfileSeed } from '@/lib/profile-seed-cache';
 import haptics from '@/lib/haptics';
 import { User } from '@/types';
 import { isUuidString } from '@/lib/utils';
+import { fetchSymmetricBlockedPeerIds } from '@/lib/block-queries';
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { LIKES_TAB_ORDER, LIKES_LIST_STALE_MS, LIKES_SEEN_AT_COLUMN, type LikesTab } from '@/constants/likes-screen';
 import { likesParamForTab, likesTabFromPathSegment } from '@/constants/likes-routes';
-import { likesTabOffsets, likesTabHasMore, resetLikesTabPagination } from '@/lib/likes-tab-pagination';
+import { _likesTabOffsets, _likesTabHasMore, resetLikesTabPagination } from '@/lib/likes-tab-pagination';
 import type { LikesHubListItem } from '@/lib/likes-fetch-users';
 import { fetchUsersForLikesTab, prefetchLikesUserImages } from '@/lib/likes-fetch-users';
 import { useDialog } from '@/components/ui/DialogProvider';
@@ -96,14 +97,8 @@ export function useLikesHubController(): LikesHubContextValue {
   const fetchBlockedSet = useCallback(async (force = false) => {
     if (!user) return new Set<string>();
     if (!force && blockedIdsRef.current) return blockedIdsRef.current;
-    const { data: blocksData } = await supabase
-      .from('blocks')
-      .select('blocked_id, blocker_id')
-      .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
-
-    const blockedIds = new Set<string>(
-      (blocksData ?? []).map((b) => (b.blocker_id === user.id ? b.blocked_id : b.blocker_id)),
-    );
+    const ids = await fetchSymmetricBlockedPeerIds(user.id);
+    const blockedIds = new Set(ids);
     blockedIdsRef.current = blockedIds;
     return blockedIds;
   }, [user]);
@@ -119,7 +114,7 @@ export function useLikesHubController(): LikesHubContextValue {
       const lastAt = tabFetchedAtRef.current[t] ?? 0;
       if (!force && !isLoadMore && Date.now() - lastAt < LIKES_LIST_STALE_MS) return;
 
-      if (isLoadMore && !likesTabHasMore[t]) return;
+      if (isLoadMore && !_likesTabHasMore[t]) return;
 
       if (isLoadMore) {
         setLoadingMore((prev) => ({ ...prev, [t]: true }));
@@ -129,7 +124,7 @@ export function useLikesHubController(): LikesHubContextValue {
       const p = (async () => {
         try {
           const blockedSet = await fetchBlockedSet(force);
-          const offset = isLoadMore ? likesTabOffsets[t] : 0;
+          const offset = isLoadMore ? _likesTabOffsets[t] : 0;
           const { items, hasMore } = await fetchUsersForLikesTab(
             t,
             user.id,
@@ -149,8 +144,8 @@ export function useLikesHubController(): LikesHubContextValue {
             };
           });
 
-          likesTabOffsets[t] = offset + items.length;
-          likesTabHasMore[t] = hasMore;
+          _likesTabOffsets[t] = offset + items.length;
+          _likesTabHasMore[t] = hasMore;
 
           setLoadedTabs((prev) => {
             if (prev.has(t)) return prev;
@@ -285,20 +280,6 @@ export function useLikesHubController(): LikesHubContextValue {
       if (!user) return;
       void fetchActivityCountsRef.current();
       void loadTabRef.current(activeTabRef.current, false);
-      void supabase
-        .from('user_settings')
-        .select('likes_seen_at, views_seen_at, favourites_seen_at, matches_seen_at')
-        .eq('user_id', user.id)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (!data) return;
-          setActivitySeenAt({
-            received: data.likes_seen_at ?? null,
-            viewers: data.views_seen_at ?? null,
-            favourites: data.favourites_seen_at ?? null,
-            matches: data.matches_seen_at ?? null,
-          });
-        });
     }, [user?.id]),
   );
 
@@ -383,7 +364,7 @@ export function useLikesHubController(): LikesHubContextValue {
   const activeList = lists[activeTab] ?? [];
   const activeError = tabErrors[activeTab];
   const activeLoadingMore = loadingMore[activeTab];
-  const activeHasMore = likesTabHasMore[activeTab];
+  const activeHasMore = _likesTabHasMore[activeTab];
   const showMessageButton = activeTab === 'matches';
 
   return {

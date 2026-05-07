@@ -21,7 +21,7 @@ A browse-based dating app for Africans and the African diaspora — built with R
 | Navigation | Expo Router 5 (file-based) |
 | Backend | Supabase (Auth, PostgreSQL, Realtime, Storage) |
 | State | Zustand |
-| Styling | NativeWind (Tailwind CSS for RN) |
+| Styling | React Native `StyleSheet` (+ shared theme constants) |
 | Images | expo-image |
 | Language | TypeScript (strict) |
 
@@ -38,7 +38,7 @@ npm install
 ### 2. Set up Supabase
 
 1. Create a project at [supabase.com](https://supabase.com)
-2. Run the SQL schema in `src/lib/supabase-schema.sql` via the Supabase SQL editor
+2. Apply migrations: install the [Supabase CLI](https://supabase.com/docs/guides/cli) and run `supabase db push` (or `supabase link` + `db push`) so `supabase/migrations/` is the source of truth
 3. Copy your project URL and anon key
 
 ### 3. Configure Environment
@@ -51,6 +51,7 @@ Edit `.env`:
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+EXPO_PUBLIC_SENTRY_DSN=https://examplePublicKey@o0.ingest.sentry.io/0
 ```
 
 ### 4. Run
@@ -83,11 +84,11 @@ africana/
 │   │   └── chat/            # (future: message components)
 │   ├── store/               # Zustand stores (auth, discover, chat)
 │   ├── lib/
-│   │   ├── supabase.ts      # Supabase client
-│   │   └── supabase-schema.sql  # Database schema
+│   │   └── supabase.ts      # Supabase client
 │   ├── types/               # TypeScript types
 │   └── constants/           # Colors, countries list, config
-└── global.css               # Tailwind CSS entry
+├── supabase/
+│   └── migrations/          # Postgres schema (canonical)
 ```
 
 ## Database Schema

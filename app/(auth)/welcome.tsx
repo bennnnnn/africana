@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { signInWithGoogle } from '@/lib/google-auth';
 import { useAuthStore } from '@/store/auth.store';
 import { COLORS, FONT } from '@/constants';
-import { isProfileCompleteForDiscover, onboardingHrefFromSession } from '@/lib/profile-completion';
+import { redirectAfterAuth } from '@/lib/profile-completion';
 import { appDialog } from '@/lib/app-dialog';
 
 const { width, height } = Dimensions.get('window');
@@ -38,7 +38,7 @@ const SLIDES = [
 ];
 
 export default function WelcomeScreen() {
-  const { fetchProfile, fetchSettings } = useAuthStore();
+  const { hydrateUserFromServer } = useAuthStore();
   const [googleLoading, setGoogleLoading] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const flatListRef = useRef<FlatList>(null);
@@ -78,14 +78,9 @@ export default function WelcomeScreen() {
     try {
       const session = await signInWithGoogle();
       if (session?.user) {
-        await fetchProfile(session.user.id);
-        await fetchSettings(session.user.id);
+        await hydrateUserFromServer(session.user.id);
         const { user } = useAuthStore.getState();
-        if (isProfileCompleteForDiscover(user)) {
-          router.replace('/(tabs)/discover');
-        } else {
-          router.replace(onboardingHrefFromSession(session));
-        }
+        redirectAfterAuth(router, user, session);
       }
     } catch (e: any) {
       if (e?.message !== 'User cancelled') {
@@ -200,7 +195,7 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.green,
   },
   circle: {
     position: 'absolute',

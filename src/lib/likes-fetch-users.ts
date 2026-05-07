@@ -24,26 +24,12 @@ function parseMatchesRpcPayload(data: unknown): LikesHubListItem[] {
   for (const row of raw) {
     if (!row || typeof row !== 'object') continue;
     const rec = row as Record<string, unknown>;
-    if (typeof rec.matched_at === 'string') {
-      const { matched_at: _m, ...profile } = rec;
-      const candidate = profile as Record<string, unknown>;
-      const id = typeof candidate.id === 'string' ? candidate.id : undefined;
-      if (!isUuidString(id)) continue;
-      out.push({ user: candidate as unknown as User, activityAt: rec.matched_at });
-      continue;
-    }
-    // Legacy RPC shape (plain profile rows) before jsonb migration — approximate time.
-    if (typeof rec.id === 'string') {
-      if (!isUuidString(rec.id)) continue;
-      const u = rec as unknown as User;
-      const activityAt =
-        typeof rec.updated_at === 'string'
-          ? rec.updated_at
-          : typeof rec.created_at === 'string'
-            ? rec.created_at
-            : new Date().toISOString();
-      out.push({ user: u, activityAt });
-    }
+    if (typeof rec.matched_at !== 'string') continue;
+    const { matched_at: _m, ...profile } = rec;
+    const candidate = profile as Record<string, unknown>;
+    const id = typeof candidate.id === 'string' ? candidate.id : undefined;
+    if (!isUuidString(id)) continue;
+    out.push({ user: candidate as unknown as User, activityAt: rec.matched_at });
   }
   return out;
 }

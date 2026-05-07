@@ -8,7 +8,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONT, RADIUS, SHADOWS } from '@/constants';
+import { COLORS, FONT } from '@/constants';
 
 export const settingsStyles = StyleSheet.create({
   scrollContent: {
@@ -32,22 +32,6 @@ export const settingsStyles = StyleSheet.create({
     lineHeight: 17,
     marginBottom: 8,
     paddingHorizontal: 2,
-  },
-});
-
-/** Grouped list container for the settings hub (iOS-style inset group). */
-export function SettingsHubCard({ children }: { children: React.ReactNode }) {
-  return <View style={hubCardStyles.card}>{children}</View>;
-}
-
-const hubCardStyles = StyleSheet.create({
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLORS.border,
-    overflow: 'hidden',
-    ...SHADOWS.sm,
   },
 });
 

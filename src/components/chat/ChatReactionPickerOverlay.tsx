@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Animated } from 'react-native';
 import { REACTIONS, type ReactionEmoji, type ReactionsMap } from '@/constants/chat-reactions';
-import { chatScreenStyles as s } from '@/components/chat/chat-screen-styles';
+import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
 
 type Props = {
   messageId: string;
