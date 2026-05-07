@@ -15,7 +15,9 @@ import { COLORS, RADIUS, FONT } from '@/constants';
 import { HeroPlaceholder } from '@/components/ui/HeroPlaceholder';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
-import { isUserEffectivelyOnline } from '@/lib/utils';
+import { getEffectivePresence } from '@/lib/utils';
+import { profileImageUrlForList } from '@/lib/storage-image-url';
+import { usePresenceStore } from '@/store/presence.store';
 import haptics from '@/lib/haptics';
 
 interface UserCardProps {
@@ -34,12 +36,23 @@ const NEW_MEMBER_WINDOW_MS = 10 * 24 * 60 * 60 * 1000; // 10 days
 
 function UserCardInner({ user, cardWidth, cardHeight, beforeNavigate, onLongPress }: UserCardProps) {
   const photoUrl = user.profile_photos?.[0] || user.avatar_url || null;
+  const displayPhoto = photoUrl ? profileImageUrlForList(photoUrl) ?? photoUrl : null;
   const hasPhoto = !!photoUrl;
   const shortLocation = user.city || user.state || user.country || '';
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  const isOnline = isUserEffectivelyOnline(user.online_status, user.last_seen);
+  const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
+  const isOnline =
+    getEffectivePresence(
+      {
+        id: user.id,
+        online_visible: user.online_visible,
+        online_status: user.online_status,
+        last_seen: user.last_seen,
+      },
+      peerOnlineIds,
+    ) === 'online';
 
   useEffect(() => {
     if (!isOnline) return;
@@ -69,7 +82,9 @@ function UserCardInner({ user, cardWidth, cardHeight, beforeNavigate, onLongPres
       onPress={() => {
         setProfileSeed(user);
         const photos = (user.profile_photos ?? []).filter(Boolean).slice(0, 3);
-        if (photos.length > 0) void Image.prefetch(photos);
+        if (photos.length > 0) {
+          void Image.prefetch(photos.map((u) => profileImageUrlForList(u) ?? u));
+        }
         beforeNavigate?.();
         router.push(`/(profile)/${user.id}`);
       }}
@@ -84,7 +99,7 @@ function UserCardInner({ user, cardWidth, cardHeight, beforeNavigate, onLongPres
       {/* ── Photo or placeholder — fills the card ── */}
       {hasPhoto ? (
         <Image
-          source={{ uri: photoUrl! }}
+          source={{ uri: displayPhoto! }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={200}

@@ -2,15 +2,16 @@ import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '@/lib/supabase';
+import { logWarn } from '@/lib/logger';
 
 /**
  * Compress + downscale before upload. Uploading the raw 12MP HEIC straight
  * from the camera roll is wasteful — for dating-app use-cases 1600px on the
- * long edge at JPEG q=0.82 is indistinguishable to the human eye and cuts
- * payload by ~8-20x.
+ * long edge at moderate JPEG quality is indistinguishable on phone screens and
+ * cuts payload vs uploading full camera resolution.
  */
-const MAX_DIMENSION = 1600;
-const JPEG_QUALITY = 0.82;
+const MAX_DIMENSION = 1080;
+const JPEG_QUALITY = 0.78;
 
 async function compressForUpload(localUri: string): Promise<{ uri: string; mimeType: string }> {
   try {
@@ -23,7 +24,7 @@ async function compressForUpload(localUri: string): Promise<{ uri: string; mimeT
   } catch (e) {
     // If manipulation fails (very large file, unsupported format) we fall back
     // to the original URI — upload can still succeed, just bigger.
-    console.warn('[storage-image-upload] compress failed, uploading original:', e);
+    logWarn('[storage-image-upload] compress failed, uploading original', e);
     return { uri: localUri, mimeType: '' };
   }
 }

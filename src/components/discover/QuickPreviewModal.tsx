@@ -17,7 +17,9 @@ import { User } from '@/types';
 import { COLORS, RADIUS, FONT, SHADOWS } from '@/constants';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
-import { isUserEffectivelyOnline, formatLastSeen } from '@/lib/utils';
+import { getEffectivePresence, formatLastSeen } from '@/lib/utils';
+import { profileImageUrlForList } from '@/lib/storage-image-url';
+import { usePresenceStore } from '@/store/presence.store';
 import { useAuthStore } from '@/store/auth.store';
 import { useDiscoverStore } from '@/store/discover.store';
 import { useDialog } from '@/components/ui/DialogProvider';
@@ -42,8 +44,19 @@ function CardContent({ user, cardWidth, cardHeight }: { user: User; cardWidth: n
     const p = user.profile_photos ?? [];
     return p.length > 0 ? p : user.avatar_url ? [user.avatar_url] : [];
   }, [user]);
+  const heroUri = photos[0] ? profileImageUrlForList(photos[0]) ?? photos[0] : null;
 
-  const isOnline = isUserEffectivelyOnline(user.online_status, user.last_seen);
+  const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
+  const isOnline =
+    getEffectivePresence(
+      {
+        id: user.id,
+        online_visible: user.online_visible,
+        online_status: user.online_status,
+        last_seen: user.last_seen,
+      },
+      peerOnlineIds,
+    ) === 'online';
   const location = [user.city, user.state, user.country].filter(Boolean).join(', ');
   const activityLabel = isOnline
     ? 'Online'
@@ -53,9 +66,9 @@ function CardContent({ user, cardWidth, cardHeight }: { user: User; cardWidth: n
 
   return (
     <View style={{ width: cardWidth, height: cardHeight, borderRadius: RADIUS.xxl, overflow: 'hidden', backgroundColor: COLORS.savanna }}>
-      {photos[0] ? (
+      {heroUri ? (
         <Image
-          source={{ uri: photos[0] }}
+          source={{ uri: heroUri }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={0}
@@ -228,7 +241,7 @@ export function QuickPreviewModal({ visible, users, startIndex, onClose }: Quick
     onClose();
     setProfileSeed(user);
     const pics = (user.profile_photos ?? []).filter(Boolean).slice(0, 3);
-    if (pics.length > 0) void Image.prefetch(pics);
+    if (pics.length > 0) void Image.prefetch(pics.map((u) => profileImageUrlForList(u) ?? u));
     router.push(`/(profile)/${user.id}`);
   }, [user, onClose]);
 

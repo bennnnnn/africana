@@ -28,6 +28,7 @@ import { COLORS, RADIUS, FONT } from '@/constants';
 import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import haptics from '@/lib/haptics';
 import { getEffectivePresence } from '@/lib/utils';
+import { usePresenceStore } from '@/store/presence.store';
 import { TIMINGS } from '@/lib/timings';
 import dayjs from 'dayjs';
 
@@ -71,11 +72,13 @@ const ConversationRow = memo(function ConversationRow({
   isTyping,
   onPress,
   onLongPress,
+  peerOnlineIds,
 }: {
   item: Conversation;
   isTyping: boolean;
   onPress: (item: Conversation) => void;
   onLongPress: (item: Conversation) => void;
+  peerOnlineIds: ReadonlySet<string>;
 }) {
   const other = item.other_user;
   const hasUnread = (item.unread_count ?? 0) > 0;
@@ -92,11 +95,15 @@ const ConversationRow = memo(function ConversationRow({
         uri={other?.avatar_url}
         name={other?.full_name ?? '?'}
         size={52}
-        onlineStatus={getEffectivePresence({
-          online_visible: other?.online_visible,
-          online_status: other?.online_status,
-          last_seen: other?.last_seen ?? '',
-        })}
+        onlineStatus={getEffectivePresence(
+          {
+            id: other?.id,
+            online_visible: other?.online_visible,
+            online_status: other?.online_status,
+            last_seen: other?.last_seen ?? '',
+          },
+          peerOnlineIds,
+        )}
         showStatus
       />
 
@@ -148,6 +155,7 @@ export default function MessagesScreen() {
     })),
   );
   const { showDialog, showToast } = useDialog();
+  const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -362,6 +370,7 @@ export default function MessagesScreen() {
             isTyping={!!typingMap[item.id]}
             onPress={handleRowPress}
             onLongPress={handleRowLongPress}
+            peerOnlineIds={peerOnlineIds}
           />
         )}
       />

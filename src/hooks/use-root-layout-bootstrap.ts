@@ -17,13 +17,11 @@ import { hydrateProfileSeedCache } from '@/lib/profile-seed-cache';
 import { redirectAfterAuth } from '@/lib/profile-completion';
 import { logError, logWarn } from '@/lib/logger';
 import { isUuidString } from '@/lib/utils';
-import { TIMINGS } from '@/lib/timings';
 import { resetClientModuleStateAtLogout } from '@/lib/reset-client-module-state-at-logout';
+import { joinAppPresenceChannel, leaveAppPresenceChannel } from '@/lib/app-presence-channel';
 import { useAuthStore } from '@/store/auth.store';
 
 type RouterLike = { push: (href: any) => void; replace: (href: any) => void };
-
-const ONLINE_HEARTBEAT_MS = TIMINGS.presenceHeartbeatMs;
 
 /**
  * Root app bootstrap + subscriptions (auth/session hydration, deep links, notifications, presence).
@@ -41,7 +39,6 @@ export function useRootLayoutBootstrap(params: {
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const notifResponseSub = useRef<any>(null);
   const notifReceivedSub = useRef<any>(null);
-  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Do not `require('expo-notifications')` in Expo Go — it logs noisy errors.
   const isExpoGo = Constants.appOwnership === 'expo';
@@ -63,24 +60,6 @@ export function useRootLayoutBootstrap(params: {
       .update({ online_status: status, last_seen: new Date().toISOString() })
       .eq('id', userId);
   }
-
-  async function pingLastSeen(userId: string) {
-    await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', userId);
-  }
-
-  const startHeartbeat = (userId: string) => {
-    if (heartbeatRef.current) return;
-    heartbeatRef.current = setInterval(() => {
-      void pingLastSeen(userId).catch(() => {});
-    }, ONLINE_HEARTBEAT_MS);
-  };
-
-  const stopHeartbeat = () => {
-    if (heartbeatRef.current) {
-      clearInterval(heartbeatRef.current);
-      heartbeatRef.current = null;
-    }
-  };
 
   useEffect(() => {
     initSentry();
@@ -106,7 +85,7 @@ export function useRootLayoutBootstrap(params: {
             useAuthStore.getState().patchUser({ online_status: 'online' });
             InteractionManager.runAfterInteractions(() => {
               void setOnlineStatus(uid, 'online').catch(() => {});
-              startHeartbeat(uid);
+              void joinAppPresenceChannel(uid).catch((e) => logWarn('[presence] bootstrap join', e));
               queueWelcomeEmail(uid);
               void registerForPushNotifications(uid).then((r) => {
                 if (!r.ok && r.reason !== 'expo_go') {
@@ -153,9 +132,9 @@ export function useRootLayoutBootstrap(params: {
           if (nextState === 'active' && prev !== 'active') {
             void setOnlineStatus(session.user.id, 'online').catch((e) => logError('setOnlineStatus', e));
             useAuthStore.getState().patchUser({ online_status: 'online' });
-            startHeartbeat(session.user.id);
+            void joinAppPresenceChannel(session.user.id).catch((e) => logWarn('[presence] foreground join', e));
           } else if (nextState === 'background' || nextState === 'inactive') {
-            stopHeartbeat();
+            void leaveAppPresenceChannel().catch(() => {});
             void setOnlineStatus(session.user.id, 'offline').catch((e) => logError('setOnlineStatus', e));
             useAuthStore.getState().patchUser({ online_status: 'offline' });
           }
@@ -183,7 +162,7 @@ export function useRootLayoutBootstrap(params: {
         });
         if (event === 'SIGNED_IN') {
           track(EVENTS.AUTH_LOGIN);
-          startHeartbeat(uid);
+          void joinAppPresenceChannel(uid).catch((e) => logWarn('[presence] sign-in join', e));
         }
       } else if (event === 'SIGNED_OUT') {
         setSentryUser(null);
@@ -191,7 +170,6 @@ export function useRootLayoutBootstrap(params: {
         track(EVENTS.AUTH_SIGNOUT);
         resetAnalytics();
         resetLifecycleEmailQueue();
-        stopHeartbeat();
         router.replace('/(auth)/welcome');
       }
     });
@@ -237,7 +215,7 @@ export function useRootLayoutBootstrap(params: {
       appStateSub.remove();
       notifResponseSub.current?.remove();
       notifReceivedSub.current?.remove();
-      stopHeartbeat();
+      void leaveAppPresenceChannel().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -6,7 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import type { User } from '@/types';
 import { COLORS } from '@/constants';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
-import { formatLastSeen } from '@/lib/utils';
+import { formatLastSeen, getEffectivePresence } from '@/lib/utils';
+import { usePresenceStore } from '@/store/presence.store';
+import { profileImageUrlForList } from '@/lib/storage-image-url';
 import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
 
 type SelectionProps = {
@@ -65,6 +67,20 @@ export function ChatScreenHeaderChrome(props: Props) {
   }
 
   const { peer, avatar, peerTyping, onOpenMenu } = props;
+  const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
+  const displayOnline =
+    peer &&
+    getEffectivePresence(
+      {
+        id: peer.id,
+        online_visible: peer.online_visible,
+        online_status: peer.online_status,
+        last_seen: peer.last_seen ?? '',
+      },
+      peerOnlineIds,
+    ) === 'online';
+  const headerImageUri = avatar ? profileImageUrlForList(avatar) ?? avatar : null;
+
   return (
     <View style={s.header}>
       <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
@@ -79,10 +95,10 @@ export function ChatScreenHeaderChrome(props: Props) {
           }}
           style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
         >
-          {avatar ? (
+          {headerImageUri ? (
             <View>
-              <Image key={peer.id} source={{ uri: avatar }} style={s.headerAvatar} contentFit="cover" />
-              {peer.online_status === 'online' ? (
+              <Image key={peer.id} source={{ uri: headerImageUri }} style={s.headerAvatar} contentFit="cover" />
+              {displayOnline ? (
                 <View style={[s.onlineDot, { backgroundColor: COLORS.online }]} />
               ) : null}
             </View>
@@ -97,7 +113,7 @@ export function ChatScreenHeaderChrome(props: Props) {
                 {
                   color: peerTyping
                     ? COLORS.primary
-                    : peer.online_status === 'online'
+                    : displayOnline
                       ? COLORS.online
                       : COLORS.textMuted,
                 },
@@ -105,7 +121,7 @@ export function ChatScreenHeaderChrome(props: Props) {
             >
               {peerTyping
                 ? 'Typing…'
-                : peer.online_status === 'online'
+                : displayOnline
                   ? 'Online'
                   : peer.online_visible === false
                     ? 'Offline'

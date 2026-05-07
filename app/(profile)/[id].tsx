@@ -73,6 +73,7 @@ import { ProfileDiscoverGateModal } from '@/components/profile/ProfileDiscoverGa
 import { pr } from '@/components/profile/profile-view-styles';
 import { GENDER_LABEL, FLOAT_ACTION_SIZE, floatingActionCircle } from '@/components/profile/profile-view-constants';
 import { getEffectivePresence, isUserEffectivelyOnline, isUuidString } from '@/lib/utils';
+import { usePresenceStore } from '@/store/presence.store';
 import { SPRING, SNAP_IN } from '@/lib/motion';
 
 export default function ProfileViewScreen() {
@@ -90,6 +91,7 @@ export default function ProfileViewScreen() {
   const { user: currentUser, session } = useAuthStore(
     useShallow((s) => ({ user: s.user, session: s.session })),
   );
+  const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
   const profileScrollRef = useRef<ScrollView>(null);
   const pullPanRef = useRef(null);
   const [strengthBannerDismissed, setStrengthBannerDismissed] = useState(false);
@@ -819,11 +821,15 @@ export default function ProfileViewScreen() {
     ? isUserEffectivelyOnline(profile.online_status, profile.last_seen)
       ? 'online'
       : 'offline'
-    : getEffectivePresence({
-        online_visible: profile.online_visible,
-        online_status: profile.online_status,
-        last_seen: profile.last_seen ?? '',
-      });
+    : getEffectivePresence(
+        {
+          id: profile.id,
+          online_visible: profile.online_visible,
+          online_status: profile.online_status,
+          last_seen: profile.last_seen ?? '',
+        },
+        peerOnlineIds,
+      );
 
   const recipientMessagesPaused = !isOwnProfile && profile.accepts_messages === false;
 

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import type { User } from '@/types';
 import { LIKES_PAGE_SIZE, type LikesTab } from '@/constants/likes-screen';
 import { isUuidString } from '@/lib/utils';
+import { profileImageUrlForList } from '@/lib/storage-image-url';
 
 export type LikesHubListItem = {
   user: User;
@@ -111,7 +112,8 @@ export async function fetchUsersForLikesTab(
 export function prefetchLikesUserImages(items: LikesHubListItem[]): void {
   const urls = items
     .map((it) => it.user.avatar_url || (it.user.profile_photos ?? [])[0])
-    .filter((url): url is string => !!url);
+    .filter((url): url is string => !!url)
+    .map((url) => profileImageUrlForList(url) ?? url);
   if (urls.length > 0) {
     void Image.prefetch(urls);
   }

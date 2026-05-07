@@ -15,7 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useTheme } from '@/theme/ThemeProvider';
-import { isUserEffectivelyOnline } from '@/lib/utils';
+import { getEffectivePresence } from '@/lib/utils';
+import { usePresenceStore } from '@/store/presence.store';
+import { profileImageUrlForList } from '@/lib/storage-image-url';
 import { DEFAULT_AVATAR } from '@/constants';
 import { User } from '@/types';
 import { filterVisibleUserEntities } from '@/lib/social-visibility';
@@ -52,7 +54,20 @@ const ViewerRowItem = memo(function ViewerRowItem({
   onOpen: (v: User) => void;
 }) {
   const v = item.viewer;
-  const avatar = v.avatar_url || (v.profile_photos ?? [])[0] || `${DEFAULT_AVATAR}${encodeURIComponent((v.full_name ?? '?').charAt(0))}`;
+  const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
+  const avatarRaw =
+    v.avatar_url || (v.profile_photos ?? [])[0] || `${DEFAULT_AVATAR}${encodeURIComponent((v.full_name ?? '?').charAt(0))}`;
+  const avatar = profileImageUrlForList(avatarRaw) ?? avatarRaw;
+  const showOnlineDot =
+    getEffectivePresence(
+      {
+        id: v.id,
+        online_visible: v.online_visible,
+        online_status: v.online_status,
+        last_seen: v.last_seen,
+      },
+      peerOnlineIds,
+    ) === 'online';
   const location = [v.city, v.country].filter(Boolean).join(', ');
   return (
     <TouchableOpacity
@@ -74,7 +89,7 @@ const ViewerRowItem = memo(function ViewerRowItem({
           transition={120}
           recyclingKey={v.id}
         />
-        {isUserEffectivelyOnline(v.online_status, v.last_seen) && (
+        {showOnlineDot && (
           <View style={{
             position: 'absolute', bottom: 1, right: 1,
             width: 12, height: 12, borderRadius: 6,

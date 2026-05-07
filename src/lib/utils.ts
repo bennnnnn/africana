@@ -1,12 +1,8 @@
 /**
- * How recent `profiles.last_seen` must be before we consider someone actually
- * online. The client heartbeats `last_seen` every 60 s while the app is
- * foregrounded (see `app/_layout.tsx`), so 3 minutes gives ~2 missed
- * heartbeats of grace before we mark the user as offline. This is what makes
- * the presence indicator self-healing — if the app force-quits, crashes,
- * loses network, or the OS kills it without the AppState→background event
- * firing, the user naturally falls off the online list within a few minutes
- * instead of being stuck "online" indefinitely.
+ * How recent `profiles.last_seen` must be before we treat DB `online_status='online'`
+ * as trustworthy. Live "green dot" for other users also uses Supabase Realtime Presence
+ * (`app-presence-channel`) so we do not rely on periodic `last_seen` writes.
+ * This window still self-heals stale rows when the app dies without a background transition.
  */
 export const ONLINE_FRESHNESS_MINUTES = 3;
 
@@ -76,14 +72,22 @@ export function isUserEffectivelyOnline(
 }
 
 type PresenceInput = {
+  id?: string;
   online_visible?: boolean | null;
   online_status?: string | null;
   last_seen?: string | null;
 };
 
-/** Normalizes DB presence fields to the string the UI expects (`online` | `offline`). */
-export function getEffectivePresence(user: PresenceInput): 'online' | 'offline' {
+/**
+ * Normalizes DB presence + optional Realtime Presence peer set to `online` | `offline`.
+ * When `peerOnlineUserIds` contains `user.id`, the user counts as online without a DB write.
+ */
+export function getEffectivePresence(
+  user: PresenceInput,
+  peerOnlineUserIds?: ReadonlySet<string> | null,
+): 'online' | 'offline' {
   if (user.online_visible === false) return 'offline';
+  if (user.id && peerOnlineUserIds?.has(user.id)) return 'online';
   return isUserEffectivelyOnline(user.online_status, user.last_seen) ? 'online' : 'offline';
 }
 

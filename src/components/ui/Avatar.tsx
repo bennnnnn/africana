@@ -2,6 +2,7 @@ import React from 'react';
 import { View, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
+import { profileImageUrlForList } from '@/lib/storage-image-url';
 import { OnlineStatus } from '@/types';
 
 interface AvatarProps {
@@ -16,7 +17,9 @@ interface AvatarProps {
 export function Avatar({ uri, name = '?', size = 48, onlineStatus, showStatus = false, style }: AvatarProps) {
   const statusColor = onlineStatus === 'online' ? COLORS.online : COLORS.offline;
 
-  const avatarUri = uri || `${DEFAULT_AVATAR}${encodeURIComponent(name.charAt(0).toUpperCase())}`;
+  const fallback = `${DEFAULT_AVATAR}${encodeURIComponent(name.charAt(0).toUpperCase())}`;
+  const raw = uri?.trim() ? uri.trim() : fallback;
+  const avatarUri = profileImageUrlForList(raw) ?? raw;
 
   return (
     <View style={[{ width: size, height: size }, style]}>

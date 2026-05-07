@@ -26,6 +26,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { UI_TOAST } from '@/constants/copy';
 import { getOnlineFreshnessCutoffISO, getEffectivePresence } from '@/lib/utils';
+import { usePresenceStore } from '@/store/presence.store';
+import { profileImageUrlForList } from '@/lib/storage-image-url';
 import { TIMINGS } from '@/lib/timings';
 import haptics from '@/lib/haptics';
 
@@ -40,7 +42,9 @@ const OnlineRow = memo(function OnlineRow({
   onOpen: (u: User) => void;
   onMessage: (id: string) => void;
 }) {
-  const avatar = item.avatar_url || item.profile_photos?.[0] || `${DEFAULT_AVATAR}${encodeURIComponent(item.full_name.charAt(0))}`;
+  const avatarRaw =
+    item.avatar_url || item.profile_photos?.[0] || `${DEFAULT_AVATAR}${encodeURIComponent(item.full_name.charAt(0))}`;
+  const avatar = profileImageUrlForList(avatarRaw) ?? avatarRaw;
   const location = [item.city, item.country].filter(Boolean).join(', ');
   const today = new Date();
   const birthdate = new Date(item.birthdate);
@@ -118,6 +122,7 @@ const OnlineRow = memo(function OnlineRow({
 });
 
 export default function OnlineScreen() {
+  const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
   const { user } = useAuthStore();
   const { showToast } = useDialog();
   const getOrCreateConversation = useChatStore((s) => s.getOrCreateConversation);
@@ -184,13 +189,17 @@ export default function OnlineScreen() {
     () =>
       onlineUsers.filter(
         (u) =>
-          getEffectivePresence({
-            online_visible: u.online_visible,
-            online_status: u.online_status,
-            last_seen: u.last_seen ?? '',
-          }) === 'online',
+          getEffectivePresence(
+            {
+              id: u.id,
+              online_visible: u.online_visible,
+              online_status: u.online_status,
+              last_seen: u.last_seen ?? '',
+            },
+            peerOnlineIds,
+          ) === 'online',
       ),
-    [onlineUsers],
+    [onlineUsers, peerOnlineIds],
   );
 
   const handleRefresh = useCallback(async () => {

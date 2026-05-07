@@ -14,6 +14,7 @@ import { classifyLikesInsertError } from '@/lib/map-likes-insert-error';
 import { UI_TOAST } from '@/constants/copy';
 import { getOnlineFreshnessCutoffISO, getEffectivePresence } from '@/lib/utils';
 import { fetchSymmetricBlockedPeerIds } from '@/lib/block-queries';
+import { usePresenceStore } from '@/store/presence.store';
 /** Map discover preference to profile gender filter (undefined → no filter). */
 const interestedInToGender = (v: InterestedIn | undefined): string | null => {
   if (v === 'men') return 'male';
@@ -105,9 +106,6 @@ const DEFAULT_FILTERS: FilterOptions = {
 const PAGE_SIZE = 20;
 
 const fetchLikedUserIdsPending = new Map<string, Promise<void>>();
-
-let _realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
-let _subscribed = false;
 
 // Cached per-user blocks + likes so pagination doesn't re-fetch them every page.
 // Invalidated on reset (filter change / pull-to-refresh) or user switch.
@@ -228,6 +226,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         return;
       }
 
+      const peerOnlineIds = usePresenceStore.getState().peerOnlineIds;
       const processRaw = (rows: Record<string, unknown>[]): User[] =>
         rows.map((u) => {
           const bday = u.birthdate ? new Date(String(u.birthdate)) : null;
@@ -239,11 +238,15 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           // Effective status pairs the column with a fresh `last_seen` so a
           // crashed/force-quit account doesn't sit at the top of the grid
           // claiming to be online for hours.
-          const effectiveOnlineStatus = getEffectivePresence({
-            online_visible: u.online_visible as boolean | null | undefined,
-            online_status: u.online_status as string | null,
-            last_seen: String(u.last_seen ?? ''),
-          });
+          const effectiveOnlineStatus = getEffectivePresence(
+            {
+              id: String(u.id ?? ''),
+              online_visible: u.online_visible as boolean | null | undefined,
+              online_status: u.online_status as string | null,
+              last_seen: String(u.last_seen ?? ''),
+            },
+            peerOnlineIds,
+          );
           return {
             ...(u as unknown as User),
             age,
@@ -320,45 +323,10 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     }
   },
 
-  subscribeToOnlineStatus: () => {
-    if (_subscribed) return;
-    _subscribed = true;
-    _realtimeChannel = supabase
-      .channel('discover-profiles-online')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'profiles' },
-        (payload) => {
-          const updated = payload.new as { id?: string; online_status?: string; last_seen?: string };
-          if (!updated?.id) return;
-          set((state) => ({
-            users: state.users.map((u) => {
-              if (u.id !== updated.id) return u;
-              const nextLastSeen = updated.last_seen ?? u.last_seen;
-              const rawStatus = (updated.online_status ?? u.online_status) as any;
-              // Re-apply the freshness check on every update so a heartbeat
-              // that arrives moments before the peer goes offline doesn't
-              // leave them stuck "online" in the local cache.
-              const effective = getEffectivePresence({
-                online_visible: u.online_visible,
-                online_status: rawStatus,
-                last_seen: nextLastSeen ?? '',
-              });
-              return { ...u, online_status: effective as any, last_seen: nextLastSeen };
-            }),
-          }));
-        },
-      )
-      .subscribe();
-  },
+  /** Legacy hook — online dots use Realtime Presence (`app-presence-channel`), not postgres_changes. */
+  subscribeToOnlineStatus: () => {},
 
-  unsubscribeFromOnlineStatus: () => {
-    if (_realtimeChannel) {
-      supabase.removeChannel(_realtimeChannel);
-      _realtimeChannel = null;
-    }
-    _subscribed = false;
-  },
+  unsubscribeFromOnlineStatus: () => {},
 
   toggleLike: async (fromUserId, toUserId) => {
     const { likedUserIds } = get();
@@ -475,11 +443,6 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
 
 /** Tear down discover realtime + module caches on logout (avoids cross-user leakage). */
 export function resetDiscoverModuleState(): void {
-  if (_realtimeChannel) {
-    void supabase.removeChannel(_realtimeChannel);
-    _realtimeChannel = null;
-  }
-  _subscribed = false;
   _cachedBlockedIds = [];
   _cachedLikedIds = new Set();
   _cachedForUserId = null;

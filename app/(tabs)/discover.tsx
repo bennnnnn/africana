@@ -19,6 +19,7 @@ import { QuickPreviewModal } from '@/components/discover/QuickPreviewModal';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { Image } from 'expo-image';
 import haptics from '@/lib/haptics';
+import { profileImageUrlForList } from '@/lib/storage-image-url';
 import { PostOnboardingProfileBanner } from '@/components/profile/PostOnboardingProfileBanner';
 import { COLORS, RADIUS, FONT, RELIGION_OPTIONS } from '@/constants';
 import { FilterOptions, User } from '@/types';
@@ -131,7 +132,8 @@ export default function DiscoverScreen() {
     const urls = users
       .slice(0, 8)
       .map((u) => u.profile_photos?.[0] || u.avatar_url)
-      .filter((url): url is string => !!url);
+      .filter((url): url is string => !!url)
+      .map((url) => profileImageUrlForList(url) ?? url);
     if (urls.length > 0) void Image.prefetch(urls);
   }, [users.length > 0 ? users[0]?.id : null]);
 
@@ -243,9 +245,13 @@ export default function DiscoverScreen() {
       const lookahead = usersRef.current.slice(lastVisibleIdx + 1, lastVisibleIdx + 7);
       const urls = lookahead
         .map((u) => u.profile_photos?.[0] || u.avatar_url)
-        .filter((url): url is string => !!url && !prefetchedRef.current.has(url));
+        .filter((url): url is string => !!url && !prefetchedRef.current.has(url))
+        .map((url) => {
+          const transformed = profileImageUrlForList(url) ?? url;
+          prefetchedRef.current.add(url);
+          return transformed;
+        });
       if (urls.length === 0) return;
-      urls.forEach((url) => prefetchedRef.current.add(url));
       void Image.prefetch(urls);
     },
   ).current;

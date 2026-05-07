@@ -6,6 +6,7 @@ import { clearProfileSeedCache } from '@/lib/profile-seed-cache';
 import { resetAllLikesTabPagination } from '@/lib/likes-tab-pagination';
 import { resetChatModuleStateAtLogout } from '@/store/chat.store';
 import { resetDiscoverModuleState } from '@/store/discover.store';
+import { resetPresenceModuleStateAtLogout } from '@/lib/app-presence-channel';
 import { useActivityStore } from '@/store/activity.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 
@@ -14,6 +15,7 @@ import { useProfileBrowseStore } from '@/store/profile-browse.store';
  * Idempotent — safe if `onAuthStateChange` and `signOut` both trigger cleanup.
  */
 export function resetClientModuleStateAtLogout(): void {
+  resetPresenceModuleStateAtLogout();
   releaseAllTypingChannels();
   setActiveConversation(null);
   resetProfileGalleryModuleState();

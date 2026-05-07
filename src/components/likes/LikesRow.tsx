@@ -4,7 +4,9 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import type { User } from '@/types';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
-import { isUserEffectivelyOnline } from '@/lib/utils';
+import { getEffectivePresence } from '@/lib/utils';
+import { profileImageUrlForList } from '@/lib/storage-image-url';
+import { usePresenceStore } from '@/store/presence.store';
 import { likesScreenStyles as s } from '@/components/likes/likes-screen-styles';
 
 export const LikesRow = memo(function LikesRow({
@@ -22,10 +24,11 @@ export const LikesRow = memo(function LikesRow({
   onPress: (u: User) => void;
   onMessagePress: (id: string) => void;
 }) {
-  const avatar =
+  const avatarRaw =
     u.avatar_url ||
     (u.profile_photos ?? [])[0] ||
     `${DEFAULT_AVATAR}${encodeURIComponent((u.full_name ?? '?').charAt(0))}`;
+  const avatar = profileImageUrlForList(avatarRaw) ?? avatarRaw;
 
   const age = useMemo(() => {
     if (!u.birthdate) return null;
@@ -41,7 +44,17 @@ export const LikesRow = memo(function LikesRow({
 
   const location = useMemo(() => [u.city, u.country].filter(Boolean).join(', '), [u.city, u.country]);
 
-  const isOnline = isUserEffectivelyOnline(u.online_status, u.last_seen);
+  const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
+  const isOnline =
+    getEffectivePresence(
+      {
+        id: u.id,
+        online_visible: u.online_visible,
+        online_status: u.online_status,
+        last_seen: u.last_seen,
+      },
+      peerOnlineIds,
+    ) === 'online';
 
   return (
     <TouchableOpacity

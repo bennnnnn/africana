@@ -38,6 +38,8 @@ import { EMPTY_REACTION_LIST, type ReactionEmoji, type ReactionsMap } from '@/co
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import { getEffectivePresence } from '@/lib/utils';
+import { usePresenceStore } from '@/store/presence.store';
+import { profileImageUrlForList } from '@/lib/storage-image-url';
 import { useKeyboardHeight } from '@/hooks/use-keyboard-height';
 import { useChatRealtime } from '@/hooks/use-chat-realtime';
 import { useChatVisibilitySync } from '@/hooks/use-chat-visibility-sync';
@@ -146,6 +148,24 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const [chatHeaderHeight, setChatHeaderHeight] = useState(0);
   const keyboardHeight = useKeyboardHeight();
+  const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
+
+  useEffect(() => {
+    setOtherUser((prev) => {
+      if (!prev) return prev;
+      const eff = getEffectivePresence(
+        {
+          id: prev.id,
+          online_visible: prev.online_visible,
+          online_status: prev.online_status,
+          last_seen: prev.last_seen ?? '',
+        },
+        peerOnlineIds,
+      );
+      if (eff === prev.online_status) return prev;
+      return { ...prev, online_status: eff };
+    });
+  }, [peerOnlineIds]);
 
   useEffect(() => {
     if (otherUser) setHeaderFallbackPeer(otherUser);
@@ -220,7 +240,10 @@ export default function ChatScreen() {
     : undefined;
   const isLiked = peer ? likedUserIds.has(peer.id) : false;
   const avatar = peer
-    ? (peer.avatar_url || `${DEFAULT_AVATAR}${encodeURIComponent((peer.full_name ?? '?').charAt(0))}`)
+    ? (() => {
+        const raw = peer.avatar_url || `${DEFAULT_AVATAR}${encodeURIComponent((peer.full_name ?? '?').charAt(0))}`;
+        return profileImageUrlForList(raw) ?? raw;
+      })()
     : null;
 
   const bodyTopInset = chatHeaderHeight > 0 ? chatHeaderHeight : insets.top + 54;
@@ -364,11 +387,16 @@ export default function ChatScreen() {
         // We used to do an extra .select() here on every chat open — that was
         // a full network round-trip blocking the perceived "messages appearing".
         const peerSeed = seeded.other_user;
-        const effectiveOnline = getEffectivePresence({
-          online_visible: peerSeed.online_visible,
-          online_status: peerSeed.online_status,
-          last_seen: peerSeed.last_seen ?? '',
-        });
+        const peers = usePresenceStore.getState().peerOnlineIds;
+        const effectiveOnline = getEffectivePresence(
+          {
+            id: peerSeed.id,
+            online_visible: peerSeed.online_visible,
+            online_status: peerSeed.online_status,
+            last_seen: peerSeed.last_seen ?? '',
+          },
+          peers,
+        );
         setOtherUser({ ...peerSeed, online_status: effectiveOnline });
         if (peerSeed.accepts_messages === false) setMessagingDisabled(true);
         if (await hasSymmetricBlockBetween(user.id, peerSeed.id)) {
@@ -394,11 +422,16 @@ export default function ChatScreen() {
           .eq('id', peerFromRoute)
           .maybeSingle();
         if (raw) {
-          const effectiveOnline = getEffectivePresence({
-            online_visible: raw.online_visible,
-            online_status: raw.online_status,
-            last_seen: raw.last_seen ?? '',
-          });
+          const peers = usePresenceStore.getState().peerOnlineIds;
+          const effectiveOnline = getEffectivePresence(
+            {
+              id: raw.id as string,
+              online_visible: raw.online_visible,
+              online_status: raw.online_status,
+              last_seen: raw.last_seen ?? '',
+            },
+            peers,
+          );
           setOtherUser({ ...raw, online_status: effectiveOnline });
           if (raw.accepts_messages === false) setMessagingDisabled(true);
           if (await hasSymmetricBlockBetween(user.id, peerFromRoute)) {
@@ -428,11 +461,16 @@ export default function ChatScreen() {
             .eq('id', otherId)
             .maybeSingle();
           if (raw) {
-            const effectiveOnline = getEffectivePresence({
-              online_visible: raw.online_visible,
-              online_status: raw.online_status,
-              last_seen: raw.last_seen ?? '',
-            });
+            const peers = usePresenceStore.getState().peerOnlineIds;
+            const effectiveOnline = getEffectivePresence(
+              {
+                id: raw.id as string,
+                online_visible: raw.online_visible,
+                online_status: raw.online_status,
+                last_seen: raw.last_seen ?? '',
+              },
+              peers,
+            );
             setOtherUser({ ...raw, online_status: effectiveOnline });
             if (raw.accepts_messages === false) setMessagingDisabled(true);
             if (await hasSymmetricBlockBetween(user.id, otherId)) {

@@ -1,6 +1,5 @@
 /** Central timing constants (see docs/improve.md). */
 export const TIMINGS = {
-  presenceHeartbeatMs: 60_000,
   /** Inbox fallback poll removed — kept for documentation / future reconnect backoff. */
   inboxPollFallbackMs: 60_000,
   onlineRefreshMs: 30_000,
