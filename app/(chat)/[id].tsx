@@ -1,4 +1,11 @@
-import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { View, Text, FlatList, TextInput, Animated, Platform, StyleSheet } from 'react-native';
@@ -34,7 +41,11 @@ import { ChatScreenHeaderChrome } from '@/components/chat/ChatScreenHeaderChrome
 import { addFavourite, blockUser } from '@/lib/social-actions';
 import { User } from '@/types';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
-import { EMPTY_REACTION_LIST, type ReactionEmoji, type ReactionsMap } from '@/constants/chat-reactions';
+import {
+  EMPTY_REACTION_LIST,
+  type ReactionEmoji,
+  type ReactionsMap,
+} from '@/constants/chat-reactions';
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import { getEffectivePresence } from '@/lib/utils';
@@ -48,7 +59,11 @@ import { SPRING, SNAP_OUT } from '@/lib/motion';
 import haptics from '@/lib/haptics';
 import * as Clipboard from 'expo-clipboard';
 import { normalizeRouteParam } from '@/lib/chat-route-utils';
-import { peerSnapshotByConversationId, getLastChatRouteKey, setLastChatRouteKey } from '@/lib/chat-peer-session';
+import {
+  peerSnapshotByConversationId,
+  getLastChatRouteKey,
+  setLastChatRouteKey,
+} from '@/lib/chat-peer-session';
 import { buildChatListItems, type ChatListItem } from '@/lib/chat-list-build';
 import { logError, logWarn } from '@/lib/logger';
 
@@ -64,14 +79,24 @@ export default function ChatScreen() {
    * If we re-run chat init when that happens, `setOtherUser(null)` clears the header. Persist hints per conversation.
    */
   const peerIdHintByConversationRef = useRef<Map<string, string>>(new Map());
-  if (conversationId && otherUserIdParam) {
-    peerIdHintByConversationRef.current.set(conversationId, otherUserIdParam);
-  }
+  useLayoutEffect(() => {
+    if (conversationId && otherUserIdParam) {
+      peerIdHintByConversationRef.current.set(conversationId, otherUserIdParam);
+    }
+  }, [conversationId, otherUserIdParam]);
   const { user, settings } = useAuthStore(
     useShallow((s) => ({ user: s.user, settings: s.settings })),
   );
   const outgoingMessagingDisabled = settings?.receive_messages === false;
-  const { messages, conversations, fetchMessages, sendMessage, deleteMessage, softDeleteMessageForSelf, markMessagesRead } = useChatStore(
+  const {
+    messages,
+    conversations,
+    fetchMessages,
+    sendMessage,
+    deleteMessage,
+    softDeleteMessageForSelf,
+    markMessagesRead,
+  } = useChatStore(
     useShallow((s) => ({
       messages: s.messages,
       conversations: s.conversations,
@@ -84,8 +109,12 @@ export default function ChatScreen() {
   );
   // `conversationId` is `string | undefined` until the route param resolves;
   // guard the lookups so we don't index a dictionary with `undefined`.
-  const hasMoreOlder = useChatStore((s) => (conversationId ? !!s.hasMoreMessages[conversationId] : false));
-  const isLoadingOlder = useChatStore((s) => (conversationId ? !!s.loadingOlderMessages[conversationId] : false));
+  const hasMoreOlder = useChatStore((s) =>
+    conversationId ? !!s.hasMoreMessages[conversationId] : false,
+  );
+  const isLoadingOlder = useChatStore((s) =>
+    conversationId ? !!s.loadingOlderMessages[conversationId] : false,
+  );
   const loadOlderMessages = useChatStore((s) => s.loadOlderMessages);
   const { likedUserIds, toggleLike, fetchLikedUserIds } = useDiscoverStore(
     useShallow((s) => ({
@@ -96,7 +125,7 @@ export default function ChatScreen() {
   );
   const { showDialog, showToast } = useDialog();
 
-  const [otherUser, setOtherUser]         = useState<User | null>(null);
+  const [otherUser, setOtherUser] = useState<User | null>(null);
   /** Keeps avatar/name visible if otherUser is briefly null (nav/keyboard glitches). Cleared only when switching chats. */
   const [headerFallbackPeer, setHeaderFallbackPeer] = useState<User | null>(null);
   /**
@@ -111,19 +140,19 @@ export default function ChatScreen() {
    *  - `peerTypingTimerRef` clears the indicator after 3s of silence.
    *  - `lastTypingSentRef` throttles outgoing broadcasts to once every 2.5s.
    */
-  const [peerTyping, setPeerTyping]       = useState(false);
-  const typingChannelRef                  = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const peerTypingTimerRef                = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastTypingSentRef                 = useRef(0);
-  const [text, setText]                   = useState('');
-  const [loading, setLoading]             = useState(true);
+  const [peerTyping, setPeerTyping] = useState(false);
+  const typingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const peerTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentRef = useRef(0);
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(true);
   const [messagingDisabled, setMessagingDisabled] = useState(false);
   /** True when a `blocks` row exists in either direction (composer disabled). */
   const [blockRelationshipActive, setBlockRelationshipActive] = useState(false);
-  const [menuVisible, setMenuVisible]     = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
-  const [isFavourite, setIsFavourite]     = useState(false);
-  const menuAnim  = useRef(new Animated.Value(0)).current;
+  const [isFavourite, setIsFavourite] = useState(false);
+  const menuAnim = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
   const inputRef = useRef<TextInput>(null);
   const isNearBottomRef = useRef(true);
@@ -133,7 +162,9 @@ export default function ChatScreen() {
   const [inputFocused, setInputFocused] = useState(false);
   // Unified overlay — one at a time. Own messages get Copy + Delete in the
   // header; other users' messages get emoji reactions (no delete).
-  const [selectedMessages, setSelectedMessages] = useState<Map<string, { isOwn: boolean; content: string }>>(new Map());
+  const [selectedMessages, setSelectedMessages] = useState<
+    Map<string, { isOwn: boolean; content: string }>
+  >(new Map());
   const reactionAnim = useRef(new Animated.Value(0)).current;
   // Reactions are persisted in `message_reactions` and synced via realtime.
   // Shape: messageId → { userId → emoji }. PK in DB is (message_id, user_id),
@@ -236,15 +267,17 @@ export default function ChatScreen() {
   // Inverted FlatList expects newest-first data. Reversing here means index 0 =
   // latest message, which the list renders at the bottom with no initial scroll needed.
   const invertedListItems = useMemo(() => [...listItems].reverse(), [listItems]);
-  const latestMessageKey = visibleMessages.length > 0
-    ? (visibleMessages[visibleMessages.length - 1].listKey ?? visibleMessages[visibleMessages.length - 1].id)
-    : undefined;
+  const latestMessageKey =
+    visibleMessages.length > 0
+      ? (visibleMessages[visibleMessages.length - 1].listKey ??
+        visibleMessages[visibleMessages.length - 1].id)
+      : undefined;
   const isLiked = peer ? likedUserIds.has(peer.id) : false;
   const avatarRaw = peer
     ? primaryProfilePhotoUrl(peer) ||
       `${DEFAULT_AVATAR}${encodeURIComponent((peer.full_name ?? '?').charAt(0))}`
     : null;
-  const avatar = peer && avatarRaw ? profileImageUrlForList(avatarRaw) ?? avatarRaw : null;
+  const avatar = peer && avatarRaw ? (profileImageUrlForList(avatarRaw) ?? avatarRaw) : null;
 
   const bodyTopInset = chatHeaderHeight > 0 ? chatHeaderHeight : insets.top + 54;
 
@@ -281,7 +314,6 @@ export default function ChatScreen() {
     lastTypingSentRef.current = 0;
   }, [conversationId]);
 
-
   const scrollToBottom = useCallback((animated: boolean) => {
     requestAnimationFrame(() => {
       flatListRef.current?.scrollToOffset({ offset: 0, animated });
@@ -298,7 +330,9 @@ export default function ChatScreen() {
       const pendingMode = pendingScrollModeRef.current;
       const shouldScroll = pendingMode !== 'none' || isNearBottomRef.current || prevCount === 0;
       if (shouldScroll) {
-        const animated = pendingMode === 'smooth' || (pendingMode === 'none' && isNearBottomRef.current && prevCount > 0);
+        const animated =
+          pendingMode === 'smooth' ||
+          (pendingMode === 'none' && isNearBottomRef.current && prevCount > 0);
         scrollToBottom(animated);
       }
       pendingScrollModeRef.current = 'none';
@@ -314,23 +348,26 @@ export default function ChatScreen() {
     }
   }, [keyboardHeight, scrollToBottom]);
 
-  const handleListScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    // With inverted FlatList: offset 0 = newest messages (visual bottom).
-    // Scrolling toward older messages increases contentOffset.y.
-    isNearBottomRef.current = contentOffset.y < 80;
-    // Load older messages when the user scrolls near the visual top
-    // (= far end of the inverted list = high contentOffset.y).
-    const distanceFromTop = contentSize.height - contentOffset.y - layoutMeasurement.height;
-    if (
-      conversationId &&
-      hasMoreOlder &&
-      !isLoadingOlder &&
-      distanceFromTop < layoutMeasurement.height * 0.6
-    ) {
-      void loadOlderMessages(conversationId);
-    }
-  }, [conversationId, hasMoreOlder, isLoadingOlder, loadOlderMessages]);
+  const handleListScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      // With inverted FlatList: offset 0 = newest messages (visual bottom).
+      // Scrolling toward older messages increases contentOffset.y.
+      isNearBottomRef.current = contentOffset.y < 80;
+      // Load older messages when the user scrolls near the visual top
+      // (= far end of the inverted list = high contentOffset.y).
+      const distanceFromTop = contentSize.height - contentOffset.y - layoutMeasurement.height;
+      if (
+        conversationId &&
+        hasMoreOlder &&
+        !isLoadingOlder &&
+        distanceFromTop < layoutMeasurement.height * 0.6
+      ) {
+        void loadOlderMessages(conversationId);
+      }
+    },
+    [conversationId, hasMoreOlder, isLoadingOlder, loadOlderMessages],
+  );
 
   // ── Sync header seed: store + snapshot, survives remount; clear only on real route change.
   useLayoutEffect(() => {
@@ -343,7 +380,9 @@ export default function ChatScreen() {
     const switched = getLastChatRouteKey() !== routeKey;
     if (switched) setLastChatRouteKey(routeKey);
 
-    const storePeer = getChatStoreState().conversations.find((c) => c.id === conversationId)?.other_user;
+    const storePeer = getChatStoreState().conversations.find(
+      (c) => c.id === conversationId,
+    )?.other_user;
     const snap = peerSnapshotByConversationId.get(conversationId);
     const seed = storePeer ?? snap ?? null;
 
@@ -365,13 +404,19 @@ export default function ChatScreen() {
   }, [conversationId, user?.id]);
 
   // ── Fetch like state ─────────────────────────────────────────────────────────
-  useEffect(() => { if (user) fetchLikedUserIds(user.id); }, [user?.id]);
+  useEffect(() => {
+    if (user) fetchLikedUserIds(user.id);
+  }, [user?.id]);
 
   // ── Favourite status ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user || !peer) return;
-    supabase.from('favourites').select('id')
-      .eq('user_id', user.id).eq('favourited_id', peer.id).maybeSingle()
+    supabase
+      .from('favourites')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('favourited_id', peer.id)
+      .maybeSingle()
       .then(({ data }) => setIsFavourite(!!data));
   }, [user?.id, peer?.id]);
 
@@ -521,9 +566,9 @@ export default function ChatScreen() {
       haptics.error();
       let toastMessage: string;
       if (
-        error === ERROR_RECIPIENT_MESSAGES_DISABLED
-        || error === ERROR_SENDER_MESSAGES_DISABLED
-        || error === ERROR_MESSAGING_BLOCKED
+        error === ERROR_RECIPIENT_MESSAGES_DISABLED ||
+        error === ERROR_SENDER_MESSAGES_DISABLED ||
+        error === ERROR_MESSAGING_BLOCKED
       ) {
         toastMessage = error;
       } else if (/sender does not accept/i.test(error)) {
@@ -540,31 +585,35 @@ export default function ChatScreen() {
     }
   };
 
-  const openMsgSheet = useCallback((messageId: string, isOwn: boolean, content: string) => {
-    setSelectedMessages((prev) => {
-      if (prev.size === 0) {
-        haptics.tapMedium();
-        reactionAnim.setValue(0);
-        Animated.spring(reactionAnim, { toValue: 1, ...SPRING }).start();
-      } else {
-        haptics.tapLight();
-      }
-      const next = new Map(prev);
-      if (next.has(messageId)) {
-        next.delete(messageId);
-        if (next.size === 0) {
-          Animated.timing(reactionAnim, { toValue: 0, ...SNAP_OUT }).start();
+  const openMsgSheet = useCallback(
+    (messageId: string, isOwn: boolean, content: string) => {
+      setSelectedMessages((prev) => {
+        if (prev.size === 0) {
+          haptics.tapMedium();
+          reactionAnim.setValue(0);
+          Animated.spring(reactionAnim, { toValue: 1, ...SPRING }).start();
+        } else {
+          haptics.tapLight();
         }
-      } else {
-        next.set(messageId, { isOwn, content });
-      }
-      return next;
-    });
-  }, [reactionAnim]);
+        const next = new Map(prev);
+        if (next.has(messageId)) {
+          next.delete(messageId);
+          if (next.size === 0) {
+            Animated.timing(reactionAnim, { toValue: 0, ...SNAP_OUT }).start();
+          }
+        } else {
+          next.set(messageId, { isOwn, content });
+        }
+        return next;
+      });
+    },
+    [reactionAnim],
+  );
 
   const closeMsgSheet = useCallback(() => {
-    Animated.timing(reactionAnim, { toValue: 0, ...SNAP_OUT })
-      .start(() => setSelectedMessages(new Map()));
+    Animated.timing(reactionAnim, { toValue: 0, ...SNAP_OUT }).start(() =>
+      setSelectedMessages(new Map()),
+    );
   }, [reactionAnim]);
 
   /**
@@ -575,61 +624,66 @@ export default function ChatScreen() {
    * Optimistic UI: we update local state immediately, then write to Postgres.
    * The realtime listener will reconcile if the server state diverges.
    */
-  const handleReact = useCallback(async (messageId: string, emoji: ReactionEmoji) => {
-    if (!user) return;
-    closeMsgSheet();
-    haptics.tapLight();
+  const handleReact = useCallback(
+    async (messageId: string, emoji: ReactionEmoji) => {
+      if (!user) return;
+      closeMsgSheet();
+      haptics.tapLight();
 
-    const currentForMessage = reactions[messageId] ?? {};
-    const myCurrent = currentForMessage[user.id];
-    const isRemoval = myCurrent === emoji;
+      const currentForMessage = reactions[messageId] ?? {};
+      const myCurrent = currentForMessage[user.id];
+      const isRemoval = myCurrent === emoji;
 
-    setReactions((prev) => {
-      const next = { ...(prev[messageId] ?? {}) };
-      if (isRemoval) {
-        delete next[user.id];
-      } else {
-        next[user.id] = emoji;
-      }
-      return { ...prev, [messageId]: next };
-    });
-
-    try {
-      if (isRemoval) {
-        const { error } = await supabase
-          .from('message_reactions')
-          .delete()
-          .eq('message_id', messageId)
-          .eq('user_id', user.id);
-        if (error) throw error;
-      } else {
-        // upsert handles both first-react and switch-emoji in one round-trip,
-        // and is idempotent across the realtime echo.
-        const { error } = await supabase
-          .from('message_reactions')
-          .upsert(
-            { message_id: messageId, user_id: user.id, emoji },
-            { onConflict: 'message_id,user_id' },
-          );
-        if (error) throw error;
-      }
-    } catch (err) {
-      logWarn('[Chat] reaction write failed', err);
-      // Roll back on failure.
       setReactions((prev) => {
         const next = { ...(prev[messageId] ?? {}) };
-        if (myCurrent) {
-          next[user.id] = myCurrent;
-        } else {
+        if (isRemoval) {
           delete next[user.id];
+        } else {
+          next[user.id] = emoji;
         }
         return { ...prev, [messageId]: next };
       });
-    }
-  }, [user, reactions, closeMsgSheet]);
+
+      try {
+        if (isRemoval) {
+          const { error } = await supabase
+            .from('message_reactions')
+            .delete()
+            .eq('message_id', messageId)
+            .eq('user_id', user.id);
+          if (error) throw error;
+        } else {
+          // upsert handles both first-react and switch-emoji in one round-trip,
+          // and is idempotent across the realtime echo.
+          const { error } = await supabase
+            .from('message_reactions')
+            .upsert(
+              { message_id: messageId, user_id: user.id, emoji },
+              { onConflict: 'message_id,user_id' },
+            );
+          if (error) throw error;
+        }
+      } catch (err) {
+        logWarn('[Chat] reaction write failed', err);
+        // Roll back on failure.
+        setReactions((prev) => {
+          const next = { ...(prev[messageId] ?? {}) };
+          if (myCurrent) {
+            next[user.id] = myCurrent;
+          } else {
+            delete next[user.id];
+          }
+          return { ...prev, [messageId]: next };
+        });
+      }
+    },
+    [user, reactions, closeMsgSheet],
+  );
 
   const handleCopyMessage = async () => {
-    const contents = Array.from(selectedMessages.values()).map(m => m.content.trim()).filter(Boolean);
+    const contents = Array.from(selectedMessages.values())
+      .map((m) => m.content.trim())
+      .filter(Boolean);
     closeMsgSheet();
     if (contents.length === 0) return;
     const text = contents.join('\n\n');
@@ -668,13 +722,18 @@ export default function ChatScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
-                await Promise.all(msgs.map(([messageId]) => softDeleteMessageForSelf(cid, messageId)));
+                await Promise.all(
+                  msgs.map(([messageId]) => softDeleteMessageForSelf(cid, messageId)),
+                );
                 showToast({
                   message: msgs.length > 1 ? 'Messages deleted for you' : 'Message deleted for you',
                   icon: 'trash-outline',
                 });
               } catch {
-                showToast({ message: 'Failed to delete some messages.', icon: 'alert-circle-outline' });
+                showToast({
+                  message: 'Failed to delete some messages.',
+                  icon: 'alert-circle-outline',
+                });
               }
             },
           },
@@ -706,11 +765,16 @@ export default function ChatScreen() {
               await Promise.all(msgs.map(([messageId]) => deleteMessage(cid, messageId)));
               showToast({
                 message:
-                  msgs.length > 1 ? 'Messages deleted for everyone' : 'Message deleted for everyone',
+                  msgs.length > 1
+                    ? 'Messages deleted for everyone'
+                    : 'Message deleted for everyone',
                 icon: 'trash-outline',
               });
             } catch {
-              showToast({ message: 'Failed to delete some messages.', icon: 'alert-circle-outline' });
+              showToast({
+                message: 'Failed to delete some messages.',
+                icon: 'alert-circle-outline',
+              });
             }
           },
         },
@@ -739,7 +803,11 @@ export default function ChatScreen() {
     if (!user || !peer) return;
     if (isFavourite) {
       try {
-        const { error } = await supabase.from('favourites').delete().eq('user_id', user.id).eq('favourited_id', peer.id);
+        const { error } = await supabase
+          .from('favourites')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('favourited_id', peer.id);
         if (error) throw error;
         setIsFavourite(false);
         showToast({ message: UI_TOAST.favouriteRemoved });
@@ -785,41 +853,51 @@ export default function ChatScreen() {
       icon: 'ban-outline',
       actions: [
         { label: UI_LABELS.cancel, style: 'cancel' },
-        { label: UI_LABELS.block, style: 'destructive', onPress: async () => {
-          try {
-            await blockUser(user.id, peer.id);
-            setBlockRelationshipActive(true);
-            router.back();
-          } catch {
-            showToast({ message: 'Failed to block user. Please try again.', icon: 'alert-circle-outline' });
-          }
-        }},
+        {
+          label: UI_LABELS.block,
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockUser(user.id, peer.id);
+              setBlockRelationshipActive(true);
+              router.back();
+            } catch {
+              showToast({
+                message: 'Failed to block user. Please try again.',
+                icon: 'alert-circle-outline',
+              });
+            }
+          },
+        },
       ],
     });
   };
 
   /** Stable renderItem — avoids invalidating FlatList's render cache on every parent render. */
-  const renderItem = useCallback(({ item }: { item: ChatListItem }) => {
-    if (item.type === 'date') {
+  const renderItem = useCallback(
+    ({ item }: { item: ChatListItem }) => {
+      if (item.type === 'date') {
+        return (
+          <View style={{ alignItems: 'center', marginVertical: 6 }}>
+            <Text style={s.datePill}>{item.label}</Text>
+          </View>
+        );
+      }
       return (
-        <View style={{ alignItems: 'center', marginVertical: 6 }}>
-          <Text style={s.datePill}>{item.label}</Text>
-        </View>
+        <ChatMessageRow
+          item={item.message}
+          userId={user?.id}
+          msgReactions={reactionEmojiArrays[item.message.id] ?? EMPTY_REACTION_LIST}
+          onLongPress={openMsgSheet}
+          onPress={selectedMessages.size > 0 ? openMsgSheet : undefined}
+          isSelected={selectedMessages.has(item.message.id)}
+          isGroupStart={item.isGroupStart}
+          isGroupEnd={item.isGroupEnd}
+        />
       );
-    }
-    return (
-      <ChatMessageRow
-        item={item.message}
-        userId={user?.id}
-        msgReactions={reactionEmojiArrays[item.message.id] ?? EMPTY_REACTION_LIST}
-        onLongPress={openMsgSheet}
-        onPress={selectedMessages.size > 0 ? openMsgSheet : undefined}
-        isSelected={selectedMessages.has(item.message.id)}
-        isGroupStart={item.isGroupStart}
-        isGroupEnd={item.isGroupEnd}
-      />
-    );
-  }, [user?.id, reactionEmojiArrays, selectedMessages, openMsgSheet]);
+    },
+    [user?.id, reactionEmojiArrays, selectedMessages, openMsgSheet],
+  );
 
   const composerVariant: ChatComposerVariant = outgoingMessagingDisabled
     ? 'outgoing-off'
@@ -839,15 +917,13 @@ export default function ChatScreen() {
       const chState = (ch as unknown as { state?: string }).state;
       if (chState !== 'joined') return;
       lastTypingSentRef.current = now;
-      ch
-        .send({
-          type: 'broadcast',
-          event: 'typing',
-          payload: { userId: user.id },
-        })
-        .catch((e: unknown) => {
-          logWarn('[Chat] typing send failed', e);
-        });
+      ch.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { userId: user.id },
+      }).catch((e: unknown) => {
+        logWarn('[Chat] typing send failed', e);
+      });
     },
     [user],
   );

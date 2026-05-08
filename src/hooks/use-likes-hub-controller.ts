@@ -12,9 +12,18 @@ import { User } from '@/types';
 import { isUuidString } from '@/lib/utils';
 import { fetchSymmetricBlockedPeerIds } from '@/lib/block-queries';
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
-import { LIKES_TAB_ORDER, LIKES_LIST_STALE_MS, LIKES_SEEN_AT_COLUMN, type LikesTab } from '@/constants/likes-screen';
+import {
+  LIKES_TAB_ORDER,
+  LIKES_LIST_STALE_MS,
+  LIKES_SEEN_AT_COLUMN,
+  type LikesTab,
+} from '@/constants/likes-screen';
 import { likesParamForTab, likesTabFromPathSegment } from '@/constants/likes-routes';
-import { _likesTabOffsets, _likesTabHasMore, resetLikesTabPagination } from '@/lib/likes-tab-pagination';
+import {
+  _likesTabOffsets,
+  _likesTabHasMore,
+  resetLikesTabPagination,
+} from '@/lib/likes-tab-pagination';
 import type { LikesHubListItem } from '@/lib/likes-fetch-users';
 import { fetchUsersForLikesTab, prefetchLikesUserImages } from '@/lib/likes-fetch-users';
 import { useDialog } from '@/components/ui/DialogProvider';
@@ -60,7 +69,9 @@ export function useLikesHubController(): LikesHubContextValue {
     viewers: [],
     favourites: [],
   });
-  const [activitySeenAt, setActivitySeenAt] = useState<Record<LikesTab, string | null> | null>(null);
+  const [activitySeenAt, setActivitySeenAt] = useState<Record<LikesTab, string | null> | null>(
+    null,
+  );
   const [loadingMore, setLoadingMore] = useState<Record<LikesTab, boolean>>({
     matches: false,
     received: false,
@@ -92,16 +103,21 @@ export function useLikesHubController(): LikesHubContextValue {
     viewers: null,
     favourites: null,
   });
-  const fetchActivityCountsRef = useRef<() => Promise<Record<LikesTab, number> | null>>(async () => null);
+  const fetchActivityCountsRef = useRef<() => Promise<Record<LikesTab, number> | null>>(
+    async () => null,
+  );
 
-  const fetchBlockedSet = useCallback(async (force = false) => {
-    if (!user) return new Set<string>();
-    if (!force && blockedIdsRef.current) return blockedIdsRef.current;
-    const ids = await fetchSymmetricBlockedPeerIds(user.id);
-    const blockedIds = new Set(ids);
-    blockedIdsRef.current = blockedIds;
-    return blockedIds;
-  }, [user]);
+  const fetchBlockedSet = useCallback(
+    async (force = false) => {
+      if (!user) return new Set<string>();
+      if (!force && blockedIdsRef.current) return blockedIdsRef.current;
+      const ids = await fetchSymmetricBlockedPeerIds(user.id);
+      const blockedIds = new Set(ids);
+      blockedIdsRef.current = blockedIds;
+      return blockedIds;
+    },
+    [user],
+  );
 
   const loadTab = useCallback(
     async (t: LikesTab, force: boolean, isLoadMore = false) => {
@@ -211,7 +227,10 @@ export function useLikesHubController(): LikesHubContextValue {
         };
         return { ...base, [t]: now };
       });
-      await supabase.from('user_settings').update({ [col]: now }).eq('user_id', user.id);
+      await supabase
+        .from('user_settings')
+        .update({ [col]: now })
+        .eq('user_id', user.id);
     },
     [user, clearStoreTab],
   );
@@ -312,7 +331,10 @@ export function useLikesHubController(): LikesHubContextValue {
         });
         return;
       }
-      router.push({ pathname: '/(chat)/[id]', params: { id: result.conversationId, otherUserId: toUserId } });
+      router.push({
+        pathname: '/(chat)/[id]',
+        params: { id: result.conversationId, otherUserId: toUserId },
+      });
     },
     [user, getOrCreateConversation, showToast],
   );
@@ -336,18 +358,23 @@ export function useLikesHubController(): LikesHubContextValue {
     listsRef.current = lists;
   }, [lists]);
 
-  const handleRowPress = useCallback((u: User) => {
-    if (!isUuidString(u?.id)) {
-      showToast({ icon: 'alert-circle-outline', message: "Couldn't open profile. Try again." });
-      return;
-    }
-    setProfileSeed(u);
-    const list = listsRef.current[activeTabRef.current] ?? [];
-    useProfileBrowseStore
-      .getState()
-      .setOrderedUserIds(list.map((x) => x.user.id).filter((id): id is string => isUuidString(id)));
-    router.push(`/(profile)/${u.id}`);
-  }, [showToast]);
+  const handleRowPress = useCallback(
+    (u: User) => {
+      if (!isUuidString(u?.id)) {
+        showToast({ icon: 'alert-circle-outline', message: "Couldn't open profile. Try again." });
+        return;
+      }
+      setProfileSeed(u);
+      const list = listsRef.current[activeTabRef.current] ?? [];
+      useProfileBrowseStore
+        .getState()
+        .setOrderedUserIds(
+          list.map((x) => x.user.id).filter((id): id is string => isUuidString(id)),
+        );
+      router.push(`/(profile)/${u.id}`);
+    },
+    [showToast],
+  );
 
   const handleMessageStable = useCallback(
     (toUserId: string) => {

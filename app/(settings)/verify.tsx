@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
@@ -125,15 +120,40 @@ export default function VerifyScreen() {
       <ScrollView contentContainerStyle={{ padding: 24 }}>
         {/* Status badge */}
         {status === 'pending' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFBEB', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#FDE68A' }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              backgroundColor: '#FFFBEB',
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 24,
+              borderWidth: 1,
+              borderColor: '#FDE68A',
+            }}
+          >
             <Ionicons name="time-outline" size={22} color="#92400E" />
             <Text style={{ flex: 1, fontSize: 14, color: '#92400E', fontWeight: '600' }}>
-              Verification pending — we're reviewing your submission. This usually takes 24–48 hours.
+              Verification pending — we{"'"}re reviewing your submission. This usually takes 24–48
+              hours.
             </Text>
           </View>
         )}
         {status === 'approved' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F0FDF4', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#BBF7D0' }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              backgroundColor: '#F0FDF4',
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 24,
+              borderWidth: 1,
+              borderColor: '#BBF7D0',
+            }}
+          >
             <Ionicons name="checkmark-circle" size={22} color="#166534" />
             <Text style={{ flex: 1, fontSize: 14, color: '#166534', fontWeight: '600' }}>
               Your profile is verified! A blue badge appears on your profile for all members to see.
@@ -141,40 +161,105 @@ export default function VerifyScreen() {
           </View>
         )}
         {status === 'rejected' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FEF2F2', borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#FECACA' }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              backgroundColor: '#FEF2F2',
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 24,
+              borderWidth: 1,
+              borderColor: '#FECACA',
+            }}
+          >
             <Ionicons name="close-circle" size={22} color="#991B1B" />
             <Text style={{ flex: 1, fontSize: 14, color: '#991B1B', fontWeight: '600' }}>
-              Your previous submission was rejected. Please try again with a clear, well-lit photo of your face.
+              Your previous submission was rejected. Please try again with a clear, well-lit photo
+              of your face.
             </Text>
           </View>
         )}
 
         {/* Hero icon */}
         <View style={{ alignItems: 'center', marginBottom: 28 }}>
-          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+          <View
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              backgroundColor: '#FFFFFF',
+              borderWidth: 1,
+              borderColor: colors.border,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 16,
+            }}
+          >
             <Ionicons name="shield-checkmark-outline" size={38} color="#111111" />
           </View>
           <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', textAlign: 'center' }}>
-            {status === 'approved' ? 'You\'re Verified' : 'Get Verified'}
+            {status === 'approved' ? "You're Verified" : 'Get Verified'}
           </Text>
-          <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 21, marginTop: 8, paddingHorizontal: 16 }}>
-            A verified badge shows other members your profile is real, increasing your match rate significantly.
+          <Text
+            style={{
+              fontSize: 14,
+              color: colors.textSecondary,
+              textAlign: 'center',
+              lineHeight: 21,
+              marginTop: 8,
+              paddingHorizontal: 16,
+            }}
+          >
+            A verified badge shows other members your profile is real, increasing your match rate
+            significantly.
           </Text>
         </View>
 
         {/* Steps */}
         {[
-          { icon: 'camera-outline', title: 'Take a selfie', desc: 'Use your front camera. Make sure your face is clearly visible.' },
-          { icon: 'cloud-upload-outline', title: 'Submit for review', desc: 'Our team reviews selfies manually within 24–48 hours.' },
-          { icon: 'checkmark-circle-outline', title: 'Get your badge', desc: 'A blue checkmark badge will appear on your profile.' },
+          {
+            icon: 'camera-outline',
+            title: 'Take a selfie',
+            desc: 'Use your front camera. Make sure your face is clearly visible.',
+          },
+          {
+            icon: 'cloud-upload-outline',
+            title: 'Submit for review',
+            desc: 'Our team reviews selfies manually within 24–48 hours.',
+          },
+          {
+            icon: 'checkmark-circle-outline',
+            title: 'Get your badge',
+            desc: 'A blue checkmark badge will appear on your profile.',
+          },
         ].map((step, i) => (
           <View key={i} style={{ flexDirection: 'row', gap: 14, marginBottom: 20 }}>
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: '#FFFFFF',
+                borderWidth: 1,
+                borderColor: colors.border,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
               <Ionicons name={step.icon as any} size={20} color="#111111" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>{step.title}</Text>
-              <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 2, lineHeight: 19 }}>{step.desc}</Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>
+                {step.title}
+              </Text>
+              <Text
+                style={{ fontSize: 13, color: colors.textSecondary, marginTop: 2, lineHeight: 19 }}
+              >
+                {step.desc}
+              </Text>
             </View>
           </View>
         ))}
@@ -183,18 +268,38 @@ export default function VerifyScreen() {
           <>
             {/* Selfie preview */}
             {selfieUri ? (
-              <TouchableOpacity onPress={pickSelfie} style={{ alignItems: 'center', marginBottom: 20 }}>
+              <TouchableOpacity
+                onPress={pickSelfie}
+                style={{ alignItems: 'center', marginBottom: 20 }}
+              >
                 <Image
                   source={{ uri: selfieUri }}
-                  style={{ width: 160, height: 160, borderRadius: 80, borderWidth: 2, borderColor: '#111111' }}
+                  style={{
+                    width: 160,
+                    height: 160,
+                    borderRadius: 80,
+                    borderWidth: 2,
+                    borderColor: '#111111',
+                  }}
                   contentFit="cover"
                 />
-                <Text style={{ marginTop: 8, fontSize: 13, color: '#111111', fontWeight: '600' }}>Tap to retake</Text>
+                <Text style={{ marginTop: 8, fontSize: 13, color: '#111111', fontWeight: '600' }}>
+                  Tap to retake
+                </Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
                 onPress={pickSelfie}
-                style={{ alignItems: 'center', justifyContent: 'center', height: 160, borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.border, marginBottom: 20 }}
+                style={{
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: 160,
+                  borderRadius: 16,
+                  borderWidth: 2,
+                  borderStyle: 'dashed',
+                  borderColor: colors.border,
+                  marginBottom: 20,
+                }}
               >
                 <Ionicons name="camera-outline" size={32} color="#111111" />
                 <Text style={{ marginTop: 8, fontSize: 14, color: '#111111' }}>Take a selfie</Text>
@@ -213,7 +318,6 @@ export default function VerifyScreen() {
             />
           </>
         )}
-
 
         <View style={{ height: 40 }} />
       </ScrollView>

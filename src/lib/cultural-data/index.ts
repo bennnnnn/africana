@@ -80,11 +80,16 @@ const cultureLoaders: Record<CultureRegion, () => Promise<Record<string, Country
 };
 
 const languageLoaders: Record<CultureRegion, () => Promise<Record<string, readonly string[]>>> = {
-  east_africa: async () => (await import('./generated/east_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
-  west_africa: async () => (await import('./generated/west_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
-  central_africa: async () => (await import('./generated/central_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
-  north_africa: async () => (await import('./generated/north_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
-  southern_africa: async () => (await import('./generated/southern_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
+  east_africa: async () =>
+    (await import('./generated/east_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
+  west_africa: async () =>
+    (await import('./generated/west_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
+  central_africa: async () =>
+    (await import('./generated/central_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
+  north_africa: async () =>
+    (await import('./generated/north_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
+  southern_africa: async () =>
+    (await import('./generated/southern_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
 };
 
 export type { CountryCultureData } from './types';
@@ -109,7 +114,7 @@ export async function getCountryCultureData(countryCode: string | null | undefin
 export async function getEthnicityOptions(
   countryCode: string | null | undefined,
   subdivision?: string | null,
-  city?: string | null
+  city?: string | null,
 ): Promise<CultureOptionSet | null> {
   return buildEthnicityOptions(await getCountryCultureData(countryCode), subdivision, city);
 }
@@ -134,7 +139,7 @@ export async function getLanguageOptions(
   countryCode: string | null | undefined,
   ethnicity?: string | null,
   subdivision?: string | null,
-  city?: string | null
+  city?: string | null,
 ): Promise<CultureOptionSet | null> {
   const [countryData, fallbackLanguages] = await Promise.all([
     getCountryCultureData(countryCode),

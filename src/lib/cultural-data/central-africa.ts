@@ -30,7 +30,16 @@ export const CENTRAL_AFRICA_CULTURE: Record<string, CountryCultureData> = {
     },
   },
   TD: {
-    ethnicities: ['Sara', 'Arab', 'Kanembu', 'Hadjarai', 'Toubou', 'Zaghawa', 'Gorane', 'Mixed / Other'],
+    ethnicities: [
+      'Sara',
+      'Arab',
+      'Kanembu',
+      'Hadjarai',
+      'Toubou',
+      'Zaghawa',
+      'Gorane',
+      'Mixed / Other',
+    ],
     languages: ['Arabic', 'French'],
     ethnicityLanguages: {
       Sara: ['French'],

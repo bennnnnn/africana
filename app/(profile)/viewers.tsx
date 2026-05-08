@@ -56,7 +56,9 @@ const ViewerRowItem = memo(function ViewerRowItem({
   const v = item.viewer;
   const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
   const avatarRaw =
-    v.avatar_url || (v.profile_photos ?? [])[0] || `${DEFAULT_AVATAR}${encodeURIComponent((v.full_name ?? '?').charAt(0))}`;
+    v.avatar_url ||
+    (v.profile_photos ?? [])[0] ||
+    `${DEFAULT_AVATAR}${encodeURIComponent((v.full_name ?? '?').charAt(0))}`;
   const avatar = profileImageUrlForList(avatarRaw) ?? avatarRaw;
   const showOnlineDot =
     getEffectivePresence(
@@ -74,9 +76,13 @@ const ViewerRowItem = memo(function ViewerRowItem({
       onPress={() => onOpen(v)}
       activeOpacity={0.8}
       style={{
-        flexDirection: 'row', alignItems: 'center', gap: 14,
-        paddingHorizontal: 20, paddingVertical: 14,
-        borderBottomWidth: 1, borderBottomColor: borderColor,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: borderColor,
         backgroundColor: cardBg,
       }}
     >
@@ -90,12 +96,19 @@ const ViewerRowItem = memo(function ViewerRowItem({
           recyclingKey={v.id}
         />
         {showOnlineDot && (
-          <View style={{
-            position: 'absolute', bottom: 1, right: 1,
-            width: 12, height: 12, borderRadius: 6,
-            backgroundColor: '#22C55E',
-            borderWidth: 2, borderColor: cardBg,
-          }} />
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 1,
+              right: 1,
+              width: 12,
+              height: 12,
+              borderRadius: 6,
+              backgroundColor: '#22C55E',
+              borderWidth: 2,
+              borderColor: cardBg,
+            }}
+          />
         )}
       </View>
       <View style={{ flex: 1 }}>
@@ -117,13 +130,13 @@ const ViewerRowItem = memo(function ViewerRowItem({
 
 function timeAgo(iso: string): string {
   const diff = Math.max(0, Date.now() - new Date(iso).getTime());
-  const mins  = Math.floor(diff / 60000);
+  const mins = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
-  const days  = Math.floor(diff / 86400000);
-  if (mins  < 1)  return 'just now';
-  if (mins  < 60) return `${mins}m ago`;
+  const days = Math.floor(diff / 86400000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
   if (hours < 24) return `${hours}h ago`;
-  if (days  < 7)  return `${days}d ago`;
+  if (days < 7) return `${days}d ago`;
   return new Date(iso).toLocaleDateString();
 }
 
@@ -152,9 +165,7 @@ export default function ViewersScreen() {
         rows.map((row) => row.viewer),
       );
       const visibleViewerIds = new Set(visibleViewers.map((viewer) => viewer.id));
-      setViewers(
-        rows.filter((row) => visibleViewerIds.has(row.viewer.id))
-      );
+      setViewers(rows.filter((row) => visibleViewerIds.has(row.viewer.id)));
     }
   }, [user]);
 
@@ -171,11 +182,14 @@ export default function ViewersScreen() {
 
   const viewerBrowseIds = useMemo(() => viewers.map((r) => r.viewer.id), [viewers]);
 
-  const handleOpen = useCallback((v: User) => {
-    setProfileSeed(v);
-    useProfileBrowseStore.getState().setOrderedUserIds(viewerBrowseIds);
-    router.push(`/(profile)/${v.id}`);
-  }, [viewerBrowseIds]);
+  const handleOpen = useCallback(
+    (v: User) => {
+      setProfileSeed(v);
+      useProfileBrowseStore.getState().setOrderedUserIds(viewerBrowseIds);
+      router.push(`/(profile)/${v.id}`);
+    },
+    [viewerBrowseIds],
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: ViewerRow }) => (
@@ -202,19 +216,35 @@ export default function ViewersScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }}>
       {/* Header */}
-      <View style={{
-        flexDirection: 'row', alignItems: 'center', gap: 12,
-        paddingHorizontal: 20, paddingVertical: 14,
-        backgroundColor: colors.card,
-        borderBottomWidth: 1, borderBottomColor: colors.border,
-      }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          paddingHorizontal: 20,
+          paddingVertical: 14,
+          backgroundColor: colors.card,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border,
+        }}
+      >
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>Who Viewed Me</Text>
         {viewers.length > 0 && (
-          <View style={{ marginLeft: 'auto', backgroundColor: `${colors.primary}18`, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 }}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>{viewers.length}</Text>
+          <View
+            style={{
+              marginLeft: 'auto',
+              backgroundColor: `${colors.primary}18`,
+              borderRadius: 12,
+              paddingHorizontal: 10,
+              paddingVertical: 3,
+            }}
+          >
+            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
+              {viewers.length}
+            </Text>
           </View>
         )}
       </View>
@@ -233,14 +263,40 @@ export default function ViewersScreen() {
           maxToRenderPerBatch={10}
           windowSize={9}
           removeClippedSubviews={Platform.OS === 'android'}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+            />
+          }
           contentContainerStyle={viewers.length === 0 ? { flex: 1 } : { paddingBottom: 40 }}
           ListEmptyComponent={
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 }}>
+            <View
+              style={{
+                flex: 1,
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingHorizontal: 40,
+                gap: 12,
+              }}
+            >
               <Ionicons name="eye-off-outline" size={52} color={colors.textMuted} />
-              <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, textAlign: 'center' }}>No views yet</Text>
-              <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 21 }}>
-                When someone visits your profile, they'll appear here. Complete your profile to get more visibility.
+              <Text
+                style={{ fontSize: 20, fontWeight: '800', color: colors.text, textAlign: 'center' }}
+              >
+                No views yet
+              </Text>
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: colors.textSecondary,
+                  textAlign: 'center',
+                  lineHeight: 21,
+                }}
+              >
+                When someone visits your profile, they{"'"}ll appear here. Complete your profile to
+                get more visibility.
               </Text>
             </View>
           }

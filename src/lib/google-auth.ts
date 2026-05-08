@@ -5,8 +5,7 @@ import { supabase } from './supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
-export const getRedirectUri = () =>
-  makeRedirectUri({ scheme: 'africana', path: 'auth/callback' });
+export const getRedirectUri = () => makeRedirectUri({ scheme: 'africana', path: 'auth/callback' });
 
 export const createSessionFromUrl = async (url: string) => {
   const { params, errorCode } = QueryParams.getQueryParams(url);

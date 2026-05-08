@@ -7,7 +7,9 @@ export function oppositeInterestedIn(gender: Gender): InterestedIn {
 }
 
 /** True when the user has chosen a valid discover preference. */
-export function isInterestedInProvided(interested: InterestedIn | string | null | undefined): boolean {
+export function isInterestedInProvided(
+  interested: InterestedIn | string | null | undefined,
+): boolean {
   return interested === 'men' || interested === 'women';
 }
 

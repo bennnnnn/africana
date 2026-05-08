@@ -1,9 +1,15 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-  View, Text, ScrollView, TouchableOpacity,
-  TextInput, Pressable, ActivityIndicator,
-  Dimensions, StyleSheet,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Pressable,
+  ActivityIndicator,
+  Dimensions,
+  StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,11 +21,21 @@ import { supabase } from '@/lib/supabase';
 import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
 import { useAuthStore } from '@/store/auth.store';
 import {
-  COLORS, RADIUS, FONT, DEFAULT_AVATAR, MAX_PROFILE_PHOTOS,
-  GENDER_OPTIONS, INTERESTED_IN_OPTIONS,
-  LOOKING_FOR_OPTIONS, RELIGION_OPTIONS, EDUCATION_OPTIONS,
-  MARITAL_STATUS_OPTIONS, WANT_CHILDREN_YES_NO, PHYSICAL_CONDITION_OPTIONS,
-  OCCUPATION_OPTIONS, HAS_CHILDREN_OPTIONS,
+  COLORS,
+  RADIUS,
+  FONT,
+  DEFAULT_AVATAR,
+  MAX_PROFILE_PHOTOS,
+  GENDER_OPTIONS,
+  INTERESTED_IN_OPTIONS,
+  LOOKING_FOR_OPTIONS,
+  RELIGION_OPTIONS,
+  EDUCATION_OPTIONS,
+  MARITAL_STATUS_OPTIONS,
+  WANT_CHILDREN_YES_NO,
+  PHYSICAL_CONDITION_OPTIONS,
+  OCCUPATION_OPTIONS,
+  HAS_CHILDREN_OPTIONS,
 } from '@/constants';
 import { SliderPicker } from '@/components/ui/SliderPicker';
 import { DatePicker } from '@/components/ui/DatePicker';
@@ -62,14 +78,14 @@ export default function MyProfileScreen() {
   const [editing, setEditing] = useState<string | null>(null);
 
   // Generic edit state
-  const [editText, setEditText]     = useState('');
+  const [editText, setEditText] = useState('');
   const [editSelect, setEditSelect] = useState<string | null>(null);
-  const [editMulti, setEditMulti]   = useState<string[]>([]);
-  const [editBool, setEditBool]     = useState<boolean | null>(null);
+  const [editMulti, setEditMulti] = useState<string[]>([]);
+  const [editBool, setEditBool] = useState<boolean | null>(null);
   const [editHeight, setEditHeight] = useState(170);
   const [editWeight, setEditWeight] = useState(70);
-  const [editDate, setEditDate]               = useState<Date | null>(null);
-  const [editLocation, setEditLocation]       = useState<Partial<LocationValue>>({});
+  const [editDate, setEditDate] = useState<Date | null>(null);
+  const [editLocation, setEditLocation] = useState<Partial<LocationValue>>({});
   const [editOriginLocation, setEditOriginLocation] = useState<Partial<LocationValue>>({});
   const [photoUploading, setPhotoUploading] = useState(false);
   const [heroPage, setHeroPage] = useState(0);
@@ -78,6 +94,7 @@ export default function MyProfileScreen() {
   const [listSearch, setListSearch] = useState('');
 
   useFocusEffect(
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization -- narrow deps: focus refetch only when user id changes
     useCallback(() => {
       if (!user?.id) return;
       void fetchProfile(user.id);
@@ -122,29 +139,56 @@ export default function MyProfileScreen() {
     });
   }, [user?.id, mainPhotoIndex, heroPhotos.length]);
 
-  if (!user) return (
-    <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Ionicons name="person-outline" size={32} color={COLORS.primary} />
-      <Text style={{ marginTop: 12, fontSize: 14, color: COLORS.textSecondary }}>Loading profile…</Text>
-    </SafeAreaView>
-  );
+  if (!user)
+    return (
+      <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name="person-outline" size={32} color={COLORS.primary} />
+        <Text style={{ marginTop: 12, fontSize: 14, color: COLORS.textSecondary }}>
+          Loading profile…
+        </Text>
+      </SafeAreaView>
+    );
 
   // ── Open helpers ───────────────────────────────────────────────────────────
-  const close = () => { setEditing(null); setListSearch(''); };
+  const close = () => {
+    setEditing(null);
+    setListSearch('');
+  };
 
   const save = async (updates: Record<string, any>) => {
     setSaving(true);
-    try { await updateProfile(updates); close(); }
-    catch (e: any) {
-      appDialog({ title: 'Save failed', message: e?.message ?? "Couldn't save changes. Try again.", icon: 'alert-circle-outline' });
+    try {
+      await updateProfile(updates);
+      close();
+    } catch (e: any) {
+      appDialog({
+        title: 'Save failed',
+        message: e?.message ?? "Couldn't save changes. Try again.",
+        icon: 'alert-circle-outline',
+      });
+    } finally {
+      setSaving(false);
     }
-    finally { setSaving(false); }
   };
 
-  const openText   = (k: string, v: string | null)   => { setEditing(k); setEditText(v ?? ''); setListSearch(''); };
-  const openSelect = (k: string, v: string | null | undefined)   => { setEditing(k); setEditSelect(v ?? null); setListSearch(''); };
-  const openMulti  = (k: string, v: string[])        => { setEditing(k); setEditMulti([...v]); };
-  const openBool   = (k: string, v: boolean | null)  => { setEditing(k); setEditBool(v); };
+  const openText = (k: string, v: string | null) => {
+    setEditing(k);
+    setEditText(v ?? '');
+    setListSearch('');
+  };
+  const openSelect = (k: string, v: string | null | undefined) => {
+    setEditing(k);
+    setEditSelect(v ?? null);
+    setListSearch('');
+  };
+  const openMulti = (k: string, v: string[]) => {
+    setEditing(k);
+    setEditMulti([...v]);
+  };
+  const openBool = (k: string, v: boolean | null) => {
+    setEditing(k);
+    setEditBool(v);
+  };
 
   const openDate = () => {
     setEditing('birthdate');
@@ -254,38 +298,65 @@ export default function MyProfileScreen() {
   };
 
   const openEthnicity = async () => {
-    setEditing('ethnicity'); setEditText(user.ethnicity ?? ''); setListSearch('');
+    setEditing('ethnicity');
+    setEditText(user.ethnicity ?? '');
+    setListSearch('');
     await loadCultureData();
   };
   const openLanguages = async () => {
-    setEditing('languages'); setEditMulti([...(user.languages ?? [])]); setListSearch('');
+    setEditing('languages');
+    setEditMulti([...(user.languages ?? [])]);
+    setListSearch('');
     await loadCultureData();
   };
 
   // ── Display values ─────────────────────────────────────────────────────────
   const avatar = avatarForHero;
-  const photos   = user.profile_photos ?? [];
+  const photos = user.profile_photos ?? [];
   const location = [user.city, user.state, user.country].filter(Boolean).join(', ');
-  const today    = new Date();
-  const bday     = user.birthdate ? new Date(user.birthdate) : null;
-  const age      = bday ? today.getFullYear() - bday.getFullYear()
-    - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0) : null;
+  const today = new Date();
+  const bday = user.birthdate ? new Date(user.birthdate) : null;
+  const age = bday
+    ? today.getFullYear() -
+      bday.getFullYear() -
+      (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
+    : null;
   const isOnline = user.online_status === 'online';
 
-  const religionLabel     = user.religion       ? RELIGION_OPTIONS.find(o => o.value === user.religion)?.label            ?? user.religion       : null;
-  const educationLabel    = user.education      ? EDUCATION_OPTIONS.find(o => o.value === user.education)?.label           ?? user.education      : null;
-  const maritalLabel      = user.marital_status ? MARITAL_STATUS_OPTIONS.find(o => o.value === user.marital_status)?.label ?? user.marital_status : null;
-  const wantChildrenLabel = user.want_children  ? WANT_CHILDREN_YES_NO.find(o => o.value === user.want_children)?.label   ?? user.want_children  : null;
-  const bodyTypeLabel     = user.body_type      ? PHYSICAL_CONDITION_OPTIONS.find(o => o.value === user.body_type)?.label ?? user.body_type : null;
-  const occupationLabel   = user.occupation     ? OCCUPATION_OPTIONS.find(o => o.value === user.occupation)?.label ?? user.occupation  : null;
+  const religionLabel = user.religion
+    ? (RELIGION_OPTIONS.find((o) => o.value === user.religion)?.label ?? user.religion)
+    : null;
+  const educationLabel = user.education
+    ? (EDUCATION_OPTIONS.find((o) => o.value === user.education)?.label ?? user.education)
+    : null;
+  const maritalLabel = user.marital_status
+    ? (MARITAL_STATUS_OPTIONS.find((o) => o.value === user.marital_status)?.label ??
+      user.marital_status)
+    : null;
+  const wantChildrenLabel = user.want_children
+    ? (WANT_CHILDREN_YES_NO.find((o) => o.value === user.want_children)?.label ??
+      user.want_children)
+    : null;
+  const bodyTypeLabel = user.body_type
+    ? (PHYSICAL_CONDITION_OPTIONS.find((o) => o.value === user.body_type)?.label ?? user.body_type)
+    : null;
+  const occupationLabel = user.occupation
+    ? (OCCUPATION_OPTIONS.find((o) => o.value === user.occupation)?.label ?? user.occupation)
+    : null;
   const interestedInLabel =
     INTERESTED_IN_OPTIONS.find((o) => o.value === user.interested_in)?.label ?? null;
-  const locationDisplay    = [user.city, user.state, user.country].filter(Boolean).join(', ');
-  const originDisplay      = [user.origin_city, user.origin_state, user.origin_country].filter(Boolean).join(', ');
+  const locationDisplay = [user.city, user.state, user.country].filter(Boolean).join(', ');
+  const originDisplay = [user.origin_city, user.origin_state, user.origin_country]
+    .filter(Boolean)
+    .join(', ');
 
   // Detect if diaspora user has no origin set (needed for ethnicity/language data)
-  const livesInAfrica      = user.country ? AFRICAN_COUNTRY_CODES.has(resolveCountryFromStored(user.country)?.code ?? '') : false;
-  const hasAfricanOrigin   = !!user.origin_country && AFRICAN_COUNTRY_CODES.has(resolveCountryFromStored(user.origin_country)?.code ?? '');
+  const livesInAfrica = user.country
+    ? AFRICAN_COUNTRY_CODES.has(resolveCountryFromStored(user.country)?.code ?? '')
+    : false;
+  const hasAfricanOrigin =
+    !!user.origin_country &&
+    AFRICAN_COUNTRY_CODES.has(resolveCountryFromStored(user.origin_country)?.code ?? '');
   const needsOriginForData = !livesInAfrica && !hasAfricanOrigin;
 
   const strength = getProfileStrength(user);
@@ -301,16 +372,23 @@ export default function MyProfileScreen() {
   /** Map a `getProfileStrength` item key onto the on-screen section anchor. */
   const sectionForMissingKey = (key: string | undefined): string => {
     switch (key) {
-      case 'photo': return 'photos';
-      case 'bio': return 'about';
+      case 'photo':
+        return 'photos';
+      case 'bio':
+        return 'about';
       case 'religion':
       case 'ethnicity':
-      case 'languages': return 'personal';
+      case 'languages':
+        return 'personal';
       case 'education':
-      case 'occupation': return 'work';
-      case 'height': return 'physical';
-      case 'hobbies': return 'hobbies';
-      default: return 'about';
+      case 'occupation':
+        return 'work';
+      case 'height':
+        return 'physical';
+      case 'hobbies':
+        return 'hobbies';
+      default:
+        return 'about';
     }
   };
 
@@ -321,28 +399,46 @@ export default function MyProfileScreen() {
     onPick: (v: string | null) => void,
     withSearch = false,
   ) => {
-    const filtered = withSearch && listSearch.trim()
-      ? options.filter(o => o.label.toLowerCase().includes(listSearch.toLowerCase()))
-      : options;
+    const filtered =
+      withSearch && listSearch.trim()
+        ? options.filter((o) => o.label.toLowerCase().includes(listSearch.toLowerCase()))
+        : options;
     return (
       <View>
         {withSearch && (
           <View style={em.searchRow}>
             <Ionicons name="search-outline" size={16} color="#999" />
-            <TextInput value={listSearch} onChangeText={setListSearch}
-              placeholder="Search..." placeholderTextColor="#BBB"
-              style={{ flex: 1, fontSize: 14, color: '#111', marginLeft: 8 }} autoCorrect={false} />
+            <TextInput
+              value={listSearch}
+              onChangeText={setListSearch}
+              placeholder="Search..."
+              placeholderTextColor="#BBB"
+              style={{ flex: 1, fontSize: 14, color: '#111', marginLeft: 8 }}
+              autoCorrect={false}
+            />
           </View>
         )}
         <View style={{ gap: 8 }}>
-          {filtered.map(opt => {
+          {filtered.map((opt) => {
             const on = current === opt.value;
             return (
-              <Pressable key={opt.value} onPress={() => onPick(on ? null : opt.value)}
-                style={[em.option, on && em.optionOn]}>
-                {opt.emoji ? <Text style={{ fontSize: 18, marginRight: 10 }}>{opt.emoji}</Text> : null}
+              <Pressable
+                key={opt.value}
+                onPress={() => onPick(on ? null : opt.value)}
+                style={[em.option, on && em.optionOn]}
+              >
+                {opt.emoji ? (
+                  <Text style={{ fontSize: 18, marginRight: 10 }}>{opt.emoji}</Text>
+                ) : null}
                 <Text style={[em.optionTxt, on && em.optionTxtOn]}>{opt.label}</Text>
-                {on && <Ionicons name="checkmark-circle" size={18} color={COLORS.success} style={{ marginLeft: 'auto' }} />}
+                {on && (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={18}
+                    color={COLORS.success}
+                    style={{ marginLeft: 'auto' }}
+                  />
+                )}
               </Pressable>
             );
           })}
@@ -380,7 +476,6 @@ export default function MyProfileScreen() {
         nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
       >
-
         {/* Hero — swipe horizontally (ScrollView avoids FlatList-inside-ScrollView crash) */}
         {/* Neutral warm bg (not pure black) prevents the "dark flash" while the first
             image is still decoding on navigation. */}
@@ -422,9 +517,11 @@ export default function MyProfileScreen() {
               showCamera
             />
           )}
-          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.28)']}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.28)']}
             pointerEvents="none"
-            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '22%' }} />
+            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '22%' }}
+          />
           {/* Swipe dots — only when more than one photo */}
           {heroPhotos.length > 1 && (
             <View style={s.dotRow} pointerEvents="none">
@@ -433,16 +530,33 @@ export default function MyProfileScreen() {
               ))}
             </View>
           )}
-          <View style={[s.onlineBadge, { backgroundColor: isOnline ? COLORS.online : 'rgba(0,0,0,0.45)' }]}>
-            <View style={s.onlineDot} /><Text style={s.onlineText}>{isOnline ? 'Online' : 'Offline'}</Text>
+          <View
+            style={[
+              s.onlineBadge,
+              { backgroundColor: isOnline ? COLORS.online : 'rgba(0,0,0,0.45)' },
+            ]}
+          >
+            <View style={s.onlineDot} />
+            <Text style={s.onlineText}>{isOnline ? 'Online' : 'Offline'}</Text>
           </View>
           {photos.length < MAX_PROFILE_PHOTOS ? (
-            <TouchableOpacity style={s.cameraBtn} onPress={pickAndUploadPhoto} disabled={photoUploading}>
-              <Ionicons name={photoUploading ? 'hourglass-outline' : 'camera'} size={18} color="#FFF" />
+            <TouchableOpacity
+              style={s.cameraBtn}
+              onPress={pickAndUploadPhoto}
+              disabled={photoUploading}
+            >
+              <Ionicons
+                name={photoUploading ? 'hourglass-outline' : 'camera'}
+                size={18}
+                color="#FFF"
+              />
             </TouchableOpacity>
           ) : null}
           <View style={s.heroInfo}>
-            <Text style={s.heroName}>{user.full_name}{age ? `, ${age}` : ''}</Text>
+            <Text style={s.heroName}>
+              {user.full_name}
+              {age ? `, ${age}` : ''}
+            </Text>
             {location ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
                 <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.85)" />
@@ -455,7 +569,16 @@ export default function MyProfileScreen() {
         {/* Photo strip — tap a thumbnail to set it as main; horizontal scroll when many photos */}
         {photos.length > 1 && (
           <View>
-            <Text style={{ fontSize: 12, fontWeight: FONT.medium, color: COLORS.textSecondary, textAlign: 'center', paddingTop: 10, paddingBottom: 4 }}>
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: FONT.medium,
+                color: COLORS.textSecondary,
+                textAlign: 'center',
+                paddingTop: 10,
+                paddingBottom: 4,
+              }}
+            >
               Tap a photo to set it as your main picture
             </Text>
             <ScrollView
@@ -504,20 +627,30 @@ export default function MyProfileScreen() {
             sectionY.current.about = e.nativeEvent.layout.y;
           }}
         >
-        <View style={[s.section, { paddingTop: 18 }]}>
-          {user.bio ? (
-            <TouchableOpacity onPress={() => openText('bio', user.bio)} activeOpacity={0.7}
-              style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-              <Text style={s.bioText}>{user.bio}</Text>
-              <Ionicons name="pencil" size={15} color={COLORS.textStrong} style={{ marginTop: 3 }} />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity onPress={() => openText('bio', '')} style={s.emptyPrompt}>
-              <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
-              <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>Add a bio — it helps you stand out</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+          <View style={[s.section, { paddingTop: 18 }]}>
+            {user.bio ? (
+              <TouchableOpacity
+                onPress={() => openText('bio', user.bio)}
+                activeOpacity={0.7}
+                style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}
+              >
+                <Text style={s.bioText}>{user.bio}</Text>
+                <Ionicons
+                  name="pencil"
+                  size={15}
+                  color={COLORS.textStrong}
+                  style={{ marginTop: 3 }}
+                />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={() => openText('bio', '')} style={s.emptyPrompt}>
+                <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
+                <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>
+                  Add a bio — it helps you stand out
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Inline completion nudge — only when there's a missing field */}
@@ -529,7 +662,8 @@ export default function MyProfileScreen() {
           >
             <View style={s.completionDot} />
             <Text style={s.completionInlineTxt}>
-              Add your <Text style={{ fontWeight: FONT.extrabold }}>{nextMissing.label}</Text> to get more matches
+              Add your <Text style={{ fontWeight: FONT.extrabold }}>{nextMissing.label}</Text> to
+              get more matches
             </Text>
             <Ionicons name="chevron-forward" size={14} color={COLORS.emptyField} />
           </TouchableOpacity>
@@ -541,19 +675,63 @@ export default function MyProfileScreen() {
             sectionY.current.personal = e.nativeEvent.layout.y;
           }}
         >
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Personal</Text>
-          <FieldRow icon="person-outline"      label="Gender"         value={user.gender ? (GENDER_OPTIONS.find(o => o.value === user.gender)?.label ?? user.gender) : null} onEdit={() => openSelect('gender', user.gender)} />
-          <FieldRow icon="calendar-outline"    label="Date of birth"  value={user.birthdate ?? null} onEdit={openDate} />
-          <FieldRow icon="search-outline"      label="Interested in"  value={interestedInLabel} onEdit={() => openSelect('interested_in', user.interested_in)} />
-          <FieldRow icon="location-outline"    label="Location"       value={locationDisplay || null} onEdit={openLocation} />
-          {!livesInAfrica && (
-            <FieldRow icon="flag-outline"      label="Origin"         value={originDisplay || null} onEdit={openOriginLocation} />
-          )}
-          <FieldRow icon="globe-outline"       label="Ethnicity"      value={user.ethnicity ?? null} onEdit={openEthnicity} />
-          <FieldRow icon="chatbubbles-outline" label="Languages"      value={(user.languages ?? []).join(', ') || null} onEdit={openLanguages} />
-          <FieldRow icon="sunny-outline"       label="Religion"       value={religionLabel} onEdit={() => openSelect('religion', user.religion)} />
-        </View>
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Personal</Text>
+            <FieldRow
+              icon="person-outline"
+              label="Gender"
+              value={
+                user.gender
+                  ? (GENDER_OPTIONS.find((o) => o.value === user.gender)?.label ?? user.gender)
+                  : null
+              }
+              onEdit={() => openSelect('gender', user.gender)}
+            />
+            <FieldRow
+              icon="calendar-outline"
+              label="Date of birth"
+              value={user.birthdate ?? null}
+              onEdit={openDate}
+            />
+            <FieldRow
+              icon="search-outline"
+              label="Interested in"
+              value={interestedInLabel}
+              onEdit={() => openSelect('interested_in', user.interested_in)}
+            />
+            <FieldRow
+              icon="location-outline"
+              label="Location"
+              value={locationDisplay || null}
+              onEdit={openLocation}
+            />
+            {!livesInAfrica && (
+              <FieldRow
+                icon="flag-outline"
+                label="Origin"
+                value={originDisplay || null}
+                onEdit={openOriginLocation}
+              />
+            )}
+            <FieldRow
+              icon="globe-outline"
+              label="Ethnicity"
+              value={user.ethnicity ?? null}
+              onEdit={openEthnicity}
+            />
+            <FieldRow
+              icon="chatbubbles-outline"
+              label="Languages"
+              value={(user.languages ?? []).join(', ') || null}
+              onEdit={openLanguages}
+            />
+            <FieldRow
+              icon="sunny-outline"
+              label="Religion"
+              value={religionLabel}
+              onEdit={() => openSelect('religion', user.religion)}
+            />
+          </View>
         </View>
 
         {/* Looking for — intent first, matches the way people read profiles */}
@@ -562,26 +740,42 @@ export default function MyProfileScreen() {
             sectionY.current.looking = e.nativeEvent.layout.y;
           }}
         >
-        <View style={s.section}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <Text style={s.sectionTitle}>Looking for</Text>
-            <TouchableOpacity onPress={() => openMulti('looking_for', user.looking_for ?? [])} style={s.sectionEditBtn}>
-              <Ionicons name="pencil" size={13} color="#111" />
-            </TouchableOpacity>
-          </View>
-          {(user.looking_for ?? []).length > 0 ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 8 }}>
-              {(user.looking_for ?? []).map(lf => (
-                <View key={lf} style={s.badge}><Text style={s.badgeText}>{LOOKING_FOR_OPTIONS.find(o => o.value === lf)?.label ?? lf}</Text></View>
-              ))}
+          <View style={s.section}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 10,
+              }}
+            >
+              <Text style={s.sectionTitle}>Looking for</Text>
+              <TouchableOpacity
+                onPress={() => openMulti('looking_for', user.looking_for ?? [])}
+                style={s.sectionEditBtn}
+              >
+                <Ionicons name="pencil" size={13} color="#111" />
+              </TouchableOpacity>
             </View>
-          ) : (
-            <TouchableOpacity onPress={() => openMulti('looking_for', [])} style={s.emptyPrompt}>
-              <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
-              <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>Add what you're looking for</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+            {(user.looking_for ?? []).length > 0 ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 8 }}>
+                {(user.looking_for ?? []).map((lf) => (
+                  <View key={lf} style={s.badge}>
+                    <Text style={s.badgeText}>
+                      {LOOKING_FOR_OPTIONS.find((o) => o.value === lf)?.label ?? lf}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <TouchableOpacity onPress={() => openMulti('looking_for', [])} style={s.emptyPrompt}>
+                <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
+                <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>
+                  Add what you{"'"}re looking for
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Physical — appearance specs */}
@@ -590,13 +784,33 @@ export default function MyProfileScreen() {
             sectionY.current.physical = e.nativeEvent.layout.y;
           }}
         >
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Physical</Text>
-          <FieldRow icon="resize-outline"  label="Height"    value={user.height_cm ? `${(user.height_cm / 100).toFixed(2)} m` : null}
-            onEdit={() => { setEditing('height'); setEditHeight(user.height_cm ?? 170); }} />
-          <FieldRow icon="body-outline"    label="Body type" value={bodyTypeLabel} onEdit={() => openSelect('body_type', user.body_type)} />
-          <FieldRow icon="barbell-outline" label="Weight"    value={user.weight_kg ? `${user.weight_kg} kg` : null} onEdit={() => { setEditing('weight_kg'); setEditWeight(user.weight_kg ?? 70); }} />
-        </View>
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Physical</Text>
+            <FieldRow
+              icon="resize-outline"
+              label="Height"
+              value={user.height_cm ? `${(user.height_cm / 100).toFixed(2)} m` : null}
+              onEdit={() => {
+                setEditing('height');
+                setEditHeight(user.height_cm ?? 170);
+              }}
+            />
+            <FieldRow
+              icon="body-outline"
+              label="Body type"
+              value={bodyTypeLabel}
+              onEdit={() => openSelect('body_type', user.body_type)}
+            />
+            <FieldRow
+              icon="barbell-outline"
+              label="Weight"
+              value={user.weight_kg ? `${user.weight_kg} kg` : null}
+              onEdit={() => {
+                setEditing('weight_kg');
+                setEditWeight(user.weight_kg ?? 70);
+              }}
+            />
+          </View>
         </View>
 
         {/* Family — life stage & future */}
@@ -605,12 +819,27 @@ export default function MyProfileScreen() {
             sectionY.current.family = e.nativeEvent.layout.y;
           }}
         >
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Family</Text>
-          <FieldRow icon="heart-outline"  label="Marital status" value={maritalLabel} onEdit={() => openSelect('marital_status', user.marital_status)} />
-          <FieldRow icon="people-outline" label="Has children"   value={user.has_children == null ? null : user.has_children ? 'Yes' : 'No'} onEdit={() => openBool('has_children', user.has_children)} />
-          <FieldRow icon="happy-outline"  label="Wants children" value={wantChildrenLabel} onEdit={() => openSelect('want_children', user.want_children)} />
-        </View>
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Family</Text>
+            <FieldRow
+              icon="heart-outline"
+              label="Marital status"
+              value={maritalLabel}
+              onEdit={() => openSelect('marital_status', user.marital_status)}
+            />
+            <FieldRow
+              icon="people-outline"
+              label="Has children"
+              value={user.has_children == null ? null : user.has_children ? 'Yes' : 'No'}
+              onEdit={() => openBool('has_children', user.has_children)}
+            />
+            <FieldRow
+              icon="happy-outline"
+              label="Wants children"
+              value={wantChildrenLabel}
+              onEdit={() => openSelect('want_children', user.want_children)}
+            />
+          </View>
         </View>
 
         {/* Work & Education */}
@@ -619,11 +848,24 @@ export default function MyProfileScreen() {
             sectionY.current.work = e.nativeEvent.layout.y;
           }}
         >
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Work & Education</Text>
-          <FieldRow icon="briefcase-outline" label="Occupation" value={occupationLabel} onEdit={() => { openSelect('occupation', user.occupation); setListSearch(''); }} />
-          <FieldRow icon="school-outline"    label="Education"  value={educationLabel}  onEdit={() => openSelect('education', user.education)} />
-        </View>
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Work & Education</Text>
+            <FieldRow
+              icon="briefcase-outline"
+              label="Occupation"
+              value={occupationLabel}
+              onEdit={() => {
+                openSelect('occupation', user.occupation);
+                setListSearch('');
+              }}
+            />
+            <FieldRow
+              icon="school-outline"
+              label="Education"
+              value={educationLabel}
+              onEdit={() => openSelect('education', user.education)}
+            />
+          </View>
         </View>
 
         {/* Hobbies */}
@@ -632,26 +874,40 @@ export default function MyProfileScreen() {
             sectionY.current.hobbies = e.nativeEvent.layout.y;
           }}
         >
-        <View style={s.section}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <Text style={s.sectionTitle}>Hobbies & Interests</Text>
-            <TouchableOpacity onPress={() => openMulti('hobbies', user.hobbies ?? [])} style={s.sectionEditBtn}>
-              <Ionicons name="pencil" size={13} color="#111" />
-            </TouchableOpacity>
-          </View>
-          {(user.hobbies ?? []).length > 0 ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 8 }}>
-              {(user.hobbies ?? []).map(h => (
-                <View key={h} style={s.badge}><Text style={s.badgeText}>{h}</Text></View>
-              ))}
+          <View style={s.section}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 10,
+              }}
+            >
+              <Text style={s.sectionTitle}>Hobbies & Interests</Text>
+              <TouchableOpacity
+                onPress={() => openMulti('hobbies', user.hobbies ?? [])}
+                style={s.sectionEditBtn}
+              >
+                <Ionicons name="pencil" size={13} color="#111" />
+              </TouchableOpacity>
             </View>
-          ) : (
-            <TouchableOpacity onPress={() => openMulti('hobbies', [])} style={s.emptyPrompt}>
-              <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
-              <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>Add your hobbies & interests</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+            {(user.hobbies ?? []).length > 0 ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 8 }}>
+                {(user.hobbies ?? []).map((h) => (
+                  <View key={h} style={s.badge}>
+                    <Text style={s.badgeText}>{h}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <TouchableOpacity onPress={() => openMulti('hobbies', [])} style={s.emptyPrompt}>
+                <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
+                <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>
+                  Add your hobbies & interests
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Photos */}
@@ -660,151 +916,279 @@ export default function MyProfileScreen() {
             sectionY.current.photos = e.nativeEvent.layout.y;
           }}
         >
-        <View style={s.section}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <Text style={s.sectionTitle}>Photos</Text>
-            {photos.length < MAX_PROFILE_PHOTOS ? (
-              <TouchableOpacity onPress={pickAndUploadPhoto} style={s.sectionEditBtn}>
-                <Ionicons name="add" size={13} color="#111" />
-              </TouchableOpacity>
-            ) : (
-              <View style={s.sectionEditBtn} />
+          <View style={s.section}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 10,
+              }}
+            >
+              <Text style={s.sectionTitle}>Photos</Text>
+              {photos.length < MAX_PROFILE_PHOTOS ? (
+                <TouchableOpacity onPress={pickAndUploadPhoto} style={s.sectionEditBtn}>
+                  <Ionicons name="add" size={13} color="#111" />
+                </TouchableOpacity>
+              ) : (
+                <View style={s.sectionEditBtn} />
+              )}
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingBottom: 8 }}>
+              {photos.slice(0, MAX_PROFILE_PHOTOS).map((photo, i) => {
+                const tile = (width - 60) / 3;
+                return (
+                  <Pressable
+                    key={`${photo}-${i}`}
+                    onLongPress={() => confirmRemovePhoto(photo)}
+                    delayLongPress={450}
+                    style={{ width: tile, height: tile, borderRadius: 12, overflow: 'hidden' }}
+                  >
+                    <Image
+                      source={{ uri: photo }}
+                      style={{ width: tile, height: tile, borderRadius: 12 }}
+                      contentFit="cover"
+                    />
+                  </Pressable>
+                );
+              })}
+              {photos.length < MAX_PROFILE_PHOTOS ? (
+                <TouchableOpacity
+                  onPress={pickAndUploadPhoto}
+                  disabled={photoUploading}
+                  style={[
+                    { width: (width - 60) / 3, height: (width - 60) / 3, borderRadius: 12 },
+                    s.addPhotoTile,
+                  ]}
+                >
+                  {photoUploading ? (
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                  ) : (
+                    <>
+                      <Ionicons name="add" size={28} color={COLORS.emptyField} />
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: COLORS.emptyField,
+                          fontWeight: '600',
+                          marginTop: 2,
+                        }}
+                      >
+                        Add photo
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {photos.length > 0 && (
+              <Text style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>
+                Long press a photo to remove it
+              </Text>
             )}
           </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingBottom: 8 }}>
-            {photos.slice(0, MAX_PROFILE_PHOTOS).map((photo, i) => {
-              const tile = (width - 60) / 3;
-              return (
-                <Pressable
-                  key={`${photo}-${i}`}
-                  onLongPress={() => confirmRemovePhoto(photo)}
-                  delayLongPress={450}
-                  style={{ width: tile, height: tile, borderRadius: 12, overflow: 'hidden' }}
-                >
-                  <Image
-                    source={{ uri: photo }}
-                    style={{ width: tile, height: tile, borderRadius: 12 }}
-                    contentFit="cover"
-                  />
-                </Pressable>
-              );
-            })}
-            {photos.length < MAX_PROFILE_PHOTOS ? (
-              <TouchableOpacity onPress={pickAndUploadPhoto} disabled={photoUploading}
-                style={[{ width: (width - 60) / 3, height: (width - 60) / 3, borderRadius: 12 }, s.addPhotoTile]}>
-                {photoUploading
-                  ? <ActivityIndicator size="small" color={COLORS.primary} />
-                  : <><Ionicons name="add" size={28} color={COLORS.emptyField} /><Text style={{ fontSize: 11, color: COLORS.emptyField, fontWeight: '600', marginTop: 2 }}>Add photo</Text></>}
-              </TouchableOpacity>
-            ) : null}
-          </View>
-          {photos.length > 0 && (
-            <Text style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 4 }}>Long press a photo to remove it</Text>
-          )}
-        </View>
         </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
 
       {/* ════ BIO ════ */}
-      <EditModal visible={editing === 'bio'} title="About Me" onClose={close} saving={saving}
-        onSave={() => save({ bio: editText.trim() || null })}>
-        <TextInput value={editText} onChangeText={setEditText} multiline numberOfLines={6} maxLength={300}
-          placeholder="Tell others a little about yourself..." placeholderTextColor={COLORS.textMuted}
-          style={em.textArea} autoFocus />
-        <Text style={{ fontSize: 11, color: COLORS.textMuted, textAlign: 'right', marginTop: 6 }}>{editText.length}/300</Text>
+      <EditModal
+        visible={editing === 'bio'}
+        title="About Me"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ bio: editText.trim() || null })}
+      >
+        <TextInput
+          value={editText}
+          onChangeText={setEditText}
+          multiline
+          numberOfLines={6}
+          maxLength={300}
+          placeholder="Tell others a little about yourself..."
+          placeholderTextColor={COLORS.textMuted}
+          style={em.textArea}
+          autoFocus
+        />
+        <Text style={{ fontSize: 11, color: COLORS.textMuted, textAlign: 'right', marginTop: 6 }}>
+          {editText.length}/300
+        </Text>
       </EditModal>
 
       {/* ════ LOCATION ════ */}
-      <EditModal visible={editing === 'location'} title="Where do you live?" onClose={close} saving={saving}
-        onSave={() => save({
-          country: editLocation.country ?? user.country,
-          state:   editLocation.subdivision?.trim() || null,
-          city:    editLocation.city?.trim() || null,
-        })}>
+      <EditModal
+        visible={editing === 'location'}
+        title="Where do you live?"
+        onClose={close}
+        saving={saving}
+        onSave={() =>
+          save({
+            country: editLocation.country ?? user.country,
+            state: editLocation.subdivision?.trim() || null,
+            city: editLocation.city?.trim() || null,
+          })
+        }
+      >
         <LocationPicker value={editLocation} onChange={setEditLocation} />
       </EditModal>
 
       {/* ════ ORIGIN ════ */}
-      <EditModal visible={editing === 'origin_location'} title="Origin" onClose={close} saving={saving}
-        onSave={() => save({
-          origin_country: editOriginLocation.country?.trim() || null,
-          origin_state:   editOriginLocation.subdivision?.trim() || null,
-          origin_city:    editOriginLocation.city?.trim() || null,
-        })}>
-        <Text style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 16, lineHeight: 20 }}>
+      <EditModal
+        visible={editing === 'origin_location'}
+        title="Origin"
+        onClose={close}
+        saving={saving}
+        onSave={() =>
+          save({
+            origin_country: editOriginLocation.country?.trim() || null,
+            origin_state: editOriginLocation.subdivision?.trim() || null,
+            origin_city: editOriginLocation.city?.trim() || null,
+          })
+        }
+      >
+        <Text
+          style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 16, lineHeight: 20 }}
+        >
           Setting your origin enables ethnicity and language options specific to your country.
         </Text>
         <LocationPicker value={editOriginLocation} onChange={setEditOriginLocation} />
       </EditModal>
 
       {/* ════ BIRTHDATE ════ */}
-      <EditModal visible={editing === 'birthdate'} title="Date of Birth" onClose={close} saving={saving}
-        onSave={() => save({ birthdate: editDate ? editDate.toISOString().split('T')[0] : null })}>
-        <DatePicker label="Date of Birth" value={editDate} onChange={setEditDate} placeholder="Tap to select" />
+      <EditModal
+        visible={editing === 'birthdate'}
+        title="Date of Birth"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ birthdate: editDate ? editDate.toISOString().split('T')[0] : null })}
+      >
+        <DatePicker
+          label="Date of Birth"
+          value={editDate}
+          onChange={setEditDate}
+          placeholder="Tap to select"
+        />
       </EditModal>
 
       {/* ════ HEIGHT — same slider as onboarding ════ */}
-      <EditModal visible={editing === 'height'} title="Height" onClose={close} saving={saving}
-        onSave={() => save({ height_cm: editHeight })}>
+      <EditModal
+        visible={editing === 'height'}
+        title="Height"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ height_cm: editHeight })}
+      >
         <SliderPicker
           label="Height"
           value={editHeight}
-          min={120} max={220} unit=""
+          min={120}
+          max={220}
+          unit=""
           formatValue={(v) => `${(v / 100).toFixed(2)} m`}
           onChange={setEditHeight}
         />
       </EditModal>
 
       {/* ════ WEIGHT ════ */}
-      <EditModal visible={editing === 'weight_kg'} title="Weight" onClose={close} saving={saving}
-        onSave={() => save({ weight_kg: editWeight })}>
+      <EditModal
+        visible={editing === 'weight_kg'}
+        title="Weight"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ weight_kg: editWeight })}
+      >
         <SliderPicker
           label="Weight"
           value={editWeight}
-          min={35} max={180} unit="kg"
+          min={35}
+          max={180}
+          unit="kg"
           onChange={setEditWeight}
         />
       </EditModal>
 
       {/* ════ ETHNICITY — cultural data list matching onboarding ════ */}
-      <EditModal visible={editing === 'ethnicity'} title="Ethnicity" onClose={close} saving={saving}
-        onSave={() => save({ ethnicity: editText.trim() || null })}>
+      <EditModal
+        visible={editing === 'ethnicity'}
+        title="Ethnicity"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ ethnicity: editText.trim() || null })}
+      >
         {cultureLoading ? (
           <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
         ) : cultureEthnicityOpts.length > 0 ? (
           renderSelectList(
-            cultureEthnicityOpts.map(e => ({ value: e, label: e })),
+            cultureEthnicityOpts.map((e) => ({ value: e, label: e })),
             editText || null,
             (v) => setEditText(v ?? ''),
             true,
           )
         ) : needsOriginForData ? (
           <TouchableOpacity
-            onPress={() => { close(); setTimeout(openOriginLocation, 300); }}
-            style={{ borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.emptyFieldBorder, backgroundColor: COLORS.emptyFieldSurface, padding: 18, alignItems: 'center', gap: 10 }}>
+            onPress={() => {
+              close();
+              setTimeout(openOriginLocation, 300);
+            }}
+            style={{
+              borderRadius: 14,
+              borderWidth: 1,
+              borderStyle: 'dashed',
+              borderColor: COLORS.emptyFieldBorder,
+              backgroundColor: COLORS.emptyFieldSurface,
+              padding: 18,
+              alignItems: 'center',
+              gap: 10,
+            }}
+          >
             <Ionicons name="flag-outline" size={28} color={COLORS.emptyField} />
-            <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.emptyField, textAlign: 'center' }}>Set your origin first</Text>
-            <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}>
+            <Text
+              style={{
+                fontSize: 15,
+                fontWeight: '700',
+                color: COLORS.emptyField,
+                textAlign: 'center',
+              }}
+            >
+              Set your origin first
+            </Text>
+            <Text
+              style={{
+                fontSize: 13,
+                color: COLORS.textSecondary,
+                textAlign: 'center',
+                lineHeight: 18,
+              }}
+            >
               Tap to set your origin country and unlock ethnicity options for your heritage.
             </Text>
           </TouchableOpacity>
         ) : (
           <View>
-            <TextInput value={editText} onChangeText={setEditText} autoFocus
+            <TextInput
+              value={editText}
+              onChangeText={setEditText}
+              autoFocus
               placeholder="e.g. Yoruba, Amhara, Zulu, Habesha…"
-              placeholderTextColor={COLORS.textMuted} style={em.input} />
+              placeholderTextColor={COLORS.textMuted}
+              style={em.input}
+            />
             <Text style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 8 }}>
-              Type your ethnicity if it's not in the list
+              Type your ethnicity if it{"'"}s not in the list
             </Text>
           </View>
         )}
       </EditModal>
 
       {/* ════ LANGUAGES — cultural chip list matching onboarding ════ */}
-      <EditModal visible={editing === 'languages'} title="Languages" onClose={close} saving={saving}
-        onSave={() => save({ languages: editMulti })}>
+      <EditModal
+        visible={editing === 'languages'}
+        title="Languages"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ languages: editMulti })}
+      >
         {cultureLoading ? (
           <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
         ) : cultureLanguageOpts.suggested.length > 0 || cultureLanguageOpts.all.length > 0 ? (
@@ -813,12 +1197,16 @@ export default function MyProfileScreen() {
               <View style={{ marginBottom: 20 }}>
                 <Text style={em.groupLabel}>Suggested languages</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                  {cultureLanguageOpts.suggested.map(lang => {
+                  {cultureLanguageOpts.suggested.map((lang) => {
                     const on = editMulti.includes(lang);
                     return (
-                      <Pressable key={lang}
-                        onPress={() => setEditMulti(p => on ? p.filter(v => v !== lang) : [...p, lang])}
-                        style={[em.chip, on && em.chipOn]}>
+                      <Pressable
+                        key={lang}
+                        onPress={() =>
+                          setEditMulti((p) => (on ? p.filter((v) => v !== lang) : [...p, lang]))
+                        }
+                        style={[em.chip, on && em.chipOn]}
+                      >
                         <Text style={[em.chipTxt, on && em.chipTxtOn]}>{lang}</Text>
                       </Pressable>
                     );
@@ -826,107 +1214,204 @@ export default function MyProfileScreen() {
                 </View>
               </View>
             )}
-            {cultureLanguageOpts.all.filter(l => !cultureLanguageOpts.suggested.includes(l)).length > 0 && (
+            {cultureLanguageOpts.all.filter((l) => !cultureLanguageOpts.suggested.includes(l))
+              .length > 0 && (
               <View>
                 <Text style={em.groupLabel}>More languages</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                  {cultureLanguageOpts.all.filter(l => !cultureLanguageOpts.suggested.includes(l)).map(lang => {
-                    const on = editMulti.includes(lang);
-                    return (
-                      <Pressable key={lang}
-                        onPress={() => setEditMulti(p => on ? p.filter(v => v !== lang) : [...p, lang])}
-                        style={[em.chip, on && em.chipOn]}>
-                        <Text style={[em.chipTxt, on && em.chipTxtOn]}>{lang}</Text>
-                      </Pressable>
-                    );
-                  })}
+                  {cultureLanguageOpts.all
+                    .filter((l) => !cultureLanguageOpts.suggested.includes(l))
+                    .map((lang) => {
+                      const on = editMulti.includes(lang);
+                      return (
+                        <Pressable
+                          key={lang}
+                          onPress={() =>
+                            setEditMulti((p) => (on ? p.filter((v) => v !== lang) : [...p, lang]))
+                          }
+                          style={[em.chip, on && em.chipOn]}
+                        >
+                          <Text style={[em.chipTxt, on && em.chipTxtOn]}>{lang}</Text>
+                        </Pressable>
+                      );
+                    })}
                 </View>
               </View>
             )}
           </View>
         ) : needsOriginForData ? (
           <TouchableOpacity
-            onPress={() => { close(); setTimeout(openOriginLocation, 300); }}
-            style={{ borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.emptyFieldBorder, backgroundColor: COLORS.emptyFieldSurface, padding: 18, alignItems: 'center', gap: 10 }}>
+            onPress={() => {
+              close();
+              setTimeout(openOriginLocation, 300);
+            }}
+            style={{
+              borderRadius: 14,
+              borderWidth: 1,
+              borderStyle: 'dashed',
+              borderColor: COLORS.emptyFieldBorder,
+              backgroundColor: COLORS.emptyFieldSurface,
+              padding: 18,
+              alignItems: 'center',
+              gap: 10,
+            }}
+          >
             <Ionicons name="flag-outline" size={28} color={COLORS.emptyField} />
-            <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.emptyField, textAlign: 'center' }}>Set your origin first</Text>
-            <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}>
+            <Text
+              style={{
+                fontSize: 15,
+                fontWeight: '700',
+                color: COLORS.emptyField,
+                textAlign: 'center',
+              }}
+            >
+              Set your origin first
+            </Text>
+            <Text
+              style={{
+                fontSize: 13,
+                color: COLORS.textSecondary,
+                textAlign: 'center',
+                lineHeight: 18,
+              }}
+            >
               Tap to set your origin country and unlock language options for your heritage.
             </Text>
           </TouchableOpacity>
         ) : (
           <View>
-            <TextInput value={editMulti.join(', ')}
-              onChangeText={t => setEditMulti(t.split(',').map(l => l.trim()).filter(Boolean))}
-              autoFocus placeholder="e.g. English, Amharic, French"
-              placeholderTextColor={COLORS.textMuted} style={em.input} />
-            <Text style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 8 }}>Separate with commas</Text>
+            <TextInput
+              value={editMulti.join(', ')}
+              onChangeText={(t) =>
+                setEditMulti(
+                  t
+                    .split(',')
+                    .map((l) => l.trim())
+                    .filter(Boolean),
+                )
+              }
+              autoFocus
+              placeholder="e.g. English, Amharic, French"
+              placeholderTextColor={COLORS.textMuted}
+              style={em.input}
+            />
+            <Text style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 8 }}>
+              Separate with commas
+            </Text>
           </View>
         )}
       </EditModal>
 
       {/* ════ OCCUPATION — from OCCUPATION_OPTIONS like onboarding ════ */}
-      <EditModal visible={editing === 'occupation'} title="Occupation" onClose={close} saving={saving}
-        onSave={() => save({ occupation: editSelect })}>
+      <EditModal
+        visible={editing === 'occupation'}
+        title="Occupation"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ occupation: editSelect })}
+      >
         {renderSelectList(OCCUPATION_OPTIONS as any, editSelect, setEditSelect, true)}
       </EditModal>
 
       {/* ════ GENDER ════ */}
-      <EditModal visible={editing === 'gender'} title="I am a" onClose={close} saving={saving}
+      <EditModal
+        visible={editing === 'gender'}
+        title="I am a"
+        onClose={close}
+        saving={saving}
         onSave={() =>
           save({
             gender: editSelect,
             interested_in: oppositeInterestedIn(editSelect as Gender),
           })
-        }>
+        }
+      >
         {renderSelectList(GENDER_OPTIONS, editSelect, setEditSelect)}
       </EditModal>
 
       {/* ════ INTERESTED IN ════ */}
-      <EditModal visible={editing === 'interested_in'} title="Interested in" onClose={close} saving={saving}
-        onSave={() => save({ interested_in: editSelect })}>
+      <EditModal
+        visible={editing === 'interested_in'}
+        title="Interested in"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ interested_in: editSelect })}
+      >
         {renderSelectList(INTERESTED_IN_OPTIONS, editSelect, setEditSelect)}
       </EditModal>
 
       {/* ════ RELIGION ════ */}
-      <EditModal visible={editing === 'religion'} title="Religion" onClose={close} saving={saving}
-        onSave={() => save({ religion: editSelect })}>
+      <EditModal
+        visible={editing === 'religion'}
+        title="Religion"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ religion: editSelect })}
+      >
         {renderSelectList(RELIGION_OPTIONS, editSelect, setEditSelect)}
       </EditModal>
 
       {/* ════ EDUCATION ════ */}
-      <EditModal visible={editing === 'education'} title="Highest Education" onClose={close} saving={saving}
-        onSave={() => save({ education: editSelect })}>
+      <EditModal
+        visible={editing === 'education'}
+        title="Highest Education"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ education: editSelect })}
+      >
         {renderSelectList(EDUCATION_OPTIONS as any, editSelect, setEditSelect)}
       </EditModal>
 
       {/* ════ MARITAL STATUS ════ */}
-      <EditModal visible={editing === 'marital_status'} title="Marital Status" onClose={close} saving={saving}
-        onSave={() => save({ marital_status: editSelect })}>
+      <EditModal
+        visible={editing === 'marital_status'}
+        title="Marital Status"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ marital_status: editSelect })}
+      >
         {renderSelectList(MARITAL_STATUS_OPTIONS, editSelect, setEditSelect)}
       </EditModal>
 
       {/* ════ BODY TYPE ════ */}
-      <EditModal visible={editing === 'body_type'} title="Body Type" onClose={close} saving={saving}
-        onSave={() => save({ body_type: editSelect })}>
+      <EditModal
+        visible={editing === 'body_type'}
+        title="Body Type"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ body_type: editSelect })}
+      >
         {renderSelectList(PHYSICAL_CONDITION_OPTIONS as any, editSelect, setEditSelect)}
       </EditModal>
 
       {/* ════ WANT CHILDREN ════ */}
-      <EditModal visible={editing === 'want_children'} title="Want Children?" onClose={close} saving={saving}
-        onSave={() => save({ want_children: editSelect })}>
+      <EditModal
+        visible={editing === 'want_children'}
+        title="Want Children?"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ want_children: editSelect })}
+      >
         {renderSelectList(WANT_CHILDREN_YES_NO, editSelect, setEditSelect)}
       </EditModal>
 
       {/* ════ HAS CHILDREN ════ */}
-      <EditModal visible={editing === 'has_children'} title="Has children" onClose={close} saving={saving}
-        onSave={() => save({ has_children: editBool })}>
+      <EditModal
+        visible={editing === 'has_children'}
+        title="Has children"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ has_children: editBool })}
+      >
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          {HAS_CHILDREN_OPTIONS.map(opt => {
+          {HAS_CHILDREN_OPTIONS.map((opt) => {
             const on = editBool === (opt.value === 'true');
             return (
-              <Pressable key={opt.value} onPress={() => setEditBool(opt.value === 'true')}
-                style={[em.bigChip, on && em.bigChipOn]}>
+              <Pressable
+                key={opt.value}
+                onPress={() => setEditBool(opt.value === 'true')}
+                style={[em.bigChip, on && em.bigChipOn]}
+              >
                 <Text style={[em.bigChipTxt, on && em.bigChipTxtOn]}>{opt.label}</Text>
               </Pressable>
             );
@@ -935,15 +1420,24 @@ export default function MyProfileScreen() {
       </EditModal>
 
       {/* ════ LOOKING FOR ════ */}
-      <EditModal visible={editing === 'looking_for'} title="Looking For" onClose={close} saving={saving}
-        onSave={() => save({ looking_for: editMulti })}>
+      <EditModal
+        visible={editing === 'looking_for'}
+        title="Looking For"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ looking_for: editMulti })}
+      >
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-          {LOOKING_FOR_OPTIONS.map(opt => {
+          {LOOKING_FOR_OPTIONS.map((opt) => {
             const on = editMulti.includes(opt.value);
             return (
-              <Pressable key={opt.value}
-                onPress={() => setEditMulti(p => on ? p.filter(v => v !== opt.value) : [...p, opt.value])}
-                style={[em.chip, on && em.chipOn]}>
+              <Pressable
+                key={opt.value}
+                onPress={() =>
+                  setEditMulti((p) => (on ? p.filter((v) => v !== opt.value) : [...p, opt.value]))
+                }
+                style={[em.chip, on && em.chipOn]}
+              >
                 <Text style={[em.chipTxt, on && em.chipTxtOn]}>{opt.label}</Text>
               </Pressable>
             );
@@ -952,55 +1446,203 @@ export default function MyProfileScreen() {
       </EditModal>
 
       {/* ════ HOBBIES ════ */}
-      <EditModal visible={editing === 'hobbies'} title="Hobbies & Interests" onClose={close} saving={saving}
-        onSave={() => save({ hobbies: editMulti })}>
+      <EditModal
+        visible={editing === 'hobbies'}
+        title="Hobbies & Interests"
+        onClose={close}
+        saving={saving}
+        onSave={() => save({ hobbies: editMulti })}
+      >
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-          {HOBBY_OPTIONS.map(h => {
+          {HOBBY_OPTIONS.map((h) => {
             const on = editMulti.includes(h);
             return (
-              <Pressable key={h}
-                onPress={() => setEditMulti(p => on ? p.filter(v => v !== h) : [...p, h])}
-                style={[em.chip, on && em.chipOn]}>
+              <Pressable
+                key={h}
+                onPress={() => setEditMulti((p) => (on ? p.filter((v) => v !== h) : [...p, h]))}
+                style={[em.chip, on && em.chipOn]}
+              >
                 <Text style={[em.chipTxt, on && em.chipTxtOn]}>{h}</Text>
               </Pressable>
             );
           })}
         </View>
       </EditModal>
-
     </SafeAreaView>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: COLORS.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border },
-  iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
-  completionPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.emptyFieldSurface, borderWidth: 1, borderColor: COLORS.emptyFieldBorder },
-  completionPillTxt: { fontSize: 11, fontWeight: FONT.extrabold, color: COLORS.emptyField, letterSpacing: 0.2 },
-  onlineBadge: { position: 'absolute', top: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.xl },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.savanna,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completionPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.emptyFieldSurface,
+    borderWidth: 1,
+    borderColor: COLORS.emptyFieldBorder,
+  },
+  completionPillTxt: {
+    fontSize: 11,
+    fontWeight: FONT.extrabold,
+    color: COLORS.emptyField,
+    letterSpacing: 0.2,
+  },
+  onlineBadge: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.xl,
+  },
   onlineDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.white },
   onlineText: { fontSize: 12, color: COLORS.white, fontWeight: FONT.semibold },
-  cameraBtn: { position: 'absolute', bottom: 100, right: 14, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)' },
-  dotRow: { position: 'absolute', bottom: 80, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5 },
+  cameraBtn: {
+    position: 'absolute',
+    bottom: 100,
+    right: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  dotRow: {
+    position: 'absolute',
+    bottom: 80,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 5,
+  },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.45)' },
   dotActive: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.white },
   heroInfo: { position: 'absolute', bottom: 16, left: 16, right: 60 },
-  heroName: { fontSize: 30, fontFamily: FONT.displayFamily, color: COLORS.white, textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6, letterSpacing: 0.3 },
+  heroName: {
+    fontSize: 30,
+    fontFamily: FONT.displayFamily,
+    color: COLORS.white,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+    letterSpacing: 0.3,
+  },
   heroLocation: { fontSize: FONT.sm, color: 'rgba(255,255,255,0.85)' },
-  completionInline: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: COLORS.emptyFieldSurface, borderWidth: 1, borderColor: COLORS.emptyFieldBorder },
+  completionInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.emptyFieldSurface,
+    borderWidth: 1,
+    borderColor: COLORS.emptyFieldBorder,
+  },
   completionInlineTxt: { flex: 1, fontSize: 12.5, color: COLORS.text, lineHeight: 17 },
   completionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.emptyField },
-  section: { backgroundColor: COLORS.white, marginBottom: 8, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 8 },
-  sectionTitle: { fontSize: FONT.xs, fontWeight: FONT.extrabold, color: COLORS.earth, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 },
-  sectionEditBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
+  section: {
+    backgroundColor: COLORS.white,
+    marginBottom: 8,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: FONT.xs,
+    fontWeight: FONT.extrabold,
+    color: COLORS.earth,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  sectionEditBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.savanna,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   bioText: { flex: 1, fontSize: FONT.md, color: COLORS.textStrong, lineHeight: 23 },
-  emptyPrompt: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADIUS.md, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.emptyFieldBorder, backgroundColor: COLORS.emptyFieldSurface, marginBottom: 8 },
-  badge: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.xl, backgroundColor: COLORS.savanna, borderWidth: 1, borderColor: COLORS.border },
+  emptyPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: COLORS.emptyFieldBorder,
+    backgroundColor: COLORS.emptyFieldSurface,
+    marginBottom: 8,
+  },
+  badge: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.savanna,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
   badgeText: { fontSize: FONT.sm, color: COLORS.textStrong, fontWeight: FONT.semibold },
-  addPhotoTile: { backgroundColor: COLORS.emptyFieldSurface, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.emptyFieldBorder, alignItems: 'center', justifyContent: 'center' },
-  stripThumb:     { width: 56, height: 56, borderRadius: RADIUS.md, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
-  stripThumbActive:{ borderColor: COLORS.primary },
-  stripImg:       { width: '100%', height: '100%' },
-  stripCheck:     { position: 'absolute', bottom: 3, right: 3, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  addPhotoTile: {
+    backgroundColor: COLORS.emptyFieldSurface,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: COLORS.emptyFieldBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stripThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  stripThumbActive: { borderColor: COLORS.primary },
+  stripImg: { width: '100%', height: '100%' },
+  stripCheck: {
+    position: 'absolute',
+    bottom: 3,
+    right: 3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

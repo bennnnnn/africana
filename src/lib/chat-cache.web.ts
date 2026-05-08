@@ -51,13 +51,19 @@ export async function getCachedConversationSnapshot(
   };
 }
 
-export async function replaceCachedConversations(userId: string, conversations: Conversation[]): Promise<void> {
+export async function replaceCachedConversations(
+  userId: string,
+  conversations: Conversation[],
+): Promise<void> {
   const next = conversations.map(normalizeConversation);
   lruSet(conversationSnapshotStore, userId, next);
   lruSet(conversationStore, userId, next);
 }
 
-export async function deleteCachedConversation(userId: string, conversationId: string): Promise<void> {
+export async function deleteCachedConversation(
+  userId: string,
+  conversationId: string,
+): Promise<void> {
   // Remove from snapshot store
   const snapshot = conversationSnapshotStore.get(userId);
   if (snapshot) {
@@ -78,7 +84,10 @@ export async function getCachedMessages(conversationId: string): Promise<Message
   return (messageStore.get(conversationId) ?? []).map(normalizeMessage);
 }
 
-export async function replaceCachedMessages(conversationId: string, messages: Message[]): Promise<void> {
+export async function replaceCachedMessages(
+  conversationId: string,
+  messages: Message[],
+): Promise<void> {
   lruSet(messageStore, conversationId, messages.map(normalizeMessage));
 }
 

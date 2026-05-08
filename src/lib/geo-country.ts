@@ -31,7 +31,9 @@ async function fetchJson(url: string): Promise<unknown | null> {
   }
 }
 
-function matchCatalog(countryCode: string | undefined | null): { country: string; countryCode: string } | null {
+function matchCatalog(
+  countryCode: string | undefined | null,
+): { country: string; countryCode: string } | null {
   if (!countryCode || typeof countryCode !== 'string') return null;
   const code = countryCode.trim().toUpperCase();
   if (code.length !== 2) return null;
@@ -46,10 +48,7 @@ function parseIpWhoToRaw(data: unknown): IpRaw | null {
   if (!data || typeof data !== 'object') return null;
   const d = data as Record<string, unknown>;
   if (d.success === false) return null;
-  const code =
-    typeof d.country_code === 'string'
-      ? d.country_code.trim().toUpperCase()
-      : '';
+  const code = typeof d.country_code === 'string' ? d.country_code.trim().toUpperCase() : '';
   if (!getCountry(code)) return null;
   return {
     country_code: code,
@@ -61,10 +60,7 @@ function parseIpWhoToRaw(data: unknown): IpRaw | null {
 function parseGeoJsToRaw(data: unknown): IpRaw | null {
   if (!data || typeof data !== 'object') return null;
   const d = data as Record<string, unknown>;
-  const code =
-    typeof d.country_code === 'string'
-      ? d.country_code.trim().toUpperCase()
-      : '';
+  const code = typeof d.country_code === 'string' ? d.country_code.trim().toUpperCase() : '';
   if (!getCountry(code)) return null;
   return {
     country_code: code,
@@ -77,10 +73,7 @@ function parseIpApiCoToRaw(data: unknown): IpRaw | null {
   if (!data || typeof data !== 'object') return null;
   const d = data as Record<string, unknown>;
   if (d.error) return null;
-  const code =
-    typeof d.country_code === 'string'
-      ? d.country_code.trim().toUpperCase()
-      : '';
+  const code = typeof d.country_code === 'string' ? d.country_code.trim().toUpperCase() : '';
   if (!getCountry(code)) return null;
   const region =
     typeof d.region === 'string'
@@ -151,7 +144,10 @@ function pickBestCityInStrings(cities: string[], cityRaw: string): string {
   return bestScore >= 26 ? best : '';
 }
 
-async function citiesForSubdivision(country: CountryData, subdivisionName: string): Promise<string[]> {
+async function citiesForSubdivision(
+  country: CountryData,
+  subdivisionName: string,
+): Promise<string[]> {
   const sub = country.subdivisions.find((s) => s.name === subdivisionName);
   const staticList = sub?.cities ?? [];
   const ext = await loadAfricaCountryCities(country.code);
@@ -216,7 +212,7 @@ async function resolveIpRawToLocation(raw: IpRaw): Promise<LocationFromIp | null
     };
   }
 
-  let subName = pickBestSubdivisionName(countryData, region);
+  const subName = pickBestSubdivisionName(countryData, region);
 
   if (!subName && cityIn) {
     const found = await findSubdivisionAndCityFromCityOnly(countryData, cityIn);
@@ -271,7 +267,9 @@ export async function detectLocationFromIp(): Promise<LocationFromIp | null> {
     }
     const ipRaw = parseRaw(rawJson);
     if (!ipRaw) {
-      logWarn(`[geo-location] ${name} response not usable`, { sample: JSON.stringify(rawJson).slice(0, 200) });
+      logWarn(`[geo-location] ${name} response not usable`, {
+        sample: JSON.stringify(rawJson).slice(0, 200),
+      });
       continue;
     }
     try {
@@ -289,7 +287,10 @@ export async function detectLocationFromIp(): Promise<LocationFromIp | null> {
 /**
  * @deprecated Prefer {@link detectLocationFromIp} when you need subdivision/city hints.
  */
-export async function detectCountryFromIp(): Promise<{ country: string; countryCode: string } | null> {
+export async function detectCountryFromIp(): Promise<{
+  country: string;
+  countryCode: string;
+} | null> {
   const loc = await detectLocationFromIp();
   if (!loc) return null;
   return { country: loc.country, countryCode: loc.countryCode };

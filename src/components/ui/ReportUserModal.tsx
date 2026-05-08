@@ -64,19 +64,30 @@ export function ReportUserModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={close}
-    >
-      <View style={{ flex: 1, backgroundColor: 'rgba(17,17,17,0.42)', justifyContent: 'center', padding: 24 }}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: 'rgba(17,17,17,0.42)',
+          justifyContent: 'center',
+          padding: 24,
+        }}
+      >
         <View style={{ backgroundColor: COLORS.white, borderRadius: RADIUS.xxl, padding: 22 }}>
-          <Text style={{ fontSize: FONT.xl, fontWeight: FONT.extrabold, color: COLORS.textStrong, lineHeight: 28 }}>
+          <Text
+            style={{
+              fontSize: FONT.xl,
+              fontWeight: FONT.extrabold,
+              color: COLORS.textStrong,
+              lineHeight: 28,
+            }}
+          >
             Report {reportedUserName}
           </Text>
-          <Text style={{ marginTop: 8, fontSize: FONT.md, lineHeight: 22, color: COLORS.textSecondary }}>
-            Choose a reason. We'll review it.
+          <Text
+            style={{ marginTop: 8, fontSize: FONT.md, lineHeight: 22, color: COLORS.textSecondary }}
+          >
+            Choose a reason. We{"'"}ll review it.
           </Text>
           <View style={{ marginTop: 18, gap: 10 }}>
             {USER_REPORT_REASONS.map((reason) => {
@@ -111,7 +122,9 @@ export function ReportUserModal({
                   >
                     {reason}
                   </Text>
-                  {selected ? <Ionicons name="checkmark-circle" size={18} color={COLORS.success} /> : null}
+                  {selected ? (
+                    <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />
+                  ) : null}
                 </TouchableOpacity>
               );
             })}
@@ -126,7 +139,9 @@ export function ReportUserModal({
                 backgroundColor: COLORS.savanna,
               }}
             >
-              <Text style={{ fontSize: FONT.sm, fontWeight: FONT.bold, color: COLORS.earth }}>Choose a reason</Text>
+              <Text style={{ fontSize: FONT.sm, fontWeight: FONT.bold, color: COLORS.earth }}>
+                Choose a reason
+              </Text>
             </View>
           ) : null}
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
@@ -145,7 +160,9 @@ export function ReportUserModal({
                 backgroundColor: COLORS.white,
               }}
             >
-              <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.textStrong }}>{UI_LABELS.cancel}</Text>
+              <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.textStrong }}>
+                {UI_LABELS.cancel}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.85}
@@ -164,7 +181,9 @@ export function ReportUserModal({
               }}
             >
               <Ionicons name="flag-outline" size={17} color={COLORS.white} />
-              <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.white }}>Report</Text>
+              <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.white }}>
+                Report
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

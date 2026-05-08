@@ -115,11 +115,14 @@ export async function getSubscription(userId: string): Promise<Subscription> {
     try {
       const Purchases = (await import('react-native-purchases' as any)).default;
       const info = await Purchases.getCustomerInfo();
-      const isGold     = !!info.entitlements.active['gold'];
+      const isGold = !!info.entitlements.active['gold'];
       const isPlatinum = !!info.entitlements.active['platinum'];
-      if (isPlatinum) return { plan: 'platinum', expiresAt: null, isActive: true, provider: 'revenuecat' };
-      if (isGold)     return { plan: 'gold',     expiresAt: null, isActive: true, provider: 'revenuecat' };
-    } catch {}
+      if (isPlatinum)
+        return { plan: 'platinum', expiresAt: null, isActive: true, provider: 'revenuecat' };
+      if (isGold) return { plan: 'gold', expiresAt: null, isActive: true, provider: 'revenuecat' };
+    } catch {
+      /* RevenueCat not configured or customer info unavailable */
+    }
   }
 
   // Fall back to DB
@@ -131,7 +134,10 @@ export async function getSubscription(userId: string): Promise<Subscription> {
 
   if (!data || !data.is_active) {
     // Early growth: no paid sub yet — Gold for users who helped spread the word.
-    if ((await growthShareRewardsCurrentlyApplies()) && (await userHasRecordedProfileShare(userId))) {
+    if (
+      (await growthShareRewardsCurrentlyApplies()) &&
+      (await userHasRecordedProfileShare(userId))
+    ) {
       return { plan: 'gold', expiresAt: null, isActive: true, provider: 'manual' };
     }
     return FREE_SUB;
@@ -165,18 +171,18 @@ export async function purchasePlan(
     const Purchases = (await import('react-native-purchases' as any)).default;
     const offerings = await Purchases.getOfferings();
     const pkgId = PLANS[plan].revenuecatId[Platform.OS === 'ios' ? 'ios' : 'android'];
-    const pkg = offerings.current?.availablePackages.find(
-      (p: any) => p.identifier === pkgId,
-    );
+    const pkg = offerings.current?.availablePackages.find((p: any) => p.identifier === pkgId);
     if (!pkg) return { success: false, error: 'Package not found.' };
     const { customerInfo } = await Purchases.purchasePackage(pkg);
     const isActive = !!customerInfo.entitlements.active[plan];
     if (isActive) {
       // Sync to DB for offline access
-      await supabase.from('subscriptions').upsert(
-        { user_id: userId, plan, is_active: true, provider: 'revenuecat' },
-        { onConflict: 'user_id' },
-      );
+      await supabase
+        .from('subscriptions')
+        .upsert(
+          { user_id: userId, plan, is_active: true, provider: 'revenuecat' },
+          { onConflict: 'user_id' },
+        );
     }
     return { success: isActive };
   } catch (e: any) {
@@ -194,13 +200,15 @@ export async function restorePurchases(
     const Purchases = (await import('react-native-purchases' as any)).default;
     const info = await Purchases.restorePurchases();
     const isPlatinum = !!info.entitlements.active['platinum'];
-    const isGold     = !!info.entitlements.active['gold'];
+    const isGold = !!info.entitlements.active['gold'];
     const plan: PlanId = isPlatinum ? 'platinum' : isGold ? 'gold' : 'free';
     if (plan !== 'free') {
-      await supabase.from('subscriptions').upsert(
-        { user_id: userId, plan, is_active: true, provider: 'revenuecat' },
-        { onConflict: 'user_id' },
-      );
+      await supabase
+        .from('subscriptions')
+        .upsert(
+          { user_id: userId, plan, is_active: true, provider: 'revenuecat' },
+          { onConflict: 'user_id' },
+        );
     }
     return { success: true, plan };
   } catch {

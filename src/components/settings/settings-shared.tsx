@@ -1,12 +1,5 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Switch,
-  Pressable,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, TouchableOpacity, Switch, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONT } from '@/constants';
 
@@ -227,7 +220,10 @@ export function SettingRow({
 
 export function SettingsSectionHeader({ label, first }: { label: string; first?: boolean }) {
   return (
-    <Text style={[sectionHeaderStyles.text, !first && sectionHeaderStyles.textAfter]} accessibilityRole="header">
+    <Text
+      style={[sectionHeaderStyles.text, !first && sectionHeaderStyles.textAfter]}
+      accessibilityRole="header"
+    >
       {label}
     </Text>
   );

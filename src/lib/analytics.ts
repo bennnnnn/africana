@@ -91,7 +91,11 @@ export async function initAnalytics(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const maybeReady = (instance as any).ready;
     if (typeof maybeReady === 'function') {
-      try { await maybeReady.call(instance); } catch { /* ignore */ }
+      try {
+        await maybeReady.call(instance);
+      } catch {
+        /* ignore */
+      }
     }
     client = instance;
     flushQueue();
@@ -113,7 +117,11 @@ export function track(event: string, props?: Record<string, unknown>): void {
     queue.push({ kind: 'track', event, props });
     return;
   }
-  try { client.capture(event, asPhProps(props)); } catch { /* swallow */ }
+  try {
+    client.capture(event, asPhProps(props));
+  } catch {
+    /* swallow */
+  }
 }
 
 /** Associate subsequent events with a user id. Call on sign-in. */
@@ -123,7 +131,11 @@ export function identify(distinctId: string, props?: Record<string, unknown>): v
     queue.push({ kind: 'identify', distinctId, props });
     return;
   }
-  try { client.identify(distinctId, asPhProps(props)); } catch { /* swallow */ }
+  try {
+    client.identify(distinctId, asPhProps(props));
+  } catch {
+    /* swallow */
+  }
 }
 
 /** Forget the current user. Call on sign-out. */
@@ -133,7 +145,11 @@ export function resetAnalytics(): void {
     queue.push({ kind: 'reset' });
     return;
   }
-  try { client.reset(); } catch { /* swallow */ }
+  try {
+    client.reset();
+  } catch {
+    /* swallow */
+  }
 }
 
 /** Event name constants — centralized to avoid typos in dashboards. */

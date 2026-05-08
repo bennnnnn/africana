@@ -51,7 +51,14 @@ export function ChatMessageList({
             pointerEvents: 'none',
           }}
         >
-          <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
+          <Text
+            style={{
+              fontSize: 14,
+              color: COLORS.textSecondary,
+              textAlign: 'center',
+              lineHeight: 22,
+            }}
+          >
             No messages yet.{'\n'}Say hello! 👋
           </Text>
         </View>

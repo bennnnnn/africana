@@ -45,7 +45,8 @@ export default function RegisterScreen() {
     if (!termsAccepted) {
       appDialog({
         title: 'Please accept the Terms',
-        message: 'You need to agree to the Terms of Service and Privacy Policy to create an account.',
+        message:
+          'You need to agree to the Terms of Service and Privacy Policy to create an account.',
         icon: 'document-text-outline',
       });
       return;
@@ -71,7 +72,11 @@ export default function RegisterScreen() {
             "You've reached the email limit. Please wait 1 hour, or sign in with Google instead — it's instant.",
           icon: 'time-outline',
           actions: [
-            { label: 'Sign in with Google', style: 'primary', onPress: () => router.replace('/(auth)/login') },
+            {
+              label: 'Sign in with Google',
+              style: 'primary',
+              onPress: () => router.replace('/(auth)/login'),
+            },
             { label: 'OK', style: 'cancel' },
           ],
         });
@@ -82,12 +87,20 @@ export default function RegisterScreen() {
             'This email may already be in use. Try signing in, or use Forgot password on the sign-in screen.',
           icon: 'person-outline',
           actions: [
-            { label: 'Go to sign in', style: 'primary', onPress: () => router.replace('/(auth)/login') },
+            {
+              label: 'Go to sign in',
+              style: 'primary',
+              onPress: () => router.replace('/(auth)/login'),
+            },
             { label: 'Close', style: 'cancel' },
           ],
         });
       } else {
-        appDialog({ title: 'Registration failed', message: error.message, icon: 'alert-circle-outline' });
+        appDialog({
+          title: 'Registration failed',
+          message: error.message,
+          icon: 'alert-circle-outline',
+        });
       }
       return;
     }
@@ -95,7 +108,8 @@ export default function RegisterScreen() {
     if (!data.user || !data.session?.user) {
       appDialog({
         title: 'Email sign-up unavailable',
-        message: 'We could not start your account session. Please try again or continue with Google.',
+        message:
+          'We could not start your account session. Please try again or continue with Google.',
         icon: 'alert-circle-outline',
       });
       return;
@@ -109,8 +123,14 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, paddingBottom: 36 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, padding: 24, paddingBottom: 36 }}
+          keyboardShouldPersistTaps="handled"
+        >
           <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
             <Ionicons name="arrow-back" size={20} color={COLORS.text} />
           </TouchableOpacity>
@@ -132,7 +152,11 @@ export default function RegisterScreen() {
             autoCapitalize="none"
             leftIcon="mail-outline"
             placeholder="your@email.com"
-            validationState={getValidationState(showEmailState, emailValidation, Boolean(trimmedEmail))}
+            validationState={getValidationState(
+              showEmailState,
+              emailValidation,
+              Boolean(trimmedEmail),
+            )}
             error={showEmailState ? emailValidation.message : undefined}
           />
           <Input
@@ -146,7 +170,11 @@ export default function RegisterScreen() {
             isPassword
             leftIcon="lock-closed-outline"
             placeholder="Min. 6 characters"
-            validationState={getValidationState(showPasswordState, passwordValidation, Boolean(password))}
+            validationState={getValidationState(
+              showPasswordState,
+              passwordValidation,
+              Boolean(password),
+            )}
             error={showPasswordState ? passwordValidation.message : undefined}
           />
 
@@ -166,9 +194,13 @@ export default function RegisterScreen() {
           />
 
           <View style={s.signinRow}>
-            <Text style={{ color: COLORS.textSecondary, fontSize: 14 }}>Already have an account? </Text>
+            <Text style={{ color: COLORS.textSecondary, fontSize: 14 }}>
+              Already have an account?{' '}
+            </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-              <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 14 }}>Sign In</Text>
+              <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 14 }}>
+                Sign In
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

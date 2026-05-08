@@ -6,17 +6,15 @@ import { router } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
-import {
-  SettingRow,
-  settingsStyles,
-} from '@/components/settings/settings-shared';
+import { SettingRow, settingsStyles } from '@/components/settings/settings-shared';
 import { COLORS } from '@/constants';
 import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import { exportAndShareUserData } from '@/lib/data-export';
 
 const appVersion =
   (Constants.expoConfig?.version as string | undefined) ??
-  (Constants.manifest2 as { extra?: { expoClient?: { version?: string } } })?.extra?.expoClient?.version ??
+  (Constants.manifest2 as { extra?: { expoClient?: { version?: string } } })?.extra?.expoClient
+    ?.version ??
   '1.0.0';
 
 export default function AccountSettingsScreen() {
@@ -42,9 +40,7 @@ export default function AccountSettingsScreen() {
       }
       showToast({
         message:
-          result.reason === 'unauthenticated'
-            ? UI_TOAST.sessionExpired
-            : UI_TOAST.exportFailed,
+          result.reason === 'unauthenticated' ? UI_TOAST.sessionExpired : UI_TOAST.exportFailed,
         icon: 'alert-circle-outline',
       });
     } finally {
@@ -78,7 +74,10 @@ export default function AccountSettingsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
       <SettingsHeaderBar title="Account" titleAlign="leading" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={settingsStyles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={settingsStyles.scrollContent}
+      >
         <Text style={settingsStyles.screenIntro}>
           App info, sign out, and permanently deleting your account.
         </Text>

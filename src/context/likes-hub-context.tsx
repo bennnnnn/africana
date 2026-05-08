@@ -7,9 +7,7 @@ const LikesHubContext = createContext<LikesHubContextValue | null>(null);
 
 export function LikesHubProvider({ children }: { children: React.ReactNode }) {
   const value = useLikesHubController();
-  return (
-    <LikesHubContext.Provider value={value}>{children}</LikesHubContext.Provider>
-  );
+  return <LikesHubContext.Provider value={value}>{children}</LikesHubContext.Provider>;
 }
 
 export function useLikesHub(): LikesHubContextValue {

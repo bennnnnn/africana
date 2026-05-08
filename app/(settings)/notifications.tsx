@@ -31,7 +31,8 @@ export default function NotificationsSettingsScreen() {
   );
 
   const notifyToggle =
-    (key: 'notify_messages' | 'notify_likes' | 'notify_matches' | 'notify_views') => async (v: boolean) => {
+    (key: 'notify_messages' | 'notify_likes' | 'notify_matches' | 'notify_views') =>
+    async (v: boolean) => {
       const r = await updateSettings({ [key]: v } as Partial<UserSettings>);
       if (!r.ok) {
         showToast({ message: r.message, icon: 'alert-circle-outline' });
@@ -54,7 +55,10 @@ export default function NotificationsSettingsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
       <SettingsHeaderBar title="Notifications" titleAlign="leading" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={settingsStyles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={settingsStyles.scrollContent}
+      >
         <SettingsSectionHeader label="What to notify" first />
         <View style={settingsStyles.sectionBlock}>
           <SettingRow

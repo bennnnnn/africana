@@ -20,12 +20,17 @@ export async function fetchProfileRow(userId: string): Promise<User | null> {
       })()
     : null;
   const age = bday
-    ? today.getFullYear() - bday.getFullYear() - (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
+    ? today.getFullYear() -
+      bday.getFullYear() -
+      (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
     : undefined;
 
   const rawGender = String(data.gender ?? '');
   const gender: Gender = rawGender === 'male' || rawGender === 'female' ? rawGender : 'female';
-  const interested_in = normalizeInterestedInFromDb(gender, data.interested_in as string | null | undefined);
+  const interested_in = normalizeInterestedInFromDb(
+    gender,
+    data.interested_in as string | null | undefined,
+  );
 
   const profileFix: { gender?: Gender; interested_in?: typeof interested_in } = {};
   if (gender !== data.gender) profileFix.gender = gender;
@@ -53,7 +58,11 @@ export function withSessionEmail(user: User, session: Session | null): User {
 }
 
 export async function fetchOrCreateSettingsRow(userId: string): Promise<UserSettings | null> {
-  const { data, error } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
+  const { data, error } = await supabase
+    .from('user_settings')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
   if (!error && data) return data as UserSettings;
 
   const defaults = {
@@ -73,7 +82,10 @@ export async function fetchOrCreateSettingsRow(userId: string): Promise<UserSett
     matches_seen_at: null,
     sent_seen_at: null,
   };
-  const { data: created } = await supabase.from('user_settings').upsert(defaults, { onConflict: 'user_id' }).select().single();
+  const { data: created } = await supabase
+    .from('user_settings')
+    .upsert(defaults, { onConflict: 'user_id' })
+    .select()
+    .single();
   return (created as UserSettings) ?? null;
 }
-

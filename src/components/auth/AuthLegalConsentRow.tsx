@@ -19,8 +19,7 @@ export function AuthLegalConsentRow({ checked, onToggle, variant = 'surface', st
   const textColor: TextStyle['color'] =
     variant === 'brand' ? 'rgba(255,255,255,0.88)' : COLORS.textSecondary;
   const linkColor: TextStyle['color'] = variant === 'brand' ? '#FFFFFF' : COLORS.primary;
-  const idleIcon =
-    variant === 'brand' ? 'rgba(255,255,255,0.55)' : COLORS.textMuted;
+  const idleIcon = variant === 'brand' ? 'rgba(255,255,255,0.55)' : COLORS.textMuted;
   const iconColor = checked ? linkColor : idleIcon;
 
   return (
@@ -41,8 +40,8 @@ export function AuthLegalConsentRow({ checked, onToggle, variant = 'surface', st
           }}
         >
           Terms of Service
-        </Text>
-        {' '}and{' '}
+        </Text>{' '}
+        and{' '}
         <Text
           style={[styles.link, { color: linkColor }]}
           onPress={(e) => {

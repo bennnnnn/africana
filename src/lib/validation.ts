@@ -36,7 +36,7 @@ export function validateFirstName(value: string): ValidationResult {
 export function getValidationState(
   visible: boolean,
   result: ValidationResult,
-  hasValue: boolean
+  hasValue: boolean,
 ): 'default' | 'error' | 'success' {
   if (!visible) return 'default';
   if (!result.valid) return 'error';

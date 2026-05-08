@@ -1,21 +1,17 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   ActivityIndicator,
-  Animated,
   ScrollView,
-  TouchableOpacity,
   Pressable,
   Platform,
   KeyboardAvoidingView,
   StyleSheet,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
@@ -44,8 +40,11 @@ import { detectLocationFromIp } from '@/lib/geo-country';
 import { logWarn } from '@/lib/logger';
 import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
 import { MultiChipSelect } from '@/components/onboarding/MultiChipSelect';
+import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
+import { OnboardingProgressBar } from '@/components/onboarding/OnboardingProgressBar';
+import { OnboardingPhotoGrid } from '@/components/onboarding/OnboardingPhotoGrid';
 
-const { width } = Dimensions.get('window');
+// Keep Dimensions import for downstream layout (step chip layouts) even when not directly used here.
 
 // Step 7 is the celebration screen; steps 1–6 are defined in ONBOARDING_STEP_METAS.
 
@@ -54,7 +53,6 @@ export default function OnboardingScreen() {
   const hydrateUserFromServer = useAuthStore((s) => s.hydrateUserFromServer);
 
   const [step, setStep] = useState(1);
-  const progressAnim = useRef(new Animated.Value((1 / TOTAL_STEPS) * 100)).current;
 
   // Step 1
   const [fullName, setFullName] = useState('');
@@ -64,25 +62,40 @@ export default function OnboardingScreen() {
   const [photoUris, setPhotoUris] = useState<string[]>([]);
 
   // Step 3
-  const [birthdate, setBirthdate]       = useState<Date | null>(null);
-  const [gender, setGender]             = useState<Gender | null>(null);
+  const [birthdate, setBirthdate] = useState<Date | null>(null);
+  const [gender, setGender] = useState<Gender | null>(null);
   const [interestedIn, setInterestedIn] = useState<InterestedIn | null>(null);
+  const [ageYears, setAgeYears] = useState<number | null>(null);
+
+  const handleBirthdateChange = (d: Date | null) => {
+    setBirthdate(d);
+    if (!d) {
+      setAgeYears(null);
+      return;
+    }
+    const years = (Date.now() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+    setAgeYears(years);
+  };
 
   // Step 4
   const [lookingFor, setLookingFor] = useState<LookingFor[]>([]);
   const toggleLookingFor = (val: LookingFor) =>
-    setLookingFor((p) => p.includes(val) ? p.filter((v) => v !== val) : [...p, val]);
+    setLookingFor((p) => (p.includes(val) ? p.filter((v) => v !== val) : [...p, val]));
 
   // Step 5 — location
-  const [location, setLocation]             = useState<Partial<LocationValue>>({});
+  const [location, setLocation] = useState<Partial<LocationValue>>({});
   const [originLocation, setOriginLocation] = useState<Partial<LocationValue>>({});
 
   // Step 6 — ethnicity & languages
-  const [ethnicity, setEthnicity]   = useState('');
-  const [languages, setLanguages]   = useState<string[]>([]);
-  const [cultureEthnicityOptions, setCultureEthnicityOptions] = useState<CultureOptionSet | null>(null);
-  const [cultureLanguageOptions, setCultureLanguageOptions]   = useState<CultureOptionSet | null>(null);
-  const [cultureOptionsLoading, setCultureOptionsLoading]     = useState(false);
+  const [ethnicity, setEthnicity] = useState('');
+  const [languages, setLanguages] = useState<string[]>([]);
+  const [cultureEthnicityOptions, setCultureEthnicityOptions] = useState<CultureOptionSet | null>(
+    null,
+  );
+  const [cultureLanguageOptions, setCultureLanguageOptions] = useState<CultureOptionSet | null>(
+    null,
+  );
+  const [cultureOptionsLoading, setCultureOptionsLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const saveInFlightRef = useRef(false);
@@ -90,16 +103,22 @@ export default function OnboardingScreen() {
   const firstNameValidation = validateFirstName(fullName);
 
   // ── Cultural location derivations ──────────────────────────────────────────
-  const livesInAfrica = location.countryCode ? AFRICAN_COUNTRY_CODES.has(location.countryCode) : false;
+  const livesInAfrica = location.countryCode
+    ? AFRICAN_COUNTRY_CODES.has(location.countryCode)
+    : false;
   const needsOriginCountry = Boolean(location.countryCode) && !livesInAfrica;
-  const originMatchesLiving = Boolean(originLocation.countryCode) && originLocation.countryCode === location.countryCode;
+  const originMatchesLiving =
+    Boolean(originLocation.countryCode) && originLocation.countryCode === location.countryCode;
   const culturalLocation = livesInAfrica
     ? location
-    : (needsOriginCountry && originLocation.countryCode && AFRICAN_COUNTRY_CODES.has(originLocation.countryCode) && !originMatchesLiving)
+    : needsOriginCountry &&
+        originLocation.countryCode &&
+        AFRICAN_COUNTRY_CODES.has(originLocation.countryCode) &&
+        !originMatchesLiving
       ? originLocation
       : null;
   const locationPathComplete = Boolean(
-    culturalLocation?.country && culturalLocation?.subdivision && culturalLocation?.city
+    culturalLocation?.country && culturalLocation?.subdivision && culturalLocation?.city,
   );
   /** “Your roots” (step 6) only when we have a full cultural location; otherwise finish after location. */
   const showRootsStep = locationPathComplete;
@@ -107,23 +126,18 @@ export default function OnboardingScreen() {
     step <= 4 ? TOTAL_STEPS : step === 5 && !showRootsStep ? 5 : TOTAL_STEPS;
 
   useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: (Math.min(step, progressDenominator) / progressDenominator) * 100,
-      duration: 350,
-      useNativeDriver: false,
-    }).start();
-  }, [step, progressDenominator]);
-
-  useLayoutEffect(() => {
-    if (step === 6 && !locationPathComplete) {
-      setStep(5);
-    }
+    if (step !== 6 || locationPathComplete) return;
+    const t = setTimeout(() => setStep(5), 0);
+    return () => clearTimeout(t);
   }, [step, locationPathComplete]);
 
   const suggestedLanguages = cultureLanguageOptions?.suggested ?? [];
-  const allLanguages       = cultureLanguageOptions?.all ?? [];
+  const allLanguages = cultureLanguageOptions?.all ?? [];
 
-  const originCountryOptions: SelectOption[] = ALL_COUNTRIES.map((c) => ({ value: c.code, label: c.name }));
+  const originCountryOptions: SelectOption[] = ALL_COUNTRIES.map((c) => ({
+    value: c.code,
+    label: c.name,
+  }));
 
   // Load ethnicity & language options whenever location path is complete
   useEffect(() => {
@@ -138,8 +152,17 @@ export default function OnboardingScreen() {
       setCultureOptionsLoading(true);
       try {
         const [ethOpts, langOpts] = await Promise.all([
-          getEthnicityOptions(culturalLocation.countryCode, culturalLocation.subdivision, culturalLocation.city),
-          getLanguageOptions(culturalLocation.countryCode, ethnicity || null, culturalLocation.subdivision, culturalLocation.city),
+          getEthnicityOptions(
+            culturalLocation.countryCode,
+            culturalLocation.subdivision,
+            culturalLocation.city,
+          ),
+          getLanguageOptions(
+            culturalLocation.countryCode,
+            ethnicity || null,
+            culturalLocation.subdivision,
+            culturalLocation.city,
+          ),
         ]);
         if (cancelled) return;
         setCultureEthnicityOptions(ethOpts);
@@ -155,8 +178,18 @@ export default function OnboardingScreen() {
       }
     }
     void load();
-    return () => { cancelled = true; };
-  }, [culturalLocation?.countryCode, culturalLocation?.subdivision, culturalLocation?.city, ethnicity, locationPathComplete]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    culturalLocation?.countryCode,
+    culturalLocation?.subdivision,
+    culturalLocation?.city,
+    ethnicity,
+    locationPathComplete,
+  ]);
+
+  // Age is derived when DOB changes (avoid setState-in-effect lint).
 
   const handleLivingLocationChange = (value: Partial<LocationValue>) => {
     setLocation((cur) => {
@@ -186,7 +219,7 @@ export default function OnboardingScreen() {
   };
 
   const toggleLanguage = (lang: string) =>
-    setLanguages((cur) => cur.includes(lang) ? cur.filter((l) => l !== lang) : [...cur, lang]);
+    setLanguages((cur) => (cur.includes(lang) ? cur.filter((l) => l !== lang) : [...cur, lang]));
 
   // Pre-fill living location from IP when user reaches location step (country + best-effort region/city).
   useEffect(() => {
@@ -232,7 +265,8 @@ export default function OnboardingScreen() {
       if (approved.length === 0) {
         appDialog({
           title: 'No faces detected',
-          message: 'None of the selected photos clearly show a face. Please choose photos where your face is visible and well-lit.',
+          message:
+            'None of the selected photos clearly show a face. Please choose photos where your face is visible and well-lit.',
           icon: 'happy-outline',
         });
         return;
@@ -256,10 +290,17 @@ export default function OnboardingScreen() {
   const handleSaveProfile = async (skipCultureFields: boolean) => {
     if (saveInFlightRef.current) return;
     if (!params.userId || !params.email) {
-      appDialog({ title: 'Session error', message: 'Please go back and try again.', icon: 'alert-circle-outline' });
+      appDialog({
+        title: 'Session error',
+        message: 'Please go back and try again.',
+        icon: 'alert-circle-outline',
+      });
       return;
     }
-    if (!firstNameValidation.valid) { setStep(1); return; }
+    if (!firstNameValidation.valid) {
+      setStep(1);
+      return;
+    }
     if (!birthdate || !gender || !interestedIn) {
       appDialog({ title: 'Incomplete', message: 'Please complete step 3.' });
       return;
@@ -285,7 +326,11 @@ export default function OnboardingScreen() {
       return;
     }
     if (!location.country) {
-      appDialog({ title: 'Missing location', message: 'Please select your country.', icon: 'location-outline' });
+      appDialog({
+        title: 'Missing location',
+        message: 'Please select your country.',
+        icon: 'location-outline',
+      });
       return;
     }
     if (lookingFor.length === 0) {
@@ -300,13 +345,18 @@ export default function OnboardingScreen() {
     saveInFlightRef.current = true;
     setLoading(true);
     try {
-      let { data: { session } } = await supabase.auth.getSession();
+      let {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         const { data } = await supabase.auth.refreshSession();
         session = data.session;
       }
       if (!session) {
-        appDialog({ title: 'Session expired', message: 'Please log in again to complete your profile.' });
+        appDialog({
+          title: 'Session expired',
+          message: 'Please log in again to complete your profile.',
+        });
         router.replace('/(auth)/login');
         return;
       }
@@ -319,10 +369,10 @@ export default function OnboardingScreen() {
 
       let uploadedUrls: string[] = [];
       if (photoUris.length > 0) {
-        for (const uri of photoUris) {
-          const out = await uploadToAvatarsBucket(params.userId, uri);
-          if (!('error' in out)) uploadedUrls.push(out.publicUrl);
-        }
+        const results = await Promise.all(
+          photoUris.map((uri) => uploadToAvatarsBucket(params.userId!, uri)),
+        );
+        uploadedUrls = results.flatMap((out) => ('error' in out ? [] : [out.publicUrl]));
         if (uploadedUrls.length === 0) {
           appDialog({
             title: 'Photo upload failed',
@@ -336,31 +386,34 @@ export default function OnboardingScreen() {
       const savedEthnicity = skipCultureFields ? null : ethnicity.trim() || null;
       const savedLanguages = skipCultureFields ? [] : languages;
 
-      const { error } = await supabase.from('profiles').upsert({
-        id:             params.userId,
-        // NOTE: do NOT include `email` here. `public.profiles` has no `email`
-        // column — email lives in `auth.users.email` and is enriched onto
-        // the User object client-side via the session in `fetchProfile`.
-        // PostgREST will reject the whole upsert with "Could not find the
-        // 'email' column" if this is sent.
-        full_name:      fullName.trim(),
-        username:       params.email,
-        birthdate:      birthdate.toISOString().split('T')[0],
-        gender,
-        interested_in:  interestedIn,
-        looking_for:    lookingFor,
-        country:        location.country || '',
-        state:          location.subdivision || null,
-        city:           location.city || null,
-        origin_country: originLocation.country?.trim() || null,
-        origin_state:   originLocation.subdivision?.trim() || null,
-        origin_city:    originLocation.city?.trim() || null,
-        ethnicity:      savedEthnicity,
-        languages:      savedLanguages,
-        avatar_url:     avatarUrl,
-        profile_photos: uploadedUrls,
-        terms_accepted_at: termsAcceptedAt,
-      }, { onConflict: 'id' });
+      const { error } = await supabase.from('profiles').upsert(
+        {
+          id: params.userId,
+          // NOTE: do NOT include `email` here. `public.profiles` has no `email`
+          // column — email lives in `auth.users.email` and is enriched onto
+          // the User object client-side via the session in `fetchProfile`.
+          // PostgREST will reject the whole upsert with "Could not find the
+          // 'email' column" if this is sent.
+          full_name: fullName.trim(),
+          username: params.email,
+          birthdate: birthdate.toISOString().split('T')[0],
+          gender,
+          interested_in: interestedIn,
+          looking_for: lookingFor,
+          country: location.country || '',
+          state: location.subdivision || null,
+          city: location.city || null,
+          origin_country: originLocation.country?.trim() || null,
+          origin_state: originLocation.subdivision?.trim() || null,
+          origin_city: originLocation.city?.trim() || null,
+          ethnicity: savedEthnicity,
+          languages: savedLanguages,
+          avatar_url: avatarUrl,
+          profile_photos: uploadedUrls,
+          terms_accepted_at: termsAcceptedAt,
+        },
+        { onConflict: 'id' },
+      );
 
       if (error) {
         if (error.message.includes('security policy') || error.code === '42501') {
@@ -370,16 +423,20 @@ export default function OnboardingScreen() {
             icon: 'log-in-outline',
           });
         } else {
-          appDialog({ title: 'Something went wrong', message: error.message, icon: 'alert-circle-outline' });
+          appDialog({
+            title: 'Something went wrong',
+            message: error.message,
+            icon: 'alert-circle-outline',
+          });
         }
         return;
       }
 
       await saveOnboardingSkippedHints({
-        bio:         true,
-        photo:       uploadedUrls.length === 0,
-        goals:       false,
-        work:        true,
+        bio: true,
+        photo: uploadedUrls.length === 0,
+        goals: false,
+        work: true,
         moreDetails: skipCultureFields || !(savedEthnicity || savedLanguages.length > 0),
       });
 
@@ -404,8 +461,7 @@ export default function OnboardingScreen() {
     if (step === 2) return true;
     if (step === 3) {
       if (!birthdate || !gender || !interestedIn) return false;
-      const ageYears = (Date.now() - birthdate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-      return ageYears >= 18 && ageYears <= 120;
+      return (ageYears ?? 0) >= 18 && (ageYears ?? 0) <= 120;
     }
     if (step === 4) return lookingFor.length > 0;
     if (step === 5) return !!location.country;
@@ -417,7 +473,10 @@ export default function OnboardingScreen() {
       await handleSaveProfile(false);
       return;
     }
-    if (step === 7) { router.replace('/(tabs)/discover'); return; }
+    if (step === 7) {
+      router.replace('/(tabs)/discover');
+      return;
+    }
     if (step === 5 && !showRootsStep) {
       await handleSaveProfile(true);
       return;
@@ -433,11 +492,17 @@ export default function OnboardingScreen() {
           <Text style={{ fontSize: 72, marginBottom: 24 }}>🎉</Text>
           <Text style={s.celebTitle}>Welcome to Africana!</Text>
           <Text style={s.celebSub}>
-            Your profile is live. You can enrich it anytime from your Profile tab — a fuller profile attracts better matches.
+            Your profile is live. You can enrich it anytime from your Profile tab — a fuller profile
+            attracts better matches.
           </Text>
         </View>
         <View style={s.celebFooter}>
-          <Button title="Start Exploring →" onPress={() => router.replace('/(tabs)/discover')} fullWidth size="lg" />
+          <Button
+            title="Start Exploring →"
+            onPress={() => router.replace('/(tabs)/discover')}
+            fullWidth
+            size="lg"
+          />
         </View>
       </SafeAreaView>
     );
@@ -448,29 +513,20 @@ export default function OnboardingScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
         {/* ── Header ── */}
-        <View style={s.header}>
-          {step > 1 ? (
-            <TouchableOpacity onPress={() => setStep(step - 1)} style={s.backBtn}>
-              <Ionicons name="arrow-back" size={20} color={COLORS.text} />
-            </TouchableOpacity>
-          ) : <View style={{ width: 36 }} />}
-          <View style={{ flex: 1 }} />
-          <Text style={s.counter}>
-            {step} / {progressDenominator}
-          </Text>
-        </View>
+        <OnboardingHeader
+          step={step}
+          total={progressDenominator}
+          canGoBack={step > 1}
+          onBack={() => setStep(step - 1)}
+        />
 
         {/* ── Animated progress bar ── */}
-        <View style={s.track}>
-          <Animated.View
-            style={[s.fill, {
-              width: progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
-            }]}
-          />
-        </View>
+        <OnboardingProgressBar step={step} denominator={progressDenominator} />
 
         <ScrollView
           contentContainerStyle={{ padding: 24, paddingTop: 16, paddingBottom: 60 }}
@@ -499,11 +555,18 @@ export default function OnboardingScreen() {
             <>
               <Input
                 value={fullName}
-                onChangeText={(v) => { setFullName(v); if (!touched.fullName) setTouched((t) => ({ ...t, fullName: true })); }}
+                onChangeText={(v) => {
+                  setFullName(v);
+                  if (!touched.fullName) setTouched((t) => ({ ...t, fullName: true }));
+                }}
                 onBlur={() => setTouched((t) => ({ ...t, fullName: true }))}
                 placeholder="e.g. Amara"
                 autoCapitalize="words"
-                validationState={getValidationState(Boolean(touched.fullName), firstNameValidation, Boolean(fullName.trim()))}
+                validationState={getValidationState(
+                  Boolean(touched.fullName),
+                  firstNameValidation,
+                  Boolean(fullName.trim()),
+                )}
                 error={touched.fullName ? firstNameValidation.message : undefined}
                 autoFocus
               />
@@ -512,42 +575,22 @@ export default function OnboardingScreen() {
 
           {/* ════ STEP 2 — Photos ════ */}
           {step === 2 && (
-            <View style={{ alignItems: 'center' }}>
-              <View style={s.photoGrid}>
-                {photoUris.map((uri, i) => (
-                  <View key={uri} style={s.photoThumb}>
-                    <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                    {i === 0 && (
-                      <View style={s.mainBadge}>
-                        <Text style={s.mainBadgeTxt}>MAIN</Text>
-                      </View>
-                    )}
-                    <TouchableOpacity
-                      style={s.removePhotoBtn}
-                      onPress={() => setPhotoUris((p) => p.filter((_, idx) => idx !== i))}
-                    >
-                      <Ionicons name="close-circle" size={22} color="#FFF" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-                {photoUris.length < MAX_PROFILE_PHOTOS && (
-                  <TouchableOpacity style={s.photoAddSlot} onPress={pickPhotos}>
-                    <Text style={s.photoAddTxt}>Add photos</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <Text style={[s.hint, { marginTop: 12, textAlign: 'center' }]}>
-                {photoUris.length > 0
-                  ? `${photoUris.length} of ${MAX_PROFILE_PHOTOS} photos selected`
-                  : `Select up to ${MAX_PROFILE_PHOTOS} photos at once`}
-              </Text>
-            </View>
+            <OnboardingPhotoGrid
+              photoUris={photoUris}
+              onAdd={() => void pickPhotos().catch(() => {})}
+              onRemoveAt={(i) => setPhotoUris((p) => p.filter((_, idx) => idx !== i))}
+            />
           )}
 
           {/* ════ STEP 3 — Birthday · Gender · Interested In ════ */}
           {step === 3 && (
             <View>
-              <DatePicker label="Date of Birth" value={birthdate} onChange={setBirthdate} placeholder="Tap to select" />
+              <DatePicker
+                label="Date of Birth"
+                value={birthdate}
+                onChange={handleBirthdateChange}
+                placeholder="Tap to select"
+              />
 
               <Text style={s.label}>I am a</Text>
               <View style={s.rowEqual}>
@@ -558,7 +601,9 @@ export default function OnboardingScreen() {
                     style={[s.bigChip, gender === opt.value && s.chipOn]}
                   >
                     <Text style={{ fontSize: 26, marginBottom: 6 }}>{opt.emoji}</Text>
-                    <Text style={[s.chipTxt, gender === opt.value && s.chipTxtOn]}>{opt.label}</Text>
+                    <Text style={[s.chipTxt, gender === opt.value && s.chipTxtOn]}>
+                      {opt.label}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
@@ -572,7 +617,9 @@ export default function OnboardingScreen() {
                     style={[s.bigChip, interestedIn === opt.value && s.chipOn]}
                   >
                     <Text style={{ fontSize: 26, marginBottom: 6 }}>{opt.emoji}</Text>
-                    <Text style={[s.chipTxt, interestedIn === opt.value && s.chipTxtOn]}>{opt.label}</Text>
+                    <Text style={[s.chipTxt, interestedIn === opt.value && s.chipTxtOn]}>
+                      {opt.label}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
@@ -592,7 +639,9 @@ export default function OnboardingScreen() {
                   >
                     <Text style={{ fontSize: 28 }}>{opt.emoji}</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.cardLabel, on && { color: COLORS.success }]}>{opt.label}</Text>
+                      <Text style={[s.cardLabel, on && { color: COLORS.success }]}>
+                        {opt.label}
+                      </Text>
                     </View>
                     <View style={[s.checkCircle, on && s.checkCircleOn]}>
                       {on && <Ionicons name="checkmark" size={14} color="#FFF" />}
@@ -600,7 +649,9 @@ export default function OnboardingScreen() {
                   </Pressable>
                 );
               })}
-              <Text style={s.hint}>You can pick more than one — choose at least one to continue.</Text>
+              <Text style={s.hint}>
+                You can pick more than one — choose at least one to continue.
+              </Text>
             </View>
           )}
 
@@ -617,9 +668,15 @@ export default function OnboardingScreen() {
                   value={originLocation.countryCode ?? null}
                   onChange={(code) => {
                     const found = ALL_COUNTRIES.find((c) => c.code === code);
-                    setOriginLocation(found
-                      ? { country: found.name, countryCode: found.code, subdivision: '', city: '' }
-                      : {}
+                    setOriginLocation(
+                      found
+                        ? {
+                            country: found.name,
+                            countryCode: found.code,
+                            subdivision: '',
+                            city: '',
+                          }
+                        : {},
                     );
                     setEthnicity('');
                     setLanguages([]);
@@ -628,13 +685,15 @@ export default function OnboardingScreen() {
                 />
               )}
 
-              {originLocation.countryCode && AFRICAN_COUNTRY_CODES.has(originLocation.countryCode) && !originMatchesLiving && (
-                <LocationPicker
-                  value={originLocation}
-                  onChange={handleOriginLocationChange}
-                  showCountryField={false}
-                />
-              )}
+              {originLocation.countryCode &&
+                AFRICAN_COUNTRY_CODES.has(originLocation.countryCode) &&
+                !originMatchesLiving && (
+                  <LocationPicker
+                    value={originLocation}
+                    onChange={handleOriginLocationChange}
+                    showCountryField={false}
+                  />
+                )}
             </View>
           )}
 
@@ -685,7 +744,14 @@ export default function OnboardingScreen() {
                 <Input
                   label="Languages spoken"
                   value={languages.join(', ')}
-                  onChangeText={(v) => setLanguages(v.split(',').map((l) => l.trim()).filter(Boolean))}
+                  onChangeText={(v) =>
+                    setLanguages(
+                      v
+                        .split(',')
+                        .map((l) => l.trim())
+                        .filter(Boolean),
+                    )
+                  }
                   placeholder="e.g. Amharic, English"
                   leftIcon="chatbubbles-outline"
                 />
@@ -712,13 +778,22 @@ export default function OnboardingScreen() {
               style={s.ctaPrimary}
             />
             {step === 2 && photoUris.length === 0 && (
-              <Button title="Skip — add photos later" variant="ghost" onPress={() => setStep(step + 1)} fullWidth />
+              <Button
+                title="Skip — add photos later"
+                variant="ghost"
+                onPress={() => setStep(step + 1)}
+                fullWidth
+              />
             )}
             {step === 6 && (
               <Button
                 title="Skip for now"
                 variant="ghost"
-                onPress={() => void handleSaveProfile(true).catch((e) => console.error('handleSaveProfile skip', e))}
+                onPress={() =>
+                  void handleSaveProfile(true).catch((e) =>
+                    console.error('handleSaveProfile skip', e),
+                  )
+                }
                 fullWidth
                 disabled={loading}
               />
@@ -731,25 +806,46 @@ export default function OnboardingScreen() {
 }
 
 const s = StyleSheet.create({
-  header:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 6 },
-  backBtn:  { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
-  counter:  { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
-  track:    { height: 5, backgroundColor: COLORS.border, marginHorizontal: 20, borderRadius: 3, marginBottom: 8 },
-  fill:     { height: 5, backgroundColor: COLORS.primary, borderRadius: 3 },
-
-  stepHero:  { width: 72, height: 72, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 16, alignSelf: 'center' },
-  stepTitle: { fontSize: 24, fontWeight: '800', color: COLORS.text, textAlign: 'center', marginBottom: 6 },
+  stepHero: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    alignSelf: 'center',
+  },
+  stepTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: 6,
+  },
   /** When hero emoji is hidden (steps 1–2), pull title up slightly. */
   stepTitleTightTop: { marginTop: 4 },
   /** Selection steps (3–6) omit `stepSub`; extra space below title. */
   stepTitleSolo: { marginBottom: 20 },
-  stepSub:   { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 28 },
+  stepSub: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 28,
+  },
 
-  label:    { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 10 },
-  row:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  label: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 10 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   rowEqual: { flexDirection: 'row', flexWrap: 'nowrap', gap: 10 },
-  chip:     { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF' },
-  bigChip:  {
+  chip: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: '#FFF',
+  },
+  bigChip: {
     flex: 1,
     minWidth: 0,
     paddingVertical: 16,
@@ -766,28 +862,43 @@ const s = StyleSheet.create({
     shadowRadius: 10,
     elevation: 5,
   },
-  chipOn:   { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
-  chipTxt:  { fontSize: 14, color: COLORS.textSecondary, fontWeight: '500' },
-  chipTxtOn:{ color: COLORS.success, fontWeight: '700' },
+  chipOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
+  chipTxt: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '500' },
+  chipTxtOn: { color: COLORS.success, fontWeight: '700' },
 
-  card:         { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF', gap: 14 },
-  cardOn:       { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
-  cardLabel:    { fontSize: 16, fontWeight: '700', color: COLORS.text },
-  checkCircle:  { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
-  checkCircleOn:{ borderColor: COLORS.success, backgroundColor: COLORS.success },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: '#FFF',
+    gap: 14,
+  },
+  cardOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
+  cardLabel: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  checkCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkCircleOn: { borderColor: COLORS.success, backgroundColor: COLORS.success },
 
-  // ── Photo grid (step 2) ───────────────────────────────────────────────────
-  photoGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', width: '100%' },
-  photoThumb:    { width: (width - 48 - 16) / 3, height: (width - 48 - 16) / 3 * 1.3, borderRadius: 12, overflow: 'hidden', position: 'relative' },
-  mainBadge:     { position: 'absolute', bottom: 6, left: 6, backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  mainBadgeTxt:  { color: '#FFF', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-  removePhotoBtn:{ position: 'absolute', top: 4, right: 4 },
-  photoAddSlot:  { width: (width - 48 - 16) / 3, height: (width - 48 - 16) / 3 * 1.3, borderRadius: 12, borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.earthLight, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
-  photoAddTxt:   { fontSize: 13, color: COLORS.textSecondary, fontWeight: '700', textAlign: 'center' },
-  hint:          { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
+  hint: { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
 
-  celebContainer:  { flex: 1, padding: 28, justifyContent: 'center', alignItems: 'center' },
-  celebTitle:      { fontSize: 32, fontWeight: '800', color: COLORS.text, marginBottom: 12, textAlign: 'center' },
-  celebSub:        { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
-  celebFooter:     { paddingHorizontal: 28, paddingBottom: 32 },
+  celebContainer: { flex: 1, padding: 28, justifyContent: 'center', alignItems: 'center' },
+  celebTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  celebSub: { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
+  celebFooter: { paddingHorizontal: 28, paddingBottom: 32 },
 });

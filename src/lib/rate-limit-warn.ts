@@ -17,11 +17,7 @@ import { appDialog } from '@/lib/app-dialog';
 /** Trigger the warning when remaining in a bucket is <= this many. */
 const SOFT_WARN = 5;
 
-type Bucket =
-  | 'messages_hour'
-  | 'messages_day'
-  | 'likes_hour'
-  | 'likes_day';
+type Bucket = 'messages_hour' | 'messages_day' | 'likes_hour' | 'likes_day';
 
 const warnedThisSession = new Set<Bucket>();
 
@@ -46,17 +42,35 @@ function evaluate(
   counts: Counts,
   topic: 'messages' | 'likes',
 ): { bucket: Bucket; remaining: number; limit: number } | null {
-  const hour = topic === 'messages'
-    ? { used: counts.messages_hour_used, limit: counts.messages_hour_limit, bucket: 'messages_hour' as const }
-    : { used: counts.likes_hour_used,    limit: counts.likes_hour_limit,    bucket: 'likes_hour' as const };
-  const day = topic === 'messages'
-    ? { used: counts.messages_day_used, limit: counts.messages_day_limit, bucket: 'messages_day' as const }
-    : { used: counts.likes_day_used,    limit: counts.likes_day_limit,    bucket: 'likes_day' as const };
+  const hour =
+    topic === 'messages'
+      ? {
+          used: counts.messages_hour_used,
+          limit: counts.messages_hour_limit,
+          bucket: 'messages_hour' as const,
+        }
+      : {
+          used: counts.likes_hour_used,
+          limit: counts.likes_hour_limit,
+          bucket: 'likes_hour' as const,
+        };
+  const day =
+    topic === 'messages'
+      ? {
+          used: counts.messages_day_used,
+          limit: counts.messages_day_limit,
+          bucket: 'messages_day' as const,
+        }
+      : {
+          used: counts.likes_day_used,
+          limit: counts.likes_day_limit,
+          bucket: 'likes_day' as const,
+        };
 
   // Prefer whichever bucket is closer to its cap — that's the one the user
   // will actually hit first, and the one worth warning about.
   const hourRem = hour.limit - hour.used;
-  const dayRem  = day.limit - day.used;
+  const dayRem = day.limit - day.used;
   const tight = hourRem <= dayRem ? hour : day;
 
   const remaining = tight.limit - tight.used;
@@ -68,7 +82,10 @@ function presentDialog(bucket: Bucket, remaining: number) {
   const noun = bucket.startsWith('messages') ? 'messages' : 'likes';
   const window = bucket.endsWith('_hour') ? 'hour' : 'day';
   appDialog({
-    title: remaining === 1 ? `1 ${noun.slice(0, -1)} left this ${window}` : `${remaining} ${noun} left this ${window}`,
+    title:
+      remaining === 1
+        ? `1 ${noun.slice(0, -1)} left this ${window}`
+        : `${remaining} ${noun} left this ${window}`,
     message:
       window === 'hour'
         ? `You can send ${remaining} more ${noun} this hour before you\u2019ll need to wait.`

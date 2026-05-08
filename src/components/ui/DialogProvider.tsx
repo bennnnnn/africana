@@ -1,13 +1,13 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Animated,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Animated, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONT, RADIUS } from '@/constants';
 import { UI_LABELS } from '@/constants/copy';
@@ -57,7 +57,12 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
       setDialog({ actions: [{ label: UI_LABELS.ok, style: 'primary' }], ...config });
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 120, friction: 10 }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 120,
+          friction: 10,
+        }),
       ]).start();
     },
     [fadeAnim, scaleAnim],
@@ -75,7 +80,12 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
       if (toastTimer.current) clearTimeout(toastTimer.current);
       toastAnim.setValue(0);
       setToast(config);
-      Animated.spring(toastAnim, { toValue: 1, useNativeDriver: true, tension: 100, friction: 10 }).start();
+      Animated.spring(toastAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 10,
+      }).start();
       toastTimer.current = setTimeout(() => {
         Animated.timing(toastAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start(() =>
           setToast(null),
@@ -85,7 +95,10 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
     [toastAnim],
   );
 
-  const value = useMemo(() => ({ showDialog, showToast, dismissDialog }), [dismissDialog, showDialog, showToast]);
+  const value = useMemo(
+    () => ({ showDialog, showToast, dismissDialog }),
+    [dismissDialog, showDialog, showToast],
+  );
 
   const actions = dialog?.actions ?? [];
   const useInlineActions = actions.length <= 2;
@@ -98,69 +111,71 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
       <View style={{ flex: 1 }}>
         {children}
 
-      <Modal
-        visible={!!dialog}
-        transparent
-        animationType="none"
-        statusBarTranslucent
-        onRequestClose={dismissDialog}
-      >
-        <View style={styles.modalRoot} pointerEvents="box-none">
-          <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: fadeAnim }]}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={allowBackdropDismiss ? dismissDialog : undefined}
-            />
-          </Animated.View>
+        <Modal
+          visible={!!dialog}
+          transparent
+          animationType="none"
+          statusBarTranslucent
+          onRequestClose={dismissDialog}
+        >
+          <View style={styles.modalRoot} pointerEvents="box-none">
+            <Animated.View
+              style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: fadeAnim }]}
+            >
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={allowBackdropDismiss ? dismissDialog : undefined}
+              />
+            </Animated.View>
 
-          <Animated.View
-            pointerEvents="box-none"
-            style={[styles.cardWrap, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
-          >
-            <View style={styles.card}>
-              {iconName ? (
-                <View style={styles.iconWrap}>
-                  <Ionicons name={iconName} size={22} color={COLORS.textStrong} />
-                </View>
-              ) : null}
-              <Text style={styles.title}>{dialog?.title}</Text>
-              {!!dialog?.message && <Text style={styles.message}>{dialog.message}</Text>}
-              {dialog?.content ? <View style={styles.dialogExtra}>{dialog.content}</View> : null}
+            <Animated.View
+              pointerEvents="box-none"
+              style={[styles.cardWrap, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
+            >
+              <View style={styles.card}>
+                {iconName ? (
+                  <View style={styles.iconWrap}>
+                    <Ionicons name={iconName} size={22} color={COLORS.textStrong} />
+                  </View>
+                ) : null}
+                <Text style={styles.title}>{dialog?.title}</Text>
+                {!!dialog?.message && <Text style={styles.message}>{dialog.message}</Text>}
+                {dialog?.content ? <View style={styles.dialogExtra}>{dialog.content}</View> : null}
 
-              <View style={[styles.btnRow, useInlineActions && styles.btnRowInline]}>
-                {actions.map((action, index) => (
-                  <TouchableOpacity
-                    key={`${index}-${action.label}`}
-                    style={[
-                      styles.btn,
-                      useInlineActions && styles.btnInline,
-                      isCancelLike(action) && styles.btnSecondary,
-                      action.style === 'primary' && styles.btnPrimary,
-                      action.style === 'destructive' && styles.btnDestructive,
-                    ]}
-                    activeOpacity={0.75}
-                    onPress={() => {
-                      dismissDialog();
-                      setTimeout(() => void action.onPress?.(), 220);
-                    }}
-                  >
-                    <Text
+                <View style={[styles.btnRow, useInlineActions && styles.btnRowInline]}>
+                  {actions.map((action, index) => (
+                    <TouchableOpacity
+                      key={`${index}-${action.label}`}
                       style={[
-                        styles.btnText,
-                        isCancelLike(action) && styles.btnTextSecondary,
-                        action.style === 'primary' && styles.btnTextPrimary,
-                        action.style === 'destructive' && styles.btnTextOnDark,
+                        styles.btn,
+                        useInlineActions && styles.btnInline,
+                        isCancelLike(action) && styles.btnSecondary,
+                        action.style === 'primary' && styles.btnPrimary,
+                        action.style === 'destructive' && styles.btnDestructive,
                       ]}
+                      activeOpacity={0.75}
+                      onPress={() => {
+                        dismissDialog();
+                        setTimeout(() => void action.onPress?.(), 220);
+                      }}
                     >
-                      {action.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[
+                          styles.btnText,
+                          isCancelLike(action) && styles.btnTextSecondary,
+                          action.style === 'primary' && styles.btnTextPrimary,
+                          action.style === 'destructive' && styles.btnTextOnDark,
+                        ]}
+                      >
+                        {action.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
+            </Animated.View>
+          </View>
+        </Modal>
 
         {toast && (
           <Animated.View
@@ -169,7 +184,9 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
               styles.toast,
               {
                 opacity: toastAnim,
-                transform: [{ scale: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }],
+                transform: [
+                  { scale: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) },
+                ],
               },
             ]}
           >

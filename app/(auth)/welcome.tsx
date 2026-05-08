@@ -46,10 +46,12 @@ export default function WelcomeScreen() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [consentAccepted, setConsentAccepted] = useState(false);
 
-  useEffect(() => {
-    startAutoPlay();
-    return () => stopAutoPlay();
-  }, []);
+  const stopAutoPlay = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
 
   const startAutoPlay = () => {
     stopAutoPlay();
@@ -62,12 +64,10 @@ export default function WelcomeScreen() {
     }, 3200);
   };
 
-  const stopAutoPlay = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  };
+  useEffect(() => {
+    startAutoPlay();
+    return () => stopAutoPlay();
+  }, []);
 
   const onMomentumScrollEnd = (e: any) => {
     const index = Math.round(e.nativeEvent.contentOffset.x / width);
@@ -82,8 +82,14 @@ export default function WelcomeScreen() {
       message: 'You need to agree to the Terms of Service and Privacy Policy.',
       icon: 'document-text-outline',
       actions: [
-        { label: 'View Terms', onPress: () => router.push({ pathname: '/(auth)/legal', params: { tab: 'terms' } }) },
-        { label: 'View Privacy', onPress: () => router.push({ pathname: '/(auth)/legal', params: { tab: 'privacy' } }) },
+        {
+          label: 'View Terms',
+          onPress: () => router.push({ pathname: '/(auth)/legal', params: { tab: 'terms' } }),
+        },
+        {
+          label: 'View Privacy',
+          onPress: () => router.push({ pathname: '/(auth)/legal', params: { tab: 'privacy' } }),
+        },
         {
           label: 'I agree',
           style: 'primary',
@@ -127,9 +133,18 @@ export default function WelcomeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.circle, { top: -120, right: -80, width: 280, height: 280, opacity: 0.12 }]} />
-      <View style={[styles.circle, { top: height * 0.28, left: -60, width: 160, height: 160, opacity: 0.08 }]} />
-      <View style={[styles.circle, { bottom: 110, right: -40, width: 200, height: 200, opacity: 0.08 }]} />
+      <View
+        style={[styles.circle, { top: -120, right: -80, width: 280, height: 280, opacity: 0.12 }]}
+      />
+      <View
+        style={[
+          styles.circle,
+          { top: height * 0.28, left: -60, width: 160, height: 160, opacity: 0.08 },
+        ]}
+      />
+      <View
+        style={[styles.circle, { bottom: 110, right: -40, width: 200, height: 200, opacity: 0.08 }]}
+      />
 
       <SafeAreaView style={styles.inner}>
         {/* App name */}

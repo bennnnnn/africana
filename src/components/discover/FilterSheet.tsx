@@ -1,13 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  ScrollView,
-  Switch,
-  Dimensions,
-} from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ScrollView, Switch, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FilterOptions, Religion } from '@/types';
 import { COLORS, RELIGION_OPTIONS } from '@/constants';
@@ -59,14 +51,26 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
       <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
         {/* Header */}
         <View style={s.header}>
-          <TouchableOpacity onPress={() => { onReset(); onClose(); }}>
+          <TouchableOpacity
+            onPress={() => {
+              onReset();
+              onClose();
+            }}
+          >
             <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 15 }}>Reset</Text>
           </TouchableOpacity>
-          <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>Filter Members</Text>
+          <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>
+            Filter Members
+          </Text>
           <TouchableOpacity onPress={onClose}>
             <Ionicons name="close" size={24} color={COLORS.text} />
           </TouchableOpacity>
@@ -80,7 +84,9 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
           {/* Online Only */}
           <View style={s.row}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.online }} />
+              <View
+                style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.online }}
+              />
               <Text style={s.rowLabel}>Online Only</Text>
             </View>
             <Switch
@@ -141,7 +147,10 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
         <View style={{ padding: 20, borderTopWidth: 1, borderTopColor: COLORS.border }}>
           <Button
             title="Apply Filters"
-            onPress={() => { onApply(local); onClose(); }}
+            onPress={() => {
+              onApply(local);
+              onClose();
+            }}
             fullWidth
             size="lg"
           />

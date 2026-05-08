@@ -1,5 +1,9 @@
 import { UI_TOAST } from '@/constants/copy';
-import { pgErrorDiscriminator, pgErrorBlob, type PostgrestErrorFields } from '@/lib/postgrest-error-blob';
+import {
+  pgErrorDiscriminator,
+  pgErrorBlob,
+  type PostgrestErrorFields,
+} from '@/lib/postgrest-error-blob';
 
 /** Shown to the sender when the recipient has turned off receiving messages. */
 export const ERROR_RECIPIENT_MESSAGES_DISABLED =
@@ -9,8 +13,7 @@ export const ERROR_RECIPIENT_MESSAGES_DISABLED =
 export const ERROR_SENDER_MESSAGES_DISABLED =
   'Your messages are turned off. Open Settings → Privacy and turn on Receive messages to send.';
 
-export const ERROR_MESSAGE_MODERATION =
-  'This message looks inappropriate. Please rephrase it.';
+export const ERROR_MESSAGE_MODERATION = 'This message looks inappropriate. Please rephrase it.';
 
 export const ERROR_MESSAGE_RATE_LIMIT_HOUR =
   'You\u2019re sending messages too fast. Please wait a bit and try again.';
@@ -19,27 +22,21 @@ export const ERROR_MESSAGE_RATE_LIMIT_DAY =
 
 export const ERROR_MESSAGING_BLOCKED = UI_TOAST.openChatBlocked;
 
-function isRecipientMessagesDisabledDbError(
-  err: PostgrestErrorFields | null,
-): boolean {
+function isRecipientMessagesDisabledDbError(err: PostgrestErrorFields | null): boolean {
   const { code, key } = pgErrorDiscriminator(err);
   if (code === '23514' && key === 'recipient_messages_disabled') return true;
   const b = pgErrorBlob(err);
   return b.includes('recipient') && b.includes('not accept');
 }
 
-function isSenderMessagesDisabledDbError(
-  err: PostgrestErrorFields | null,
-): boolean {
+function isSenderMessagesDisabledDbError(err: PostgrestErrorFields | null): boolean {
   const { code, key } = pgErrorDiscriminator(err);
   if (code === '23514' && key === 'sender_messages_disabled') return true;
   const b = pgErrorBlob(err);
   return b.includes('sender') && b.includes('not accept');
 }
 
-function isMessagingBlockedDbError(
-  err: PostgrestErrorFields | null,
-): boolean {
+function isMessagingBlockedDbError(err: PostgrestErrorFields | null): boolean {
   const { code, key } = pgErrorDiscriminator(err);
   if (code === '23514' && key === 'messaging_blocked_between_participants') return true;
   const b = pgErrorBlob(err);
@@ -47,9 +44,7 @@ function isMessagingBlockedDbError(
 }
 
 /** Maps raw PostgREST errors so the UI never shows a vague insert failure for prefs guards. */
-export function mapMessagesInsertError(
-  err: PostgrestErrorFields | null,
-): string | null {
+export function mapMessagesInsertError(err: PostgrestErrorFields | null): string | null {
   if (!err) return null;
   if (isMessagingBlockedDbError(err)) return ERROR_MESSAGING_BLOCKED;
   if (isRecipientMessagesDisabledDbError(err)) return ERROR_RECIPIENT_MESSAGES_DISABLED;

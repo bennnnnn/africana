@@ -2,7 +2,16 @@ import { CountryCultureData } from './types';
 
 export const NORTH_AFRICA_CULTURE: Record<string, CountryCultureData> = {
   EG: {
-    ethnicities: ['Egyptian Arab', 'Coptic', 'Nubian', 'Bedouin', 'Beja', 'Saidi', 'Alexandrian / Mediterranean', 'Mixed / Other'],
+    ethnicities: [
+      'Egyptian Arab',
+      'Coptic',
+      'Nubian',
+      'Bedouin',
+      'Beja',
+      'Saidi',
+      'Alexandrian / Mediterranean',
+      'Mixed / Other',
+    ],
     languages: ['Arabic', 'Egyptian Arabic', 'English', 'Coptic'],
     ethnicityLanguages: {
       'Egyptian Arab': ['Egyptian Arabic', 'Arabic', 'English'],
@@ -11,15 +20,46 @@ export const NORTH_AFRICA_CULTURE: Record<string, CountryCultureData> = {
     },
   },
   MA: {
-    ethnicities: ['Arab-Berber', 'Amazigh (Berber)', 'Haratin', 'Jewish heritage', 'Sahrawi', 'Mixed / Other'],
-    languages: ['Arabic', 'French', 'Central Atlas Tamazight', 'Moroccan Arabic', 'Standard Moroccan Tamazight', 'English', 'Tachelhit', 'Riffian'],
+    ethnicities: [
+      'Arab-Berber',
+      'Amazigh (Berber)',
+      'Haratin',
+      'Jewish heritage',
+      'Sahrawi',
+      'Mixed / Other',
+    ],
+    languages: [
+      'Arabic',
+      'French',
+      'Central Atlas Tamazight',
+      'Moroccan Arabic',
+      'Standard Moroccan Tamazight',
+      'English',
+      'Tachelhit',
+      'Riffian',
+    ],
     ethnicityLanguages: {
       'Arab-Berber': ['Moroccan Arabic', 'Arabic', 'French'],
-      'Amazigh (Berber)': ['Tachelhit', 'Riffian', 'Central Atlas Tamazight', 'Standard Moroccan Tamazight', 'Arabic', 'French'],
+      'Amazigh (Berber)': [
+        'Tachelhit',
+        'Riffian',
+        'Central Atlas Tamazight',
+        'Standard Moroccan Tamazight',
+        'Arabic',
+        'French',
+      ],
     },
   },
   DZ: {
-    ethnicities: ['Arab', 'Kabyle', 'Chaoui', 'Mzab', 'Tuareg', 'European Algerian', 'Mixed / Other'],
+    ethnicities: [
+      'Arab',
+      'Kabyle',
+      'Chaoui',
+      'Mzab',
+      'Tuareg',
+      'European Algerian',
+      'Mixed / Other',
+    ],
     languages: ['Arabic', 'French', 'Algerian Arabic', 'Hassaniyya', 'Kabyle', 'English'],
     ethnicityLanguages: {
       Arab: ['Algerian Arabic', 'Arabic', 'French'],
@@ -28,7 +68,13 @@ export const NORTH_AFRICA_CULTURE: Record<string, CountryCultureData> = {
     },
   },
   TN: {
-    ethnicities: ['Tunisian Arab', 'Amazigh', 'Jewish heritage', 'European Tunisian', 'Mixed / Other'],
+    ethnicities: [
+      'Tunisian Arab',
+      'Amazigh',
+      'Jewish heritage',
+      'European Tunisian',
+      'Mixed / Other',
+    ],
     languages: ['Arabic', 'French', 'Tunisian Arabic'],
     ethnicityLanguages: {
       'Tunisian Arab': ['Tunisian Arabic', 'Arabic', 'French'],

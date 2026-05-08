@@ -10,14 +10,20 @@ export const LIKES_ROW_HEIGHT = 72;
 
 export const LIKES_TAB_ORDER: LikesTab[] = ['matches', 'received', 'viewers', 'favourites'];
 
-export const LIKES_TAB_META: Record<LikesTab, { label: string; icon: LikesIonIcon; iconActive: LikesIonIcon }> = {
+export const LIKES_TAB_META: Record<
+  LikesTab,
+  { label: string; icon: LikesIonIcon; iconActive: LikesIonIcon }
+> = {
   matches: { label: 'Matches', icon: 'flame-outline', iconActive: 'flame' },
   received: { label: 'Likes', icon: 'heart-outline', iconActive: 'heart' },
   viewers: { label: 'Views', icon: 'eye-outline', iconActive: 'eye' },
   favourites: { label: 'Stars', icon: 'star-outline', iconActive: 'star' },
 };
 
-export const LIKES_EMPTY_STATES: Record<LikesTab, { icon: LikesIonIcon; title: string; desc: string }> = {
+export const LIKES_EMPTY_STATES: Record<
+  LikesTab,
+  { icon: LikesIonIcon; title: string; desc: string }
+> = {
   matches: {
     icon: 'flame-outline',
     title: 'No matches yet',

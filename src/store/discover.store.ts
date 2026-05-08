@@ -47,9 +47,7 @@ function applyDiscoverSheetFilters(
     // Pair the column filter with a freshness cutoff on `last_seen` so the
     // "Online only" toggle doesn't surface accounts that crashed/force-quit
     // ages ago and got stuck on `online_status='online'`.
-    query = query
-      .eq('online_status', 'online')
-      .gte('last_seen', getOnlineFreshnessCutoffISO());
+    query = query.eq('online_status', 'online').gte('last_seen', getOnlineFreshnessCutoffISO());
   }
 
   query = query.not('birthdate', 'is', null);
@@ -65,7 +63,10 @@ function applyDiscoverSheetFilters(
   return query;
 }
 
-interface AgePref { min: number; max: number }
+interface AgePref {
+  min: number;
+  max: number;
+}
 
 export type DiscoverFetchUsersParams = {
   userId: string;
@@ -156,10 +157,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       if (reset || _cachedForUserId !== userId) {
         const [blockedIdsRes, likedRes] = await Promise.all([
           fetchSymmetricBlockedPeerIds(userId),
-          supabase
-            .from('likes')
-            .select('to_user_id')
-            .eq('from_user_id', userId),
+          supabase.from('likes').select('to_user_id').eq('from_user_id', userId),
         ]);
         blockedIds = blockedIdsRes;
         likedIds = new Set<string>((likedRes.data ?? []).map((l) => l.to_user_id));
@@ -261,34 +259,34 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       const processed = processRaw(rows);
 
       // Online users first, then shuffle the offline pool for variety
-      const online  = processed.filter((u) => u.online_status === 'online');
+      const online = processed.filter((u) => u.online_status === 'online');
       const offline = processed.filter((u) => u.online_status !== 'online');
       shuffleArray(offline);
       let result: User[] = [...online, ...offline];
 
       // ── Fallback: pad with liked users if results are sparse ─────────────
       if (currentPage === 0 && result.length < Math.ceil(PAGE_SIZE / 2) && likedIds.size > 0) {
-          const likedIdsArr = [...likedIds].filter((id) => !blockedIds.includes(id));
-          if (likedIdsArr.length > 0) {
-            const needed = PAGE_SIZE - result.length;
-            let likedQuery = supabase
-              .from('profiles')
-              .select(PROFILE_LIST_SELECT as '*')
-              .in('id', likedIdsArr)
-              .eq('show_in_discover', true)
-              .not('avatar_url', 'is', null);
-            if (genderFilter) likedQuery = likedQuery.eq('gender', genderFilter);
-            likedQuery = applyDiscoverSheetFilters(likedQuery, { filters, today, effMin, effMax });
-            likedQuery = likedQuery.order('last_seen', { ascending: false }).limit(needed);
-            const { data: likedData } = await likedQuery;
-            if (likedData) {
-              const likedProcessed = processRaw(likedData as Record<string, unknown>[]);
-              const likedUsers = likedProcessed;
-              shuffleArray(likedUsers);
-              result = [...result, ...likedUsers];
-            }
+        const likedIdsArr = [...likedIds].filter((id) => !blockedIds.includes(id));
+        if (likedIdsArr.length > 0) {
+          const needed = PAGE_SIZE - result.length;
+          let likedQuery = supabase
+            .from('profiles')
+            .select(PROFILE_LIST_SELECT as '*')
+            .in('id', likedIdsArr)
+            .eq('show_in_discover', true)
+            .not('avatar_url', 'is', null);
+          if (genderFilter) likedQuery = likedQuery.eq('gender', genderFilter);
+          likedQuery = applyDiscoverSheetFilters(likedQuery, { filters, today, effMin, effMax });
+          likedQuery = likedQuery.order('last_seen', { ascending: false }).limit(needed);
+          const { data: likedData } = await likedQuery;
+          if (likedData) {
+            const likedProcessed = processRaw(likedData as Record<string, unknown>[]);
+            const likedUsers = likedProcessed;
+            shuffleArray(likedUsers);
+            result = [...result, ...likedUsers];
           }
         }
+      }
 
       set((state) => ({
         users: reset || currentPage === 0 ? result : [...state.users, ...result],
@@ -308,10 +306,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       return;
     }
     const run = async () => {
-      const { data } = await supabase
-        .from('likes')
-        .select('to_user_id')
-        .eq('from_user_id', userId);
+      const { data } = await supabase.from('likes').select('to_user_id').eq('from_user_id', userId);
       if (data) set({ likedUserIds: new Set(data.map((l) => l.to_user_id)) });
     };
     const p = run();
@@ -333,7 +328,11 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     const isLiked = likedUserIds.has(toUserId);
 
     if (isLiked) {
-      await supabase.from('likes').delete().eq('from_user_id', fromUserId).eq('to_user_id', toUserId);
+      await supabase
+        .from('likes')
+        .delete()
+        .eq('from_user_id', fromUserId)
+        .eq('to_user_id', toUserId);
       set((state) => {
         const s = new Set(state.likedUserIds);
         s.delete(toUserId);
@@ -377,7 +376,8 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         track(EVENTS.RATE_LIMIT_HIT, { topic: 'likes', window: 'day' });
         appDialog({
           title: 'Daily like limit reached',
-          message: 'You\u2019ve reached today\u2019s like limit. Come back tomorrow or upgrade for more.',
+          message:
+            'You\u2019ve reached today\u2019s like limit. Come back tomorrow or upgrade for more.',
           icon: 'heart-dislike-outline',
         });
       } else {
@@ -399,8 +399,8 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     const senderName =
       useAuthStore.getState().user?.id === fromUserId
         ? (useAuthStore.getState().user?.full_name ?? 'Someone')
-        : ((await supabase.from('profiles').select('full_name').eq('id', fromUserId).maybeSingle()).data
-            ?.full_name ?? 'Someone');
+        : ((await supabase.from('profiles').select('full_name').eq('id', fromUserId).maybeSingle())
+            .data?.full_name ?? 'Someone');
     void notifyLifecycleEmail({
       campaign: 'first_like',
       recipientId: toUserId,
@@ -409,8 +409,11 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     });
 
     const { data: mutual } = await supabase
-      .from('likes').select('id')
-      .eq('from_user_id', toUserId).eq('to_user_id', fromUserId).maybeSingle();
+      .from('likes')
+      .select('id')
+      .eq('from_user_id', toUserId)
+      .eq('to_user_id', fromUserId)
+      .maybeSingle();
 
     const isMatch = !!mutual;
     if (isMatch) {

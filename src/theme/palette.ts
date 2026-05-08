@@ -24,17 +24,17 @@ export type ThemeColors = ExtendedThemeColors;
  * via `useTheme()` get the same palette as components reading `COLORS` directly.
  */
 const themeExtras = {
-  background:       COLORS.surface,
-  inactive:         COLORS.textSecondary,
-  icon:             COLORS.textStrong,
-  iconMuted:        COLORS.textSecondary,
-  selectedSurface:  COLORS.primarySurface,
-  selectedBorder:   COLORS.primary,
-  infoSurface:      COLORS.savanna,
-  infoBorder:       COLORS.border,
+  background: COLORS.surface,
+  inactive: COLORS.textSecondary,
+  icon: COLORS.textStrong,
+  iconMuted: COLORS.textSecondary,
+  selectedSurface: COLORS.primarySurface,
+  selectedBorder: COLORS.primary,
+  infoSurface: COLORS.savanna,
+  infoBorder: COLORS.border,
   favouriteSurface: COLORS.goldSurface,
-  favouriteBorder:  COLORS.gold,
-  attention:        COLORS.primary,
+  favouriteBorder: COLORS.gold,
+  attention: COLORS.primary,
 } as const;
 
 export const lightColors: ThemeColors = {

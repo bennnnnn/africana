@@ -6,7 +6,8 @@ export type LikesInsertErrorKind = 'interaction_blocked' | 'rate_hour' | 'rate_d
 export function classifyLikesInsertError(err: PostgrestErrorFields | null): LikesInsertErrorKind {
   if (!err) return 'unknown';
   const { code, key } = pgErrorDiscriminator(err);
-  if (code === '23514' && key === 'interaction_blocked_between_participants') return 'interaction_blocked';
+  if (code === '23514' && key === 'interaction_blocked_between_participants')
+    return 'interaction_blocked';
   if (code === '23P01' && key === 'rate_limit:likes:hour') return 'rate_hour';
   if (code === '23P01' && key === 'rate_limit:likes:day') return 'rate_day';
 

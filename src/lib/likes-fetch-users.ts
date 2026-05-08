@@ -17,8 +17,11 @@ export interface LikesFetchResult {
 }
 
 function parseMatchesRpcPayload(data: unknown): LikesHubListItem[] {
-  const raw =
-    Array.isArray(data) ? data : typeof data === 'string' ? (JSON.parse(data) as unknown) : [];
+  const raw = Array.isArray(data)
+    ? data
+    : typeof data === 'string'
+      ? (JSON.parse(data) as unknown)
+      : [];
   if (!Array.isArray(raw)) return [];
 
   const out: LikesHubListItem[] = [];

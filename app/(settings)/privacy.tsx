@@ -6,10 +6,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/store/auth.store';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
-import {
-  SettingRow,
-  settingsStyles,
-} from '@/components/settings/settings-shared';
+import { SettingRow, settingsStyles } from '@/components/settings/settings-shared';
 import { COLORS } from '@/constants';
 import type { UserSettings } from '@/types';
 
@@ -32,7 +29,10 @@ export default function PrivacySettingsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
       <SettingsHeaderBar title="Privacy" titleAlign="leading" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={settingsStyles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={settingsStyles.scrollContent}
+      >
         <Text style={settingsStyles.screenIntro}>
           Control who can reach you and who sees you in Discover.
         </Text>

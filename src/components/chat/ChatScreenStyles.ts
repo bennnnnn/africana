@@ -24,7 +24,13 @@ export const chatScreenStyles = StyleSheet.create({
   },
   headerName: { fontSize: 16, fontWeight: FONT.bold, color: COLORS.textStrong, letterSpacing: 0.1 },
   headerStatus: { fontSize: FONT.xs, fontWeight: FONT.semibold, marginTop: 2, letterSpacing: 0.2 },
-  iconBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1001 },
   dropdown: {
     position: 'absolute',
@@ -38,7 +44,13 @@ export const chatScreenStyles = StyleSheet.create({
     borderColor: COLORS.border,
     zIndex: 1002,
   },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 12 },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 12,
+  },
   menuIcon: {
     width: 32,
     height: 32,
@@ -90,7 +102,13 @@ export const chatScreenStyles = StyleSheet.create({
     borderColor: 'transparent',
   },
   inputFocused: { borderColor: COLORS.primaryBorder, backgroundColor: COLORS.white },
-  sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  sendBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   ctxBackdrop: {
     position: 'absolute',
     top: 0,
@@ -100,7 +118,13 @@ export const chatScreenStyles = StyleSheet.create({
     backgroundColor: COLORS.overlayLight,
     zIndex: 998,
   },
-  reactionBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  reactionBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   reactionBtnActive: {
     backgroundColor: COLORS.primarySurface,
     borderWidth: 1,
@@ -118,4 +142,3 @@ export const chatScreenStyles = StyleSheet.create({
     ...SHADOWS.lg,
   },
 });
-

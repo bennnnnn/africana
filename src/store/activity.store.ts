@@ -32,8 +32,7 @@ interface ActivityState {
 export const useActivityStore = create<ActivityState>((set) => ({
   counts: { ...EMPTY_COUNTS },
   setCounts: (next) => set({ counts: next }),
-  clearTab: (tab) =>
-    set((state) => ({ counts: { ...state.counts, [tab]: 0 } })),
+  clearTab: (tab) => set((state) => ({ counts: { ...state.counts, [tab]: 0 } })),
   clearAll: () => set({ counts: { ...EMPTY_COUNTS } }),
 }));
 
@@ -41,7 +40,4 @@ export const useActivityStore = create<ActivityState>((set) => ({
  * The number shown in the Likes tab-bar badge — sum of every tracked tab.
  */
 export const selectLikesTabBadge = (state: ActivityState): number =>
-  state.counts.matches +
-  state.counts.received +
-  state.counts.viewers +
-  state.counts.favourites;
+  state.counts.matches + state.counts.received + state.counts.viewers + state.counts.favourites;

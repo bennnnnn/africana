@@ -43,7 +43,9 @@ const OnlineRow = memo(function OnlineRow({
   onMessage: (id: string) => void;
 }) {
   const avatarRaw =
-    item.avatar_url || item.profile_photos?.[0] || `${DEFAULT_AVATAR}${encodeURIComponent(item.full_name.charAt(0))}`;
+    item.avatar_url ||
+    item.profile_photos?.[0] ||
+    `${DEFAULT_AVATAR}${encodeURIComponent(item.full_name.charAt(0))}`;
   const avatar = profileImageUrlForList(avatarRaw) ?? avatarRaw;
   const location = [item.city, item.country].filter(Boolean).join(', ');
   const today = new Date();
@@ -208,25 +210,34 @@ export default function OnlineScreen() {
     setRefreshing(false);
   }, [user]);
 
-  const handleMessage = useCallback(async (toUserId: string) => {
-    if (!user) return;
-    haptics.tapLight();
-    const result = await getOrCreateConversation(user.id, toUserId);
-    if (!result.ok) {
-      showToast({
-        icon: 'alert-circle-outline',
-        message: result.reason === 'blocked' ? UI_TOAST.openChatBlocked : UI_TOAST.openChatFailed,
+  const handleMessage = useCallback(
+    async (toUserId: string) => {
+      if (!user) return;
+      haptics.tapLight();
+      const result = await getOrCreateConversation(user.id, toUserId);
+      if (!result.ok) {
+        showToast({
+          icon: 'alert-circle-outline',
+          message: result.reason === 'blocked' ? UI_TOAST.openChatBlocked : UI_TOAST.openChatFailed,
+        });
+        return;
+      }
+      router.push({
+        pathname: '/(chat)/[id]',
+        params: { id: result.conversationId, otherUserId: toUserId },
       });
-      return;
-    }
-    router.push({ pathname: '/(chat)/[id]', params: { id: result.conversationId, otherUserId: toUserId } });
-  }, [user, getOrCreateConversation, showToast]);
+    },
+    [user, getOrCreateConversation, showToast],
+  );
 
-  const handleOpen = useCallback((u: User) => {
-    setProfileSeed(u);
-    useProfileBrowseStore.getState().setOrderedUserIds(visibleOnlineUsers.map((x) => x.id));
-    router.push(`/(profile)/${u.id}`);
-  }, [visibleOnlineUsers]);
+  const handleOpen = useCallback(
+    (u: User) => {
+      setProfileSeed(u);
+      useProfileBrowseStore.getState().setOrderedUserIds(visibleOnlineUsers.map((x) => x.id));
+      router.push(`/(profile)/${u.id}`);
+    },
+    [visibleOnlineUsers],
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: User }) => (
@@ -237,7 +248,11 @@ export default function OnlineScreen() {
 
   const keyExtractor = useCallback((item: User) => item.id, []);
   const getItemLayout = useCallback(
-    (_: any, index: number) => ({ length: ROW_HEIGHT + 10, offset: (ROW_HEIGHT + 10) * index, index }),
+    (_: any, index: number) => ({
+      length: ROW_HEIGHT + 10,
+      offset: (ROW_HEIGHT + 10) * index,
+      index,
+    }),
     [],
   );
 
@@ -260,9 +275,7 @@ export default function OnlineScreen() {
           backgroundColor: '#FFFFFF',
         }}
       >
-        <Text style={{ fontSize: 24, fontWeight: '800', color: COLORS.text }}>
-          Online Now
-        </Text>
+        <Text style={{ fontSize: 24, fontWeight: '800', color: COLORS.text }}>Online Now</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.online }} />
           <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>
@@ -283,7 +296,11 @@ export default function OnlineScreen() {
         contentContainerStyle={{ padding: 16 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+          />
         }
         ListEmptyComponent={
           <EmptyState

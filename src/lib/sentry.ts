@@ -37,4 +37,3 @@ export function setSentryUser(id: string | null): void {
 export function captureException(err: unknown, context?: Record<string, unknown>): void {
   Sentry.captureException(err, { extra: context });
 }
-

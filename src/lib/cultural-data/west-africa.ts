@@ -2,8 +2,32 @@ import { CountryCultureData } from './types';
 
 export const WEST_AFRICA_CULTURE: Record<string, CountryCultureData> = {
   NG: {
-    ethnicities: ['Yoruba', 'Igbo', 'Hausa', 'Fulani', 'Tiv', 'Kanuri', 'Ijaw', 'Edo', 'Efik', 'Ibibio', 'Nupe', 'Urhobo'],
-    languages: ['English', 'Yoruba', 'Igbo', 'Hausa', 'Fulfulde', 'Pidgin', 'Kanuri', 'Tiv', 'Edo', 'Ibibio'],
+    ethnicities: [
+      'Yoruba',
+      'Igbo',
+      'Hausa',
+      'Fulani',
+      'Tiv',
+      'Kanuri',
+      'Ijaw',
+      'Edo',
+      'Efik',
+      'Ibibio',
+      'Nupe',
+      'Urhobo',
+    ],
+    languages: [
+      'English',
+      'Yoruba',
+      'Igbo',
+      'Hausa',
+      'Fulfulde',
+      'Pidgin',
+      'Kanuri',
+      'Tiv',
+      'Edo',
+      'Ibibio',
+    ],
     subdivisionEthnicities: {
       Lagos: ['Yoruba'],
       Oyo: ['Yoruba'],

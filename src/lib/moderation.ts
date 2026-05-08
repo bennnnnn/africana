@@ -35,9 +35,7 @@ const SOLICITATION_PATTERNS: RegExp[] = [
 
 const ALL_PATTERNS: RegExp[] = [...SLUR_PATTERNS, ...SOLICITATION_PATTERNS];
 
-export type ModerationResult =
-  | { ok: true }
-  | { ok: false; reason: 'slur' | 'solicitation' };
+export type ModerationResult = { ok: true } | { ok: false; reason: 'slur' | 'solicitation' };
 
 export function moderateMessage(text: string): ModerationResult {
   if (!text) return { ok: true };

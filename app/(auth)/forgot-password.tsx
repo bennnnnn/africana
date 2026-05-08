@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,9 +10,9 @@ import { COLORS } from '@/constants';
 import { appDialog } from '@/lib/app-dialog';
 
 export default function ForgotPasswordScreen() {
-  const [email, setEmail]     = useState('');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sent, setSent]       = useState(false);
+  const [sent, setSent] = useState(false);
 
   const handleSend = async () => {
     if (!email.trim()) {
@@ -35,7 +29,11 @@ export default function ForgotPasswordScreen() {
     });
     setLoading(false);
     if (error) {
-      appDialog({ title: 'Something went wrong', message: error.message, icon: 'alert-circle-outline' });
+      appDialog({
+        title: 'Something went wrong',
+        message: error.message,
+        icon: 'alert-circle-outline',
+      });
     } else {
       setSent(true);
     }
@@ -43,8 +41,10 @@ export default function ForgotPasswordScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, padding: 24 }}>
-
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, padding: 24 }}
+      >
         <TouchableOpacity onPress={() => router.back()} style={{ marginBottom: 32 }}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
@@ -52,18 +52,34 @@ export default function ForgotPasswordScreen() {
         {sent ? (
           // ── Success state ──
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-            <View style={{
-              width: 80, height: 80, borderRadius: 40,
-              backgroundColor: COLORS.successSurface,
-              alignItems: 'center', justifyContent: 'center',
-            }}>
+            <View
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                backgroundColor: COLORS.successSurface,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               <Ionicons name="mail-open-outline" size={38} color={COLORS.success} />
             </View>
-            <Text style={{ fontSize: 24, fontWeight: '800', color: COLORS.text, textAlign: 'center' }}>
+            <Text
+              style={{ fontSize: 24, fontWeight: '800', color: COLORS.text, textAlign: 'center' }}
+            >
               Request received
             </Text>
-            <Text style={{ fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
-              If <Text style={{ fontWeight: '700', color: COLORS.text }}>{email.trim()}</Text> is linked to an Africana account, you'll receive a reset link shortly.{'\n\n'}Check your inbox and spam folder.
+            <Text
+              style={{
+                fontSize: 15,
+                color: COLORS.textSecondary,
+                textAlign: 'center',
+                lineHeight: 22,
+              }}
+            >
+              If <Text style={{ fontWeight: '700', color: COLORS.text }}>{email.trim()}</Text> is
+              linked to an Africana account, you&apos;ll receive a reset link shortly.{'\n\n'}Check
+              your inbox and spam folder.
             </Text>
             <TouchableOpacity
               onPress={() => router.replace('/(auth)/login')}
@@ -75,7 +91,9 @@ export default function ForgotPasswordScreen() {
                 borderRadius: 14,
               }}
             >
-              <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>Back to Sign In</Text>
+              <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>
+                Back to Sign In
+              </Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -84,8 +102,15 @@ export default function ForgotPasswordScreen() {
             <Text style={{ fontSize: 30, fontWeight: '800', color: COLORS.text, marginBottom: 8 }}>
               Forgot password?
             </Text>
-            <Text style={{ fontSize: 15, color: COLORS.textSecondary, marginBottom: 32, lineHeight: 22 }}>
-              Enter your email and we'll send you a link to reset your password.
+            <Text
+              style={{
+                fontSize: 15,
+                color: COLORS.textSecondary,
+                marginBottom: 32,
+                lineHeight: 22,
+              }}
+            >
+              Enter your email and we&apos;ll send you a link to reset your password.
             </Text>
 
             <Input
@@ -108,7 +133,6 @@ export default function ForgotPasswordScreen() {
             />
           </>
         )}
-
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

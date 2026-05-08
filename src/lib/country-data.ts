@@ -1,7 +1,18 @@
 export type SubdivisionLabel =
-  | 'State' | 'Region' | 'Province' | 'County' | 'Governorate'
-  | 'District' | 'Prefecture' | 'Wilaya' | 'Department' | 'Division'
-  | 'Island' | 'Canton' | 'Territory' | 'Emirate';
+  | 'State'
+  | 'Region'
+  | 'Province'
+  | 'County'
+  | 'Governorate'
+  | 'District'
+  | 'Prefecture'
+  | 'Wilaya'
+  | 'Department'
+  | 'Division'
+  | 'Island'
+  | 'Canton'
+  | 'Territory'
+  | 'Emirate';
 
 export interface Subdivision {
   name: string;
@@ -28,16 +39,24 @@ export interface CountryGroup {
 // EAST AFRICA
 // ─────────────────────────────────────────────
 const Ethiopia: CountryData = {
-  code: 'ET', name: 'Ethiopia', subdivisionLabel: 'Region',
+  code: 'ET',
+  name: 'Ethiopia',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Addis Ababa', cities: ['Addis Ababa'] },
     { name: 'Afar', cities: ['Semera', 'Asaita', 'Logia', 'Dubti'] },
-    { name: 'Amhara', cities: ['Bahir Dar', 'Gondar', 'Dessie', 'Kombolcha', 'Debre Markos', 'Debre Birhan'] },
+    {
+      name: 'Amhara',
+      cities: ['Bahir Dar', 'Gondar', 'Dessie', 'Kombolcha', 'Debre Markos', 'Debre Birhan'],
+    },
     { name: 'Benishangul-Gumuz', cities: ['Assosa', 'Metekel', 'Bambasi'] },
     { name: 'Dire Dawa', cities: ['Dire Dawa'] },
     { name: 'Gambela', cities: ['Gambela', 'Itang'] },
     { name: 'Harari', cities: ['Harar'] },
-    { name: 'Oromia', cities: ['Adama', 'Jimma', 'Bishoftu', 'Shashamane', 'Nekemte', 'Arsi Negele', 'Asella'] },
+    {
+      name: 'Oromia',
+      cities: ['Adama', 'Jimma', 'Bishoftu', 'Shashamane', 'Nekemte', 'Arsi Negele', 'Asella'],
+    },
     { name: 'Sidama', cities: ['Hawassa'] },
     { name: 'SNNPR', cities: ['Awassa', 'Arba Minch', 'Hosaena', 'Wolkite'] },
     { name: 'Somali', cities: ['Jigjiga', 'Gode', 'Kebri Dahar'] },
@@ -47,7 +66,9 @@ const Ethiopia: CountryData = {
 };
 
 const Kenya: CountryData = {
-  code: 'KE', name: 'Kenya', subdivisionLabel: 'County',
+  code: 'KE',
+  name: 'Kenya',
+  subdivisionLabel: 'County',
   subdivisions: [
     { name: 'Nairobi', cities: ['Nairobi', 'Westlands', 'Kasarani', 'Embakasi'] },
     { name: 'Mombasa', cities: ['Mombasa', 'Nyali', 'Likoni'] },
@@ -68,7 +89,9 @@ const Kenya: CountryData = {
 };
 
 const Tanzania: CountryData = {
-  code: 'TZ', name: 'Tanzania', subdivisionLabel: 'Region',
+  code: 'TZ',
+  name: 'Tanzania',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Dar es Salaam', cities: ['Dar es Salaam', 'Kinondoni', 'Ilala', 'Temeke'] },
     { name: 'Mwanza', cities: ['Mwanza', 'Ilemela', 'Nyamagana'] },
@@ -84,7 +107,9 @@ const Tanzania: CountryData = {
 };
 
 const Uganda: CountryData = {
-  code: 'UG', name: 'Uganda', subdivisionLabel: 'Region',
+  code: 'UG',
+  name: 'Uganda',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Central', cities: ['Kampala', 'Entebbe', 'Jinja', 'Mukono', 'Wakiso'] },
     { name: 'Eastern', cities: ['Mbale', 'Tororo', 'Soroti', 'Jinja', 'Iganga'] },
@@ -94,7 +119,9 @@ const Uganda: CountryData = {
 };
 
 const Rwanda: CountryData = {
-  code: 'RW', name: 'Rwanda', subdivisionLabel: 'Province',
+  code: 'RW',
+  name: 'Rwanda',
+  subdivisionLabel: 'Province',
   subdivisions: [
     { name: 'Kigali City', cities: ['Kigali', 'Nyarugenge', 'Gasabo', 'Kicukiro'] },
     { name: 'Eastern', cities: ['Rwamagana', 'Kayonza', 'Kirehe', 'Ngoma'] },
@@ -105,7 +132,9 @@ const Rwanda: CountryData = {
 };
 
 const Somalia: CountryData = {
-  code: 'SO', name: 'Somalia', subdivisionLabel: 'State',
+  code: 'SO',
+  name: 'Somalia',
+  subdivisionLabel: 'State',
   subdivisions: [
     { name: 'Banadir', cities: ['Mogadishu'] },
     { name: 'Puntland', cities: ['Garowe', 'Bosaso', 'Galkayo'] },
@@ -118,7 +147,9 @@ const Somalia: CountryData = {
 };
 
 const Eritrea: CountryData = {
-  code: 'ER', name: 'Eritrea', subdivisionLabel: 'Region',
+  code: 'ER',
+  name: 'Eritrea',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Central', cities: ['Asmara', 'Keren'] },
     { name: 'Southern', cities: ['Mendefera', 'Adi Keyh', 'Dekemhare'] },
@@ -130,7 +161,9 @@ const Eritrea: CountryData = {
 };
 
 const Burundi: CountryData = {
-  code: 'BI', name: 'Burundi', subdivisionLabel: 'Province',
+  code: 'BI',
+  name: 'Burundi',
+  subdivisionLabel: 'Province',
   subdivisions: [
     { name: 'Bujumbura Mairie', cities: ['Bujumbura'] },
     { name: 'Gitega', cities: ['Gitega'] },
@@ -141,7 +174,9 @@ const Burundi: CountryData = {
 };
 
 const Djibouti: CountryData = {
-  code: 'DJ', name: 'Djibouti', subdivisionLabel: 'Region',
+  code: 'DJ',
+  name: 'Djibouti',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Djibouti', cities: ['Djibouti City'] },
     { name: 'Ali Sabieh', cities: ['Ali Sabieh', 'Holhol'] },
@@ -152,7 +187,9 @@ const Djibouti: CountryData = {
 };
 
 const Madagascar: CountryData = {
-  code: 'MG', name: 'Madagascar', subdivisionLabel: 'Province',
+  code: 'MG',
+  name: 'Madagascar',
+  subdivisionLabel: 'Province',
   subdivisions: [
     { name: 'Antananarivo', cities: ['Antananarivo', 'Antsirabe', 'Tsiroanomandidy'] },
     { name: 'Antsiranana', cities: ['Antsiranana (Diego Suarez)', 'Ambilobe', 'Sambava'] },
@@ -167,7 +204,9 @@ const Madagascar: CountryData = {
 // WEST AFRICA
 // ─────────────────────────────────────────────
 const Nigeria: CountryData = {
-  code: 'NG', name: 'Nigeria', subdivisionLabel: 'State',
+  code: 'NG',
+  name: 'Nigeria',
+  subdivisionLabel: 'State',
   subdivisions: [
     { name: 'Abia', cities: ['Umuahia', 'Aba', 'Ohafia'] },
     { name: 'Adamawa', cities: ['Yola', 'Mubi', 'Numan', 'Jimeta'] },
@@ -193,7 +232,19 @@ const Nigeria: CountryData = {
     { name: 'Kebbi', cities: ['Birnin Kebbi', 'Argungu', 'Yelwa', 'Zuru'] },
     { name: 'Kogi', cities: ['Lokoja', 'Okene', 'Kabba', 'Idah'] },
     { name: 'Kwara', cities: ['Ilorin', 'Offa', 'Omu-Aran', 'Erin-Ile'] },
-    { name: 'Lagos', cities: ['Lagos', 'Ikeja', 'Victoria Island', 'Lekki', 'Surulere', 'Badagry', 'Ikorodu', 'Eti-Osa'] },
+    {
+      name: 'Lagos',
+      cities: [
+        'Lagos',
+        'Ikeja',
+        'Victoria Island',
+        'Lekki',
+        'Surulere',
+        'Badagry',
+        'Ikorodu',
+        'Eti-Osa',
+      ],
+    },
     { name: 'Nasarawa', cities: ['Lafia', 'Keffi', 'Akwanga', 'Nasarawa'] },
     { name: 'Niger', cities: ['Minna', 'Suleja', 'Bida', 'Kontagora'] },
     { name: 'Ogun', cities: ['Abeokuta', 'Ijebu Ode', 'Sagamu', 'Ota'] },
@@ -210,7 +261,9 @@ const Nigeria: CountryData = {
 };
 
 const Ghana: CountryData = {
-  code: 'GH', name: 'Ghana', subdivisionLabel: 'Region',
+  code: 'GH',
+  name: 'Ghana',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Greater Accra', cities: ['Accra', 'Tema', 'Ga South', 'Madina', 'Ashaiman'] },
     { name: 'Ashanti', cities: ['Kumasi', 'Obuasi', 'Ejisu', 'Mampong'] },
@@ -232,7 +285,9 @@ const Ghana: CountryData = {
 };
 
 const Senegal: CountryData = {
-  code: 'SN', name: 'Senegal', subdivisionLabel: 'Region',
+  code: 'SN',
+  name: 'Senegal',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Dakar', cities: ['Dakar', 'Pikine', 'Guédiawaye', 'Rufisque'] },
     { name: 'Diourbel', cities: ['Diourbel', 'Touba', 'Bambey', 'Mbacké'] },
@@ -252,7 +307,9 @@ const Senegal: CountryData = {
 };
 
 const CoteDIvoire: CountryData = {
-  code: 'CI', name: "Côte d'Ivoire", subdivisionLabel: 'District',
+  code: 'CI',
+  name: "Côte d'Ivoire",
+  subdivisionLabel: 'District',
   subdivisions: [
     { name: 'Abidjan', cities: ['Abidjan', 'Cocody', 'Yopougon', 'Abobo', 'Marcory'] },
     { name: 'Bas-Sassandra', cities: ['San-Pédro', 'Sassandra', 'Tabou'] },
@@ -265,13 +322,15 @@ const CoteDIvoire: CountryData = {
     { name: 'Savanes', cities: ['Korhogo', 'Boundiali', 'Ferkessédougou'] },
     { name: 'Vallée du Bandama', cities: ['Bouaké', 'Sakassou', 'Botro'] },
     { name: 'Woroba', cities: ['Séguéla', 'Worodougou', 'Mankono'] },
-    { name: "Yamoussoukro (District autonome)", cities: ['Yamoussoukro'] },
+    { name: 'Yamoussoukro (District autonome)', cities: ['Yamoussoukro'] },
     { name: 'Zanzan', cities: ['Bondoukou', 'Bouna', 'Téhini'] },
   ],
 };
 
 const SierraLeone: CountryData = {
-  code: 'SL', name: 'Sierra Leone', subdivisionLabel: 'Province',
+  code: 'SL',
+  name: 'Sierra Leone',
+  subdivisionLabel: 'Province',
   subdivisions: [
     { name: 'Western Area', cities: ['Freetown', 'Waterloo', 'Lungi'] },
     { name: 'Northern', cities: ['Makeni', 'Kabala', 'Port Loko', 'Kambia'] },
@@ -282,7 +341,9 @@ const SierraLeone: CountryData = {
 };
 
 const Liberia: CountryData = {
-  code: 'LR', name: 'Liberia', subdivisionLabel: 'County',
+  code: 'LR',
+  name: 'Liberia',
+  subdivisionLabel: 'County',
   subdivisions: [
     { name: 'Montserrado', cities: ['Monrovia', 'Paynesville', 'Gardnerville'] },
     { name: 'Margibi', cities: ['Kakata', 'Marshall'] },
@@ -298,7 +359,9 @@ const Liberia: CountryData = {
 };
 
 const Cameroon: CountryData = {
-  code: 'CM', name: 'Cameroon', subdivisionLabel: 'Region',
+  code: 'CM',
+  name: 'Cameroon',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Centre', cities: ['Yaoundé', 'Mbalmayo', 'Obala'] },
     { name: 'Littoral', cities: ['Douala', 'Nkongsamba', 'Loum', 'Edéa'] },
@@ -314,7 +377,9 @@ const Cameroon: CountryData = {
 };
 
 const GuineaConakry: CountryData = {
-  code: 'GN', name: 'Guinea', subdivisionLabel: 'Region',
+  code: 'GN',
+  name: 'Guinea',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Conakry', cities: ['Conakry', 'Ratoma', 'Matoto', 'Kaloum'] },
     { name: 'Kindia', cities: ['Kindia', 'Coyah', 'Forécariah', 'Télimélé'] },
@@ -328,7 +393,9 @@ const GuineaConakry: CountryData = {
 };
 
 const Mali: CountryData = {
-  code: 'ML', name: 'Mali', subdivisionLabel: 'Region',
+  code: 'ML',
+  name: 'Mali',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Bamako', cities: ['Bamako'] },
     { name: 'Kayes', cities: ['Kayes', 'Kita', 'Bafoulabé'] },
@@ -343,7 +410,9 @@ const Mali: CountryData = {
 };
 
 const BurkinaFaso: CountryData = {
-  code: 'BF', name: 'Burkina Faso', subdivisionLabel: 'Region',
+  code: 'BF',
+  name: 'Burkina Faso',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Centre', cities: ['Ouagadougou', 'Ziniaré', 'Loumbila'] },
     { name: 'Hauts-Bassins', cities: ['Bobo-Dioulasso', 'Houndé', 'Dédougou'] },
@@ -352,7 +421,7 @@ const BurkinaFaso: CountryData = {
     { name: 'Centre-Nord', cities: ['Kaya', 'Kongoussi', 'Tougouri'] },
     { name: 'Centre-Ouest', cities: ['Koudougou', 'Réo', 'Sabou'] },
     { name: 'Centre-Sud', cities: ['Manga', 'Pô', 'Kombissiri'] },
-    { name: 'Est', cities: ['Fada N\'Gourma', 'Diapaga', 'Bogandé'] },
+    { name: 'Est', cities: ["Fada N'Gourma", 'Diapaga', 'Bogandé'] },
     { name: 'Nord', cities: ['Ouahigouya', 'Titao', 'Yako'] },
     { name: 'Plateau-Central', cities: ['Ziniaré', 'Zorgho', 'Boussé'] },
     { name: 'Sahel', cities: ['Dori', 'Djibo', 'Gorom-Gorom'] },
@@ -365,7 +434,9 @@ const BurkinaFaso: CountryData = {
 // NORTH AFRICA
 // ─────────────────────────────────────────────
 const Egypt: CountryData = {
-  code: 'EG', name: 'Egypt', subdivisionLabel: 'Governorate',
+  code: 'EG',
+  name: 'Egypt',
+  subdivisionLabel: 'Governorate',
   subdivisions: [
     { name: 'Cairo', cities: ['Cairo', 'New Cairo', 'Heliopolis', 'Nasr City', 'Maadi'] },
     { name: 'Giza', cities: ['Giza', '6th of October City', 'Shubra al-Khayma'] },
@@ -398,7 +469,9 @@ const Egypt: CountryData = {
 };
 
 const Morocco: CountryData = {
-  code: 'MA', name: 'Morocco', subdivisionLabel: 'Region',
+  code: 'MA',
+  name: 'Morocco',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Casablanca-Settat', cities: ['Casablanca', 'Settat', 'Mohammedia', 'El Jadida'] },
     { name: 'Rabat-Salé-Kénitra', cities: ['Rabat', 'Salé', 'Kénitra', 'Témara'] },
@@ -406,7 +479,10 @@ const Morocco: CountryData = {
     { name: 'Marrakech-Safi', cities: ['Marrakech', 'Safi', 'Essaouira', 'Kelaat Sraghna'] },
     { name: 'Souss-Massa', cities: ['Agadir', 'Tiznit', 'Taroudant', 'Chtouka Ait Baha'] },
     { name: 'Oriental', cities: ['Oujda', 'Nador', 'Taourirt', 'Berkane'] },
-    { name: 'Tanger-Tétouan-Al Hoceïma', cities: ['Tangier', 'Tétouan', 'Al Hoceïma', 'Chefchaouen'] },
+    {
+      name: 'Tanger-Tétouan-Al Hoceïma',
+      cities: ['Tangier', 'Tétouan', 'Al Hoceïma', 'Chefchaouen'],
+    },
     { name: 'Béni Mellal-Khénifra', cities: ['Béni Mellal', 'Khénifra', 'Azilal', 'Kasba Tadla'] },
     { name: 'Drâa-Tafilalet', cities: ['Errachidia', 'Ouarzazate', 'Tinghir', 'Zagora'] },
     { name: 'Guelmim-Oued Noun', cities: ['Guelmim', 'Sidi Ifni', 'Tan-Tan'] },
@@ -416,7 +492,9 @@ const Morocco: CountryData = {
 };
 
 const Algeria: CountryData = {
-  code: 'DZ', name: 'Algeria', subdivisionLabel: 'Wilaya',
+  code: 'DZ',
+  name: 'Algeria',
+  subdivisionLabel: 'Wilaya',
   subdivisions: [
     { name: 'Alger', cities: ['Algiers', 'Bab El Oued', 'El Harrach', 'Hussein Dey'] },
     { name: 'Oran', cities: ['Oran', 'Arzew', 'Es Senia', 'Bir El Djir'] },
@@ -440,7 +518,9 @@ const Algeria: CountryData = {
 };
 
 const Tunisia: CountryData = {
-  code: 'TN', name: 'Tunisia', subdivisionLabel: 'Governorate',
+  code: 'TN',
+  name: 'Tunisia',
+  subdivisionLabel: 'Governorate',
   subdivisions: [
     { name: 'Tunis', cities: ['Tunis', 'La Marsa', 'Carthage', 'Ariana'] },
     { name: 'Ariana', cities: ['Ariana', 'Raoued', 'Soukra'] },
@@ -473,7 +553,9 @@ const Tunisia: CountryData = {
 // CENTRAL AFRICA
 // ─────────────────────────────────────────────
 const DRCongo: CountryData = {
-  code: 'CD', name: 'DR Congo', subdivisionLabel: 'Province',
+  code: 'CD',
+  name: 'DR Congo',
+  subdivisionLabel: 'Province',
   subdivisions: [
     { name: 'Kinshasa', cities: ['Kinshasa', 'Gombe', 'Limete', 'Masina'] },
     { name: 'Kongo Central', cities: ['Matadi', 'Boma', 'Mbanza-Ngungu'] },
@@ -496,12 +578,23 @@ const DRCongo: CountryData = {
 // SOUTHERN AFRICA
 // ─────────────────────────────────────────────
 const SouthAfrica: CountryData = {
-  code: 'ZA', name: 'South Africa', subdivisionLabel: 'Province',
+  code: 'ZA',
+  name: 'South Africa',
+  subdivisionLabel: 'Province',
   subdivisions: [
-    { name: 'Gauteng', cities: ['Johannesburg', 'Pretoria', 'Soweto', 'Sandton', 'Randburg', 'Centurion', 'Midrand'] },
+    {
+      name: 'Gauteng',
+      cities: ['Johannesburg', 'Pretoria', 'Soweto', 'Sandton', 'Randburg', 'Centurion', 'Midrand'],
+    },
     { name: 'Western Cape', cities: ['Cape Town', 'Stellenbosch', 'George', 'Paarl', 'Worcester'] },
-    { name: 'KwaZulu-Natal', cities: ['Durban', 'Pietermaritzburg', 'Richards Bay', 'Newcastle', 'Pinetown'] },
-    { name: 'Eastern Cape', cities: ['East London', 'Port Elizabeth', 'Grahamstown', 'Queenstown'] },
+    {
+      name: 'KwaZulu-Natal',
+      cities: ['Durban', 'Pietermaritzburg', 'Richards Bay', 'Newcastle', 'Pinetown'],
+    },
+    {
+      name: 'Eastern Cape',
+      cities: ['East London', 'Port Elizabeth', 'Grahamstown', 'Queenstown'],
+    },
     { name: 'Limpopo', cities: ['Polokwane', 'Tzaneen', 'Thohoyandou', 'Mokopane'] },
     { name: 'Mpumalanga', cities: ['Nelspruit', 'Witbank', 'Secunda', 'Middelburg'] },
     { name: 'North West', cities: ['Rustenburg', 'Mafikeng', 'Klerksdorp', 'Potchefstroom'] },
@@ -511,7 +604,9 @@ const SouthAfrica: CountryData = {
 };
 
 const Zimbabwe: CountryData = {
-  code: 'ZW', name: 'Zimbabwe', subdivisionLabel: 'Province',
+  code: 'ZW',
+  name: 'Zimbabwe',
+  subdivisionLabel: 'Province',
   subdivisions: [
     { name: 'Harare', cities: ['Harare', 'Chitungwiza', 'Epworth'] },
     { name: 'Bulawayo', cities: ['Bulawayo'] },
@@ -527,7 +622,9 @@ const Zimbabwe: CountryData = {
 };
 
 const Zambia: CountryData = {
-  code: 'ZM', name: 'Zambia', subdivisionLabel: 'Province',
+  code: 'ZM',
+  name: 'Zambia',
+  subdivisionLabel: 'Province',
   subdivisions: [
     { name: 'Lusaka', cities: ['Lusaka', 'Kafue', 'Chongwe'] },
     { name: 'Copperbelt', cities: ['Ndola', 'Kitwe', 'Mufulira', 'Chingola', 'Luanshya'] },
@@ -543,7 +640,9 @@ const Zambia: CountryData = {
 };
 
 const Mozambique: CountryData = {
-  code: 'MZ', name: 'Mozambique', subdivisionLabel: 'Province',
+  code: 'MZ',
+  name: 'Mozambique',
+  subdivisionLabel: 'Province',
   subdivisions: [
     { name: 'Maputo City', cities: ['Maputo', 'Matola'] },
     { name: 'Maputo', cities: ['Matola', 'Marracuene', 'Boane'] },
@@ -560,7 +659,9 @@ const Mozambique: CountryData = {
 };
 
 const Angola: CountryData = {
-  code: 'AO', name: 'Angola', subdivisionLabel: 'Province',
+  code: 'AO',
+  name: 'Angola',
+  subdivisionLabel: 'Province',
   subdivisions: [
     { name: 'Luanda', cities: ['Luanda', 'Viana', 'Cacuaco', 'Cazenga'] },
     { name: 'Benguela', cities: ['Benguela', 'Lobito', 'Catumbela'] },
@@ -572,7 +673,7 @@ const Angola: CountryData = {
     { name: 'Lunda Norte', cities: ['Dundo', 'Chitato', 'Lucapa'] },
     { name: 'Lunda Sul', cities: ['Saurimo', 'Muconda', 'Cacolo'] },
     { name: 'Cunene', cities: ['Ondjiva', 'Xangongo', 'Cahama'] },
-    { name: 'Kuanza Norte', cities: ['N\'dalatando', 'Lucala', 'Camabatela'] },
+    { name: 'Kuanza Norte', cities: ["N'dalatando", 'Lucala', 'Camabatela'] },
     { name: 'Kuanza Sul', cities: ['Sumbe', 'Porto Amboim', 'Libolo'] },
     { name: 'Cuando Cubango', cities: ['Menongue', 'Kuito Kuanavale', 'Calai'] },
     { name: 'Moxico', cities: ['Luena', 'Léua', 'Cazombo'] },
@@ -585,17 +686,52 @@ const Angola: CountryData = {
 // DIASPORA — EUROPE
 // ─────────────────────────────────────────────
 const UK: CountryData = {
-  code: 'GB', name: 'United Kingdom', subdivisionLabel: 'Region',
+  code: 'GB',
+  name: 'United Kingdom',
+  subdivisionLabel: 'Region',
   subdivisions: [
-    { name: 'London', cities: ['London', 'Croydon', 'Lewisham', 'Hackney', 'Southwark', 'Newham', 'Brent', 'Ealing'] },
-    { name: 'South East England', cities: ['Brighton', 'Southampton', 'Oxford', 'Reading', 'Guildford'] },
-    { name: 'North West England', cities: ['Manchester', 'Liverpool', 'Salford', 'Blackpool', 'Preston'] },
-    { name: 'West Midlands', cities: ['Birmingham', 'Coventry', 'Wolverhampton', 'Stoke-on-Trent'] },
-    { name: 'Yorkshire and the Humber', cities: ['Leeds', 'Sheffield', 'Bradford', 'Hull', 'York'] },
-    { name: 'East of England', cities: ['Cambridge', 'Norwich', 'Luton', 'Ipswich', 'Peterborough'] },
+    {
+      name: 'London',
+      cities: [
+        'London',
+        'Croydon',
+        'Lewisham',
+        'Hackney',
+        'Southwark',
+        'Newham',
+        'Brent',
+        'Ealing',
+      ],
+    },
+    {
+      name: 'South East England',
+      cities: ['Brighton', 'Southampton', 'Oxford', 'Reading', 'Guildford'],
+    },
+    {
+      name: 'North West England',
+      cities: ['Manchester', 'Liverpool', 'Salford', 'Blackpool', 'Preston'],
+    },
+    {
+      name: 'West Midlands',
+      cities: ['Birmingham', 'Coventry', 'Wolverhampton', 'Stoke-on-Trent'],
+    },
+    {
+      name: 'Yorkshire and the Humber',
+      cities: ['Leeds', 'Sheffield', 'Bradford', 'Hull', 'York'],
+    },
+    {
+      name: 'East of England',
+      cities: ['Cambridge', 'Norwich', 'Luton', 'Ipswich', 'Peterborough'],
+    },
     { name: 'South West England', cities: ['Bristol', 'Exeter', 'Plymouth', 'Bath', 'Swindon'] },
-    { name: 'East Midlands', cities: ['Nottingham', 'Leicester', 'Derby', 'Lincoln', 'Northampton'] },
-    { name: 'North East England', cities: ['Newcastle upon Tyne', 'Sunderland', 'Middlesbrough', 'Durham'] },
+    {
+      name: 'East Midlands',
+      cities: ['Nottingham', 'Leicester', 'Derby', 'Lincoln', 'Northampton'],
+    },
+    {
+      name: 'North East England',
+      cities: ['Newcastle upon Tyne', 'Sunderland', 'Middlesbrough', 'Durham'],
+    },
     { name: 'Scotland', cities: ['Glasgow', 'Edinburgh', 'Aberdeen', 'Dundee', 'Inverness'] },
     { name: 'Wales', cities: ['Cardiff', 'Swansea', 'Newport', 'Bangor'] },
     { name: 'Northern Ireland', cities: ['Belfast', 'Derry', 'Lisburn', 'Newtownabbey'] },
@@ -603,10 +739,26 @@ const UK: CountryData = {
 };
 
 const France: CountryData = {
-  code: 'FR', name: 'France', subdivisionLabel: 'Region',
+  code: 'FR',
+  name: 'France',
+  subdivisionLabel: 'Region',
   subdivisions: [
-    { name: 'Île-de-France', cities: ['Paris', 'Boulogne-Billancourt', 'Saint-Denis', 'Argenteuil', 'Montreuil', 'Créteil', 'Nanterre'] },
-    { name: 'Auvergne-Rhône-Alpes', cities: ['Lyon', 'Grenoble', 'Clermont-Ferrand', 'Saint-Étienne', 'Annecy'] },
+    {
+      name: 'Île-de-France',
+      cities: [
+        'Paris',
+        'Boulogne-Billancourt',
+        'Saint-Denis',
+        'Argenteuil',
+        'Montreuil',
+        'Créteil',
+        'Nanterre',
+      ],
+    },
+    {
+      name: 'Auvergne-Rhône-Alpes',
+      cities: ['Lyon', 'Grenoble', 'Clermont-Ferrand', 'Saint-Étienne', 'Annecy'],
+    },
     { name: 'Nouvelle-Aquitaine', cities: ['Bordeaux', 'Limoges', 'Poitiers', 'Pau', 'Bayonne'] },
     { name: 'Occitanie', cities: ['Toulouse', 'Montpellier', 'Nîmes', 'Perpignan', 'Narbonne'] },
     { name: 'Hauts-de-France', cities: ['Lille', 'Amiens', 'Roubaix', 'Tourcoing', 'Dunkirk'] },
@@ -614,19 +766,42 @@ const France: CountryData = {
     { name: 'Normandie', cities: ['Rouen', 'Caen', 'Le Havre', 'Cherbourg', 'Alençon'] },
     { name: 'Pays de la Loire', cities: ['Nantes', 'Angers', 'Le Mans', 'Saint-Nazaire'] },
     { name: 'Bretagne', cities: ['Rennes', 'Brest', 'Quimper', 'Lorient'] },
-    { name: 'Bourgogne-Franche-Comté', cities: ['Dijon', 'Besançon', 'Belfort', 'Chalon-sur-Saône'] },
+    {
+      name: 'Bourgogne-Franche-Comté',
+      cities: ['Dijon', 'Besançon', 'Belfort', 'Chalon-sur-Saône'],
+    },
     { name: 'Centre-Val de Loire', cities: ['Orléans', 'Tours', 'Blois', 'Chartres'] },
-    { name: "Provence-Alpes-Côte d'Azur", cities: ['Marseille', 'Nice', 'Toulon', 'Aix-en-Provence', 'Avignon'] },
+    {
+      name: "Provence-Alpes-Côte d'Azur",
+      cities: ['Marseille', 'Nice', 'Toulon', 'Aix-en-Provence', 'Avignon'],
+    },
     { name: 'Corse', cities: ['Ajaccio', 'Bastia', 'Porto-Vecchio'] },
   ],
 };
 
 const Germany: CountryData = {
-  code: 'DE', name: 'Germany', subdivisionLabel: 'State',
+  code: 'DE',
+  name: 'Germany',
+  subdivisionLabel: 'State',
   subdivisions: [
-    { name: 'North Rhine-Westphalia', cities: ['Cologne', 'Düsseldorf', 'Dortmund', 'Essen', 'Duisburg', 'Bonn', 'Aachen', 'Bielefeld'] },
+    {
+      name: 'North Rhine-Westphalia',
+      cities: [
+        'Cologne',
+        'Düsseldorf',
+        'Dortmund',
+        'Essen',
+        'Duisburg',
+        'Bonn',
+        'Aachen',
+        'Bielefeld',
+      ],
+    },
     { name: 'Bavaria', cities: ['Munich', 'Nuremberg', 'Augsburg', 'Regensburg', 'Ingolstadt'] },
-    { name: 'Baden-Württemberg', cities: ['Stuttgart', 'Mannheim', 'Karlsruhe', 'Freiburg', 'Heidelberg'] },
+    {
+      name: 'Baden-Württemberg',
+      cities: ['Stuttgart', 'Mannheim', 'Karlsruhe', 'Freiburg', 'Heidelberg'],
+    },
     { name: 'Berlin', cities: ['Berlin', 'Mitte', 'Kreuzberg', 'Neukölln', 'Charlottenburg'] },
     { name: 'Hamburg', cities: ['Hamburg', 'Altona', 'Harburg', 'Wandsbek'] },
     { name: 'Saxony', cities: ['Dresden', 'Leipzig', 'Chemnitz', 'Zwickau'] },
@@ -644,7 +819,9 @@ const Germany: CountryData = {
 };
 
 const Netherlands: CountryData = {
-  code: 'NL', name: 'Netherlands', subdivisionLabel: 'Province',
+  code: 'NL',
+  name: 'Netherlands',
+  subdivisionLabel: 'Province',
   subdivisions: [
     { name: 'South Holland', cities: ['Rotterdam', 'The Hague', 'Leiden', 'Delft', 'Dordrecht'] },
     { name: 'North Holland', cities: ['Amsterdam', 'Haarlem', 'Zaandam', 'Almere'] },
@@ -662,18 +839,28 @@ const Netherlands: CountryData = {
 };
 
 const Belgium: CountryData = {
-  code: 'BE', name: 'Belgium', subdivisionLabel: 'Region',
+  code: 'BE',
+  name: 'Belgium',
+  subdivisionLabel: 'Region',
   subdivisions: [
-    { name: 'Brussels Capital Region', cities: ['Brussels', 'Ixelles', 'Molenbeek-Saint-Jean', 'Anderlecht', 'Schaerbeek'] },
+    {
+      name: 'Brussels Capital Region',
+      cities: ['Brussels', 'Ixelles', 'Molenbeek-Saint-Jean', 'Anderlecht', 'Schaerbeek'],
+    },
     { name: 'Wallonia', cities: ['Liège', 'Charleroi', 'Namur', 'Mons', 'La Louvière'] },
     { name: 'Flanders', cities: ['Antwerp', 'Ghent', 'Bruges', 'Leuven', 'Mechelen'] },
   ],
 };
 
 const Sweden: CountryData = {
-  code: 'SE', name: 'Sweden', subdivisionLabel: 'County',
+  code: 'SE',
+  name: 'Sweden',
+  subdivisionLabel: 'County',
   subdivisions: [
-    { name: 'Stockholm', cities: ['Stockholm', 'Sollentuna', 'Södertälje', 'Huddinge', 'Botkyrka'] },
+    {
+      name: 'Stockholm',
+      cities: ['Stockholm', 'Sollentuna', 'Södertälje', 'Huddinge', 'Botkyrka'],
+    },
     { name: 'Västra Götaland', cities: ['Gothenburg', 'Mölndal', 'Borås', 'Trollhättan'] },
     { name: 'Skåne', cities: ['Malmö', 'Helsingborg', 'Lund', 'Kristianstad'] },
     { name: 'Östergötland', cities: ['Linköping', 'Norrköping', 'Motala'] },
@@ -686,7 +873,9 @@ const Sweden: CountryData = {
 };
 
 const Norway: CountryData = {
-  code: 'NO', name: 'Norway', subdivisionLabel: 'County',
+  code: 'NO',
+  name: 'Norway',
+  subdivisionLabel: 'County',
   subdivisions: [
     { name: 'Oslo', cities: ['Oslo', 'Grorud', 'Stovner', 'Alna'] },
     { name: 'Viken', cities: ['Drammen', 'Fredrikstad', 'Sarpsborg', 'Lillestrøm'] },
@@ -699,7 +888,9 @@ const Norway: CountryData = {
 };
 
 const Portugal: CountryData = {
-  code: 'PT', name: 'Portugal', subdivisionLabel: 'District',
+  code: 'PT',
+  name: 'Portugal',
+  subdivisionLabel: 'District',
   subdivisions: [
     { name: 'Lisbon', cities: ['Lisbon', 'Amadora', 'Sintra', 'Setúbal', 'Almada'] },
     { name: 'Porto', cities: ['Porto', 'Gaia', 'Matosinhos', 'Braga', 'Guimarães'] },
@@ -713,11 +904,22 @@ const Portugal: CountryData = {
 };
 
 const Spain: CountryData = {
-  code: 'ES', name: 'Spain', subdivisionLabel: 'Region',
+  code: 'ES',
+  name: 'Spain',
+  subdivisionLabel: 'Region',
   subdivisions: [
-    { name: 'Community of Madrid', cities: ['Madrid', 'Móstoles', 'Alcalá de Henares', 'Fuenlabrada', 'Getafe'] },
-    { name: 'Catalonia', cities: ['Barcelona', 'Hospitalet de Llobregat', 'Badalona', 'Sabadell', 'Terrassa'] },
-    { name: 'Andalusia', cities: ['Seville', 'Málaga', 'Córdoba', 'Granada', 'Jerez de la Frontera'] },
+    {
+      name: 'Community of Madrid',
+      cities: ['Madrid', 'Móstoles', 'Alcalá de Henares', 'Fuenlabrada', 'Getafe'],
+    },
+    {
+      name: 'Catalonia',
+      cities: ['Barcelona', 'Hospitalet de Llobregat', 'Badalona', 'Sabadell', 'Terrassa'],
+    },
+    {
+      name: 'Andalusia',
+      cities: ['Seville', 'Málaga', 'Córdoba', 'Granada', 'Jerez de la Frontera'],
+    },
     { name: 'Valencia', cities: ['Valencia', 'Alicante', 'Elche', 'Castellón'] },
     { name: 'Basque Country', cities: ['Bilbao', 'San Sebastián', 'Vitoria-Gasteiz'] },
     { name: 'Galicia', cities: ['Vigo', 'A Coruña', 'Pontevedra', 'Santiago de Compostela'] },
@@ -729,7 +931,9 @@ const Spain: CountryData = {
 };
 
 const Italy: CountryData = {
-  code: 'IT', name: 'Italy', subdivisionLabel: 'Region',
+  code: 'IT',
+  name: 'Italy',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Lombardy', cities: ['Milan', 'Brescia', 'Bergamo', 'Monza', 'Como'] },
     { name: 'Lazio', cities: ['Rome', 'Latina', 'Frosinone', 'Viterbo'] },
@@ -749,17 +953,42 @@ const Italy: CountryData = {
 // NORTH AMERICA
 // ─────────────────────────────────────────────
 const USA: CountryData = {
-  code: 'US', name: 'United States', subdivisionLabel: 'State',
+  code: 'US',
+  name: 'United States',
+  subdivisionLabel: 'State',
   subdivisions: [
     { name: 'Alabama', cities: ['Birmingham', 'Montgomery', 'Huntsville', 'Mobile'] },
     { name: 'Alaska', cities: ['Anchorage', 'Fairbanks', 'Juneau'] },
     { name: 'Arizona', cities: ['Phoenix', 'Tucson', 'Mesa', 'Chandler', 'Scottsdale'] },
     { name: 'Arkansas', cities: ['Little Rock', 'Fort Smith', 'Fayetteville'] },
-    { name: 'California', cities: ['Los Angeles', 'San Francisco', 'San Diego', 'Sacramento', 'San Jose', 'Oakland', 'Fresno', 'Long Beach'] },
+    {
+      name: 'California',
+      cities: [
+        'Los Angeles',
+        'San Francisco',
+        'San Diego',
+        'Sacramento',
+        'San Jose',
+        'Oakland',
+        'Fresno',
+        'Long Beach',
+      ],
+    },
     { name: 'Colorado', cities: ['Denver', 'Colorado Springs', 'Aurora', 'Fort Collins'] },
     { name: 'Connecticut', cities: ['Bridgeport', 'New Haven', 'Hartford', 'Stamford'] },
     { name: 'Delaware', cities: ['Wilmington', 'Dover', 'Newark'] },
-    { name: 'Florida', cities: ['Miami', 'Orlando', 'Tampa', 'Jacksonville', 'Fort Lauderdale', 'Tallahassee', 'St. Petersburg'] },
+    {
+      name: 'Florida',
+      cities: [
+        'Miami',
+        'Orlando',
+        'Tampa',
+        'Jacksonville',
+        'Fort Lauderdale',
+        'Tallahassee',
+        'St. Petersburg',
+      ],
+    },
     { name: 'Georgia', cities: ['Atlanta', 'Augusta', 'Columbus', 'Savannah', 'Athens'] },
     { name: 'Hawaii', cities: ['Honolulu', 'Pearl City', 'Hilo', 'Kailua'] },
     { name: 'Idaho', cities: ['Boise', 'Nampa', 'Meridian'] },
@@ -771,9 +1000,18 @@ const USA: CountryData = {
     { name: 'Louisiana', cities: ['New Orleans', 'Baton Rouge', 'Shreveport', 'Lafayette'] },
     { name: 'Maine', cities: ['Portland', 'Lewiston', 'Bangor'] },
     { name: 'Maryland', cities: ['Baltimore', 'Silver Spring', 'Columbia', 'Rockville'] },
-    { name: 'Massachusetts', cities: ['Boston', 'Worcester', 'Springfield', 'Cambridge', 'Lowell'] },
-    { name: 'Michigan', cities: ['Detroit', 'Grand Rapids', 'Warren', 'Sterling Heights', 'Ann Arbor'] },
-    { name: 'Minnesota', cities: ['Minneapolis', 'Saint Paul', 'Rochester', 'Duluth', 'Bloomington'] },
+    {
+      name: 'Massachusetts',
+      cities: ['Boston', 'Worcester', 'Springfield', 'Cambridge', 'Lowell'],
+    },
+    {
+      name: 'Michigan',
+      cities: ['Detroit', 'Grand Rapids', 'Warren', 'Sterling Heights', 'Ann Arbor'],
+    },
+    {
+      name: 'Minnesota',
+      cities: ['Minneapolis', 'Saint Paul', 'Rochester', 'Duluth', 'Bloomington'],
+    },
     { name: 'Mississippi', cities: ['Jackson', 'Gulfport', 'Southaven', 'Biloxi'] },
     { name: 'Missouri', cities: ['Kansas City', 'Saint Louis', 'Springfield', 'Columbia'] },
     { name: 'Montana', cities: ['Billings', 'Missoula', 'Great Falls'] },
@@ -782,23 +1020,65 @@ const USA: CountryData = {
     { name: 'New Hampshire', cities: ['Manchester', 'Nashua', 'Concord'] },
     { name: 'New Jersey', cities: ['Newark', 'Jersey City', 'Paterson', 'Elizabeth', 'Trenton'] },
     { name: 'New Mexico', cities: ['Albuquerque', 'Las Cruces', 'Rio Rancho', 'Santa Fe'] },
-    { name: 'New York', cities: ['New York City', 'Buffalo', 'Rochester', 'Yonkers', 'Syracuse', 'Albany', 'New Rochelle', 'Mount Vernon'] },
-    { name: 'North Carolina', cities: ['Charlotte', 'Raleigh', 'Greensboro', 'Durham', 'Winston-Salem'] },
+    {
+      name: 'New York',
+      cities: [
+        'New York City',
+        'Buffalo',
+        'Rochester',
+        'Yonkers',
+        'Syracuse',
+        'Albany',
+        'New Rochelle',
+        'Mount Vernon',
+      ],
+    },
+    {
+      name: 'North Carolina',
+      cities: ['Charlotte', 'Raleigh', 'Greensboro', 'Durham', 'Winston-Salem'],
+    },
     { name: 'North Dakota', cities: ['Fargo', 'Bismarck', 'Grand Forks'] },
     { name: 'Ohio', cities: ['Columbus', 'Cleveland', 'Cincinnati', 'Toledo', 'Akron', 'Dayton'] },
     { name: 'Oklahoma', cities: ['Oklahoma City', 'Tulsa', 'Norman', 'Broken Arrow'] },
     { name: 'Oregon', cities: ['Portland', 'Salem', 'Eugene', 'Gresham', 'Hillsboro'] },
-    { name: 'Pennsylvania', cities: ['Philadelphia', 'Pittsburgh', 'Allentown', 'Erie', 'Reading'] },
+    {
+      name: 'Pennsylvania',
+      cities: ['Philadelphia', 'Pittsburgh', 'Allentown', 'Erie', 'Reading'],
+    },
     { name: 'Rhode Island', cities: ['Providence', 'Cranston', 'Warwick', 'Pawtucket'] },
-    { name: 'South Carolina', cities: ['Charleston', 'Columbia', 'North Charleston', 'Mount Pleasant'] },
+    {
+      name: 'South Carolina',
+      cities: ['Charleston', 'Columbia', 'North Charleston', 'Mount Pleasant'],
+    },
     { name: 'South Dakota', cities: ['Sioux Falls', 'Rapid City', 'Aberdeen'] },
-    { name: 'Tennessee', cities: ['Nashville', 'Memphis', 'Knoxville', 'Chattanooga', 'Clarksville'] },
-    { name: 'Texas', cities: ['Houston', 'San Antonio', 'Dallas', 'Austin', 'Fort Worth', 'El Paso', 'Arlington', 'Plano'] },
+    {
+      name: 'Tennessee',
+      cities: ['Nashville', 'Memphis', 'Knoxville', 'Chattanooga', 'Clarksville'],
+    },
+    {
+      name: 'Texas',
+      cities: [
+        'Houston',
+        'San Antonio',
+        'Dallas',
+        'Austin',
+        'Fort Worth',
+        'El Paso',
+        'Arlington',
+        'Plano',
+      ],
+    },
     { name: 'Utah', cities: ['Salt Lake City', 'West Valley City', 'Provo', 'West Jordan'] },
     { name: 'Vermont', cities: ['Burlington', 'South Burlington', 'Rutland'] },
-    { name: 'Virginia', cities: ['Virginia Beach', 'Norfolk', 'Chesapeake', 'Richmond', 'Arlington'] },
+    {
+      name: 'Virginia',
+      cities: ['Virginia Beach', 'Norfolk', 'Chesapeake', 'Richmond', 'Arlington'],
+    },
     { name: 'Washington', cities: ['Seattle', 'Spokane', 'Tacoma', 'Vancouver', 'Bellevue'] },
-    { name: 'Washington D.C.', cities: ['Washington D.C.', 'Capitol Hill', 'Georgetown', 'Anacostia'] },
+    {
+      name: 'Washington D.C.',
+      cities: ['Washington D.C.', 'Capitol Hill', 'Georgetown', 'Anacostia'],
+    },
     { name: 'West Virginia', cities: ['Charleston', 'Huntington', 'Morgantown'] },
     { name: 'Wisconsin', cities: ['Milwaukee', 'Madison', 'Green Bay', 'Kenosha'] },
     { name: 'Wyoming', cities: ['Cheyenne', 'Casper', 'Laramie'] },
@@ -806,17 +1086,37 @@ const USA: CountryData = {
 };
 
 const Canada: CountryData = {
-  code: 'CA', name: 'Canada', subdivisionLabel: 'Province',
+  code: 'CA',
+  name: 'Canada',
+  subdivisionLabel: 'Province',
   subdivisions: [
-    { name: 'Ontario', cities: ['Toronto', 'Ottawa', 'Mississauga', 'Brampton', 'Hamilton', 'London', 'Markham', 'Vaughan'] },
-    { name: 'Quebec', cities: ['Montreal', 'Quebec City', 'Laval', 'Gatineau', 'Sherbrooke', 'Saguenay'] },
-    { name: 'British Columbia', cities: ['Vancouver', 'Surrey', 'Burnaby', 'Richmond', 'Kelowna', 'Victoria'] },
+    {
+      name: 'Ontario',
+      cities: [
+        'Toronto',
+        'Ottawa',
+        'Mississauga',
+        'Brampton',
+        'Hamilton',
+        'London',
+        'Markham',
+        'Vaughan',
+      ],
+    },
+    {
+      name: 'Quebec',
+      cities: ['Montreal', 'Quebec City', 'Laval', 'Gatineau', 'Sherbrooke', 'Saguenay'],
+    },
+    {
+      name: 'British Columbia',
+      cities: ['Vancouver', 'Surrey', 'Burnaby', 'Richmond', 'Kelowna', 'Victoria'],
+    },
     { name: 'Alberta', cities: ['Calgary', 'Edmonton', 'Red Deer', 'Lethbridge', 'St. Albert'] },
     { name: 'Manitoba', cities: ['Winnipeg', 'Brandon', 'Steinbach'] },
     { name: 'Saskatchewan', cities: ['Saskatoon', 'Regina', 'Prince Albert', 'Moose Jaw'] },
     { name: 'Nova Scotia', cities: ['Halifax', 'Sydney', 'Truro', 'New Glasgow'] },
     { name: 'New Brunswick', cities: ['Moncton', 'Saint John', 'Fredericton'] },
-    { name: 'Newfoundland and Labrador', cities: ['St. John\'s', 'Corner Brook', 'Gander'] },
+    { name: 'Newfoundland and Labrador', cities: ["St. John's", 'Corner Brook', 'Gander'] },
     { name: 'Prince Edward Island', cities: ['Charlottetown', 'Summerside'] },
     { name: 'Northwest Territories', cities: ['Yellowknife', 'Hay River', 'Inuvik'] },
     { name: 'Nunavut', cities: ['Iqaluit', 'Rankin Inlet', 'Arviat'] },
@@ -828,7 +1128,9 @@ const Canada: CountryData = {
 // MIDDLE EAST
 // ─────────────────────────────────────────────
 const UAE: CountryData = {
-  code: 'AE', name: 'United Arab Emirates', subdivisionLabel: 'Emirate',
+  code: 'AE',
+  name: 'United Arab Emirates',
+  subdivisionLabel: 'Emirate',
   subdivisions: [
     { name: 'Dubai', cities: ['Dubai', 'Deira', 'Bur Dubai', 'Jumeirah', 'Al Quoz'] },
     { name: 'Abu Dhabi', cities: ['Abu Dhabi', 'Al Ain', 'Khalifa City', 'Mussafah'] },
@@ -841,7 +1143,9 @@ const UAE: CountryData = {
 };
 
 const SaudiArabia: CountryData = {
-  code: 'SA', name: 'Saudi Arabia', subdivisionLabel: 'Region',
+  code: 'SA',
+  name: 'Saudi Arabia',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Riyadh', cities: ['Riyadh', 'Al-Kharj', 'Dawadmi', 'Shaqra'] },
     { name: 'Makkah', cities: ['Jeddah', 'Mecca', 'Taif', 'Qunfudhah'] },
@@ -849,7 +1153,7 @@ const SaudiArabia: CountryData = {
     { name: 'Eastern Province', cities: ['Dammam', 'Dhahran', 'Khobar', 'Al Hofuf', 'Qatif'] },
     { name: 'Asir', cities: ['Abha', 'Khamis Mushait', 'Najran', 'Bisha'] },
     { name: 'Tabuk', cities: ['Tabuk', 'Umluj', 'Al-Wajh'] },
-    { name: 'Ha\'il', cities: ['Ha\'il', 'Baqaa', 'Al Shinan'] },
+    { name: "Ha'il", cities: ["Ha'il", 'Baqaa', 'Al Shinan'] },
     { name: 'Al Jawf', cities: ['Sakaka', 'Domat Al Jandal', 'Al Qurayyat'] },
     { name: 'Jizan', cities: ['Jizan', 'Sabya', 'Abu Arish'] },
     { name: 'Najran', cities: ['Najran', 'Sharurah', 'Hubuna'] },
@@ -860,7 +1164,9 @@ const SaudiArabia: CountryData = {
 };
 
 const Qatar: CountryData = {
-  code: 'QA', name: 'Qatar', subdivisionLabel: 'District',
+  code: 'QA',
+  name: 'Qatar',
+  subdivisionLabel: 'District',
   subdivisions: [
     { name: 'Doha', cities: ['Doha', 'Al Waab', 'Al Hilal', 'Al Rayyan'] },
     { name: 'Al Daayen', cities: ['Lusail', 'Al Khor'] },
@@ -874,11 +1180,19 @@ const Qatar: CountryData = {
 // OCEANIA
 // ─────────────────────────────────────────────
 const Australia: CountryData = {
-  code: 'AU', name: 'Australia', subdivisionLabel: 'State',
+  code: 'AU',
+  name: 'Australia',
+  subdivisionLabel: 'State',
   subdivisions: [
-    { name: 'New South Wales', cities: ['Sydney', 'Newcastle', 'Wollongong', 'Parramatta', 'Blacktown'] },
+    {
+      name: 'New South Wales',
+      cities: ['Sydney', 'Newcastle', 'Wollongong', 'Parramatta', 'Blacktown'],
+    },
     { name: 'Victoria', cities: ['Melbourne', 'Geelong', 'Ballarat', 'Bendigo', 'Frankston'] },
-    { name: 'Queensland', cities: ['Brisbane', 'Gold Coast', 'Sunshine Coast', 'Townsville', 'Cairns'] },
+    {
+      name: 'Queensland',
+      cities: ['Brisbane', 'Gold Coast', 'Sunshine Coast', 'Townsville', 'Cairns'],
+    },
     { name: 'Western Australia', cities: ['Perth', 'Mandurah', 'Bunbury', 'Rockingham'] },
     { name: 'South Australia', cities: ['Adelaide', 'Mount Gambier', 'Gawler', 'Whyalla'] },
     { name: 'Tasmania', cities: ['Hobart', 'Launceston', 'Devonport', 'Burnie'] },
@@ -888,7 +1202,9 @@ const Australia: CountryData = {
 };
 
 const NewZealand: CountryData = {
-  code: 'NZ', name: 'New Zealand', subdivisionLabel: 'Region',
+  code: 'NZ',
+  name: 'New Zealand',
+  subdivisionLabel: 'Region',
   subdivisions: [
     { name: 'Auckland', cities: ['Auckland', 'Manukau', 'Waitakere', 'North Shore'] },
     { name: 'Wellington', cities: ['Wellington', 'Lower Hutt', 'Upper Hutt', 'Porirua'] },
@@ -904,8 +1220,11 @@ const NewZealand: CountryData = {
 // ─────────────────────────────────────────────
 // Minimal-data countries (country name only, no subdivisions = text input)
 // ─────────────────────────────────────────────
-const simple = (code: string, name: string, subdivisionLabel: SubdivisionLabel = 'Region'): CountryData =>
-  ({ code, name, subdivisionLabel, subdivisions: [] });
+const simple = (
+  code: string,
+  name: string,
+  subdivisionLabel: SubdivisionLabel = 'Region',
+): CountryData => ({ code, name, subdivisionLabel, subdivisions: [] });
 
 // ─────────────────────────────────────────────
 // COUNTRY GROUPS
@@ -915,7 +1234,17 @@ export const COUNTRY_GROUPS: CountryGroup[] = [
     id: 'east_africa',
     label: 'East Africa',
     emoji: '🌍',
-    countries: [Ethiopia, Kenya, Tanzania, Uganda, Rwanda, Burundi, Somalia, Eritrea, Djibouti, Madagascar,
+    countries: [
+      Ethiopia,
+      Kenya,
+      Tanzania,
+      Uganda,
+      Rwanda,
+      Burundi,
+      Somalia,
+      Eritrea,
+      Djibouti,
+      Madagascar,
       simple('SS', 'South Sudan', 'State'),
       simple('KM', 'Comoros', 'Island'),
       simple('SC', 'Seychelles', 'District'),
@@ -926,7 +1255,17 @@ export const COUNTRY_GROUPS: CountryGroup[] = [
     id: 'west_africa',
     label: 'West Africa',
     emoji: '🌍',
-    countries: [Nigeria, Ghana, Senegal, CoteDIvoire, SierraLeone, Liberia, GuineaConakry, Cameroon, Mali, BurkinaFaso,
+    countries: [
+      Nigeria,
+      Ghana,
+      Senegal,
+      CoteDIvoire,
+      SierraLeone,
+      Liberia,
+      GuineaConakry,
+      Cameroon,
+      Mali,
+      BurkinaFaso,
       simple('GW', 'Guinea-Bissau', 'Region'),
       simple('GM', 'Gambia', 'Division'),
       simple('CV', 'Cape Verde', 'Island'),
@@ -941,7 +1280,8 @@ export const COUNTRY_GROUPS: CountryGroup[] = [
     id: 'central_africa',
     label: 'Central Africa',
     emoji: '🌍',
-    countries: [DRCongo,
+    countries: [
+      DRCongo,
       simple('CG', 'Congo', 'Department'),
       simple('CF', 'Central African Republic', 'Prefecture'),
       simple('TD', 'Chad', 'Region'),
@@ -953,7 +1293,11 @@ export const COUNTRY_GROUPS: CountryGroup[] = [
     id: 'north_africa',
     label: 'North Africa',
     emoji: '🌍',
-    countries: [Egypt, Morocco, Algeria, Tunisia,
+    countries: [
+      Egypt,
+      Morocco,
+      Algeria,
+      Tunisia,
       simple('LY', 'Libya', 'District'),
       simple('SD', 'Sudan', 'State'),
     ],
@@ -962,7 +1306,12 @@ export const COUNTRY_GROUPS: CountryGroup[] = [
     id: 'south_africa_region',
     label: 'Southern Africa',
     emoji: '🌍',
-    countries: [SouthAfrica, Zimbabwe, Zambia, Mozambique, Angola,
+    countries: [
+      SouthAfrica,
+      Zimbabwe,
+      Zambia,
+      Mozambique,
+      Angola,
       simple('BW', 'Botswana', 'District'),
       simple('NA', 'Namibia', 'Region'),
       simple('MW', 'Malawi', 'Region'),
@@ -974,7 +1323,17 @@ export const COUNTRY_GROUPS: CountryGroup[] = [
     id: 'europe',
     label: 'Europe',
     emoji: '🇪🇺',
-    countries: [UK, France, Germany, Netherlands, Belgium, Sweden, Norway, Portugal, Spain, Italy,
+    countries: [
+      UK,
+      France,
+      Germany,
+      Netherlands,
+      Belgium,
+      Sweden,
+      Norway,
+      Portugal,
+      Spain,
+      Italy,
       simple('CH', 'Switzerland', 'Canton'),
       simple('AT', 'Austria', 'State'),
       simple('IE', 'Ireland', 'Province'),
@@ -986,15 +1345,16 @@ export const COUNTRY_GROUPS: CountryGroup[] = [
     id: 'north_america',
     label: 'North America',
     emoji: '🌎',
-    countries: [USA, Canada,
-      simple('MX', 'Mexico', 'State'),
-    ],
+    countries: [USA, Canada, simple('MX', 'Mexico', 'State')],
   },
   {
     id: 'middle_east',
     label: 'Middle East',
     emoji: '🌏',
-    countries: [UAE, SaudiArabia, Qatar,
+    countries: [
+      UAE,
+      SaudiArabia,
+      Qatar,
       simple('KW', 'Kuwait', 'Governorate'),
       simple('BH', 'Bahrain', 'Governorate'),
       simple('OM', 'Oman', 'Governorate'),
@@ -1011,11 +1371,15 @@ export const COUNTRY_GROUPS: CountryGroup[] = [
 // Flat list of all countries (useful for search)
 export const ALL_COUNTRIES: CountryData[] = COUNTRY_GROUPS.flatMap((g) => g.countries);
 export const AFRICAN_COUNTRY_CODES = new Set(
-  COUNTRY_GROUPS
-    .filter((group) =>
-      ['east_africa', 'west_africa', 'central_africa', 'north_africa', 'south_africa_region'].includes(group.id)
-    )
-    .flatMap((group) => group.countries.map((country) => country.code))
+  COUNTRY_GROUPS.filter((group) =>
+    [
+      'east_africa',
+      'west_africa',
+      'central_africa',
+      'north_africa',
+      'south_africa_region',
+    ].includes(group.id),
+  ).flatMap((group) => group.countries.map((country) => country.code)),
 );
 
 // Look up a country by code
@@ -1026,7 +1390,9 @@ export const getCountryByName = (name: string) => ALL_COUNTRIES.find((c) => c.na
  * Resolve a profile `country` / `origin_country` value whether the row stores
  * the canonical English display name, a different casing, or a 2-letter ISO code.
  */
-export function resolveCountryFromStored(stored: string | null | undefined): CountryData | undefined {
+export function resolveCountryFromStored(
+  stored: string | null | undefined,
+): CountryData | undefined {
   const t = stored?.trim();
   if (!t) return undefined;
   const exact = ALL_COUNTRIES.find((c) => c.name === t);

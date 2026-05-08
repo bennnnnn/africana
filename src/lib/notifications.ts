@@ -25,27 +25,34 @@ import { supabase } from './supabase';
 // to avoid console.error spam.
 const isExpoGo = Constants.appOwnership === 'expo';
 
-let Notifications: typeof import('expo-notifications') | null = null;
-if (!isExpoGo) {
-  try {
-    const loadedNotifications = require('expo-notifications') as typeof import('expo-notifications');
-    Notifications = loadedNotifications;
+type NotificationsModule = typeof import('expo-notifications');
 
-    // Foreground notification display: when a push arrives while the app is
-    // open we still want a banner + sound + badge update. Without this the OS
-    // suppresses the notification UI entirely (the user just sees nothing).
-    loadedNotifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-      }),
-    });
-  } catch {
-    // Unsupported environment — continue silently
+let notificationsModule: NotificationsModule | null = null;
+let notificationsLoad: Promise<NotificationsModule | null> | null = null;
+
+async function loadNotificationsModule(): Promise<NotificationsModule | null> {
+  if (isExpoGo) return null;
+  if (notificationsModule) return notificationsModule;
+  if (!notificationsLoad) {
+    notificationsLoad = import('expo-notifications')
+      .then((mod) => {
+        notificationsModule = mod;
+        mod.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldShowBanner: true,
+            shouldShowList: true,
+            shouldPlaySound: true,
+            shouldSetBadge: true,
+          }),
+        });
+        return mod;
+      })
+      .catch(() => null);
   }
+  const mod = await notificationsLoad;
+  notificationsModule = mod;
+  return mod;
 }
 
 // ── Android notification channels ────────────────────────────────────────────
@@ -54,48 +61,49 @@ if (!isExpoGo) {
 // delivered, otherwise Android falls back to the default channel — which on
 // some OEMs is muted by default. That's the second-most-common reason "no
 // sound on Android" reports happen, after missing FCM credentials.
-async function setupAndroidChannels() {
-  if (!Notifications) return;
+async function setupAndroidChannels(n: NotificationsModule) {
   try {
-    await Notifications.setNotificationChannelAsync('message', {
+    await n.setNotificationChannelAsync('message', {
       name: 'New Messages',
-      importance: Notifications.AndroidImportance.HIGH,
+      importance: n.AndroidImportance.HIGH,
       sound: 'default',
       vibrationPattern: [0, 200, 100, 200],
       enableVibrate: true,
       lightColor: '#0E9F6E',
     });
-    await Notifications.setNotificationChannelAsync('like', {
+    await n.setNotificationChannelAsync('like', {
       name: 'Likes',
-      importance: Notifications.AndroidImportance.DEFAULT,
+      importance: n.AndroidImportance.DEFAULT,
       sound: 'default',
       vibrationPattern: [0, 100],
       enableVibrate: true,
       lightColor: '#FF6B6B',
     });
-    await Notifications.setNotificationChannelAsync('match', {
+    await n.setNotificationChannelAsync('match', {
       name: 'Matches 🔥',
-      importance: Notifications.AndroidImportance.HIGH,
+      importance: n.AndroidImportance.HIGH,
       sound: 'default',
       vibrationPattern: [0, 300, 150, 300, 150, 300],
       enableVibrate: true,
       lightColor: '#0E9F6E',
     });
-    await Notifications.setNotificationChannelAsync('view', {
+    await n.setNotificationChannelAsync('view', {
       name: 'Profile Views',
-      importance: Notifications.AndroidImportance.LOW,
+      importance: n.AndroidImportance.LOW,
       vibrationPattern: [],
       lightColor: '#0E9F6E',
     });
-    await Notifications.setNotificationChannelAsync('favourite', {
+    await n.setNotificationChannelAsync('favourite', {
       name: 'Stars',
-      importance: Notifications.AndroidImportance.DEFAULT,
+      importance: n.AndroidImportance.DEFAULT,
       sound: 'default',
       vibrationPattern: [0, 120],
       enableVibrate: true,
       lightColor: '#F6C458',
     });
-  } catch {}
+  } catch (e) {
+    console.warn('[notifications] Android channel setup failed', e);
+  }
 }
 
 /**
@@ -105,11 +113,24 @@ async function setupAndroidChannels() {
  * how we avoid silent "zero push tokens saved" production regressions.
  */
 export type PushRegistrationResult =
-  | { ok: true;  token: string }
-  | { ok: false; reason: 'expo_go' | 'permission_denied' | 'no_project_id' | 'token_failed' | 'upsert_failed' | 'unsupported'; detail?: string };
+  | { ok: true; token: string }
+  | {
+      ok: false;
+      reason:
+        | 'expo_go'
+        | 'permission_denied'
+        | 'no_project_id'
+        | 'token_failed'
+        | 'upsert_failed'
+        | 'unsupported';
+      detail?: string;
+    };
 
 // ── Register device + save push token ────────────────────────────────────────
-export async function registerForPushNotifications(userId: string): Promise<PushRegistrationResult> {
+export async function registerForPushNotifications(
+  userId: string,
+): Promise<PushRegistrationResult> {
+  const Notifications = await loadNotificationsModule();
   if (!Notifications) {
     // Either Expo Go or environment without expo-notifications.
     return { ok: false, reason: isExpoGo ? 'expo_go' : 'unsupported' };
@@ -125,19 +146,25 @@ export async function registerForPushNotifications(userId: string): Promise<Push
       return { ok: false, reason: 'permission_denied' };
     }
 
-    if (Platform.OS === 'android') await setupAndroidChannels();
+    if (Platform.OS === 'android') await setupAndroidChannels(Notifications);
 
     const projectId =
-      (Constants as unknown as {
-        expoConfig?: { extra?: { eas?: { projectId?: string } } };
-        easConfig?: { projectId?: string };
-      }).expoConfig?.extra?.eas?.projectId ??
+      (
+        Constants as unknown as {
+          expoConfig?: { extra?: { eas?: { projectId?: string } } };
+          easConfig?: { projectId?: string };
+        }
+      ).expoConfig?.extra?.eas?.projectId ??
       (Constants as unknown as { easConfig?: { projectId?: string } }).easConfig?.projectId;
 
     if (!projectId) {
       // Without an EAS projectId, getExpoPushTokenAsync silently returns the
       // wrong token (or throws on newer SDKs). Surface this loudly.
-      return { ok: false, reason: 'no_project_id', detail: 'expo.extra.eas.projectId is missing in app.json' };
+      return {
+        ok: false,
+        reason: 'no_project_id',
+        detail: 'expo.extra.eas.projectId is missing in app.json',
+      };
     }
 
     let token: string;
@@ -149,7 +176,11 @@ export async function registerForPushNotifications(userId: string): Promise<Push
       // uploaded to the Expo project (https://docs.expo.dev/push-notifications/fcm-credentials/).
       // Most common cause on iOS: APNs key not configured during `eas build`.
       // The original error message is verbose but helpful — surface it.
-      return { ok: false, reason: 'token_failed', detail: err instanceof Error ? err.message : String(err) };
+      return {
+        ok: false,
+        reason: 'token_failed',
+        detail: err instanceof Error ? err.message : String(err),
+      };
     }
 
     const { error: upsertError } = await supabase
@@ -183,13 +214,22 @@ export async function sendLocalNotification(
   channelId: 'message' | 'like' | 'match' | 'view' | 'favourite' = 'match',
   data?: Record<string, string>,
 ): Promise<void> {
+  const Notifications = await loadNotificationsModule();
   if (!Notifications) return;
   try {
     await Notifications.scheduleNotificationAsync({
-      content: { title, body, sound: 'default', data, ...(Platform.OS === 'android' ? { channelId } : {}) },
+      content: {
+        title,
+        body,
+        sound: 'default',
+        data,
+        ...(Platform.OS === 'android' ? { channelId } : {}),
+      },
       trigger: null,
     });
-  } catch {}
+  } catch (e) {
+    console.warn('[notifications] sendLocalNotification failed', e);
+  }
 }
 
 // ── Call Edge Function to push-notify another user ───────────────────────────

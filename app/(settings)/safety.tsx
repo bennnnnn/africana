@@ -23,14 +23,10 @@ export default function SafetyScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
       <SettingsHeaderBar title="Stay safe" titleAlign="leading" />
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
-          Dating online opens up wonderful connections — and, occasionally, bad
-          actors. A few simple habits keep you in charge. If anything feels off,
-          trust your gut and pull back.
+          Dating online opens up wonderful connections — and, occasionally, bad actors. A few simple
+          habits keep you in charge. If anything feels off, trust your gut and pull back.
         </Text>
 
         <SectionHeader>Before you meet</SectionHeader>

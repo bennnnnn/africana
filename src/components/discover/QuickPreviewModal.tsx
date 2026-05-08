@@ -1,13 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  StyleSheet,
-  useWindowDimensions,
-} from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,24 +22,32 @@ import haptics from '@/lib/haptics';
 // ─── Floating action circle — identical to profile screen ────────────────────
 const FLOAT_SIZE = 56;
 const floatCircle = {
-  width:           FLOAT_SIZE,
-  height:          FLOAT_SIZE,
-  borderRadius:    FLOAT_SIZE / 2,
+  width: FLOAT_SIZE,
+  height: FLOAT_SIZE,
+  borderRadius: FLOAT_SIZE / 2,
   backgroundColor: COLORS.white,
-  alignItems:      'center' as const,
-  justifyContent:  'center' as const,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
   ...SHADOWS.lg,
 };
 
 // ─── Card content ────────────────────────────────────────────────────────────
-function CardContent({ user, cardWidth, cardHeight }: { user: User; cardWidth: number; cardHeight: number }) {
+function CardContent({
+  user,
+  cardWidth,
+  cardHeight,
+}: {
+  user: User;
+  cardWidth: number;
+  cardHeight: number;
+}) {
   const photos = useMemo(() => {
     const p = user.profile_photos ?? [];
     return p.length > 0 ? p : user.avatar_url ? [user.avatar_url] : [];
   }, [user]);
   const rawHero = photos[0] ?? null;
   const optimizedHero = useMemo(
-    () => (rawHero ? profileImageUrlForList(rawHero) ?? rawHero : null),
+    () => (rawHero ? (profileImageUrlForList(rawHero) ?? rawHero) : null),
     [rawHero],
   );
   const [heroUri, setHeroUri] = useState<string | null>(optimizedHero);
@@ -73,7 +74,15 @@ function CardContent({ user, cardWidth, cardHeight }: { user: User; cardWidth: n
       : (formatLastSeen(user.last_seen) ?? 'Offline');
 
   return (
-    <View style={{ width: cardWidth, height: cardHeight, borderRadius: RADIUS.xxl, overflow: 'hidden', backgroundColor: COLORS.savanna }}>
+    <View
+      style={{
+        width: cardWidth,
+        height: cardHeight,
+        borderRadius: RADIUS.xxl,
+        overflow: 'hidden',
+        backgroundColor: COLORS.savanna,
+      }}
+    >
       {heroUri ? (
         <Image
           source={{ uri: heroUri }}
@@ -105,14 +114,16 @@ function CardContent({ user, cardWidth, cardHeight }: { user: User; cardWidth: n
       >
         <View style={cc.nameRow}>
           <Text style={cc.name} numberOfLines={1}>
-            {user.full_name}{user.age ? `, ${user.age}` : ''}
+            {user.full_name}
+            {user.age ? `, ${user.age}` : ''}
           </Text>
           {user.verified && <VerifiedBadge size={15} />}
         </View>
         <View style={cc.metaRow}>
           <View style={[cc.onlineDot, isOnline && cc.onlineDotActive]} />
           <Text style={[cc.metaText, isOnline && cc.metaTextOnline]} numberOfLines={1}>
-            {activityLabel}{!!location ? `  ·  ${location}` : ''}
+            {activityLabel}
+            {location ? `  ·  ${location}` : ''}
           </Text>
         </View>
       </LinearGradient>
@@ -209,7 +220,7 @@ export function QuickPreviewModal({ visible, users, startIndex, onClose }: Quick
   );
   const { showToast } = useDialog();
 
-  const CARD_WIDTH  = winWidth - 32;
+  const CARD_WIDTH = winWidth - 32;
   const CARD_HEIGHT = Math.round(winHeight * 0.62);
 
   const [currentIndex, setCurrentIndex] = useState(startIndex);
@@ -218,16 +229,19 @@ export function QuickPreviewModal({ visible, users, startIndex, onClose }: Quick
     if (visible) setCurrentIndex(startIndex);
   }, [visible, startIndex]);
 
-  const user     = users[currentIndex] ?? null;
+  const user = users[currentIndex] ?? null;
   const nextUser = users[currentIndex + 1] ?? null;
 
-  const isLiked      = user ? likedUserIds.has(user.id) : false;
+  const isLiked = user ? likedUserIds.has(user.id) : false;
   const isOwnProfile = user?.id === currentUser?.id;
 
   const advance = useCallback(() => {
     setCurrentIndex((prev) => {
       const next = prev + 1;
-      if (next >= users.length) { onClose(); return prev; }
+      if (next >= users.length) {
+        onClose();
+        return prev;
+      }
       return next;
     });
   }, [users.length, onClose]);
@@ -260,9 +274,16 @@ export function QuickPreviewModal({ visible, users, startIndex, onClose }: Quick
   if (!visible || !user) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={[s.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}>
-
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View
+        style={[s.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}
+      >
         {/* ── Header ── */}
         <View style={s.header}>
           <TouchableOpacity onPress={onClose} style={s.headerBtn} hitSlop={10}>

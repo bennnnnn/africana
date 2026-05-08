@@ -37,26 +37,26 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardProvider>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          <DialogProvider>
-            <StatusBar style="auto" />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen
-                name="(profile)"
-                options={{
-                  contentStyle: { backgroundColor: 'transparent' },
-                }}
-              />
-              <Stack.Screen name="(chat)" />
-              <Stack.Screen name="(settings)" />
-            </Stack>
-          </DialogProvider>
-        </ThemeProvider>
-      </SafeAreaProvider>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <DialogProvider>
+              <StatusBar style="auto" />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen
+                  name="(profile)"
+                  options={{
+                    contentStyle: { backgroundColor: 'transparent' },
+                  }}
+                />
+                <Stack.Screen name="(chat)" />
+                <Stack.Screen name="(settings)" />
+              </Stack>
+            </DialogProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
       </KeyboardProvider>
     </GestureHandlerRootView>
   );

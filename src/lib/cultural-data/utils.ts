@@ -51,7 +51,7 @@ function lookupStringListMap(
 
 function ethnicityLanguageList(
   country: CountryCultureData | null | undefined,
-  ethnicity: string | null | undefined
+  ethnicity: string | null | undefined,
 ): string[] {
   if (!country?.ethnicityLanguages || !ethnicity?.trim()) return [];
   const m = country.ethnicityLanguages;
@@ -61,7 +61,7 @@ function ethnicityLanguageList(
 export function buildEthnicityOptions(
   country: CountryCultureData | null,
   subdivision?: string | null,
-  city?: string | null
+  city?: string | null,
 ) {
   if (!country) return null;
 
@@ -82,7 +82,7 @@ export function buildLanguageOptions(
   fallbackLanguages: readonly string[] = [],
   ethnicity?: string | null,
   subdivision?: string | null,
-  city?: string | null
+  city?: string | null,
 ) {
   if (!country && fallbackLanguages.length === 0) return null;
 

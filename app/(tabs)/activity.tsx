@@ -47,17 +47,22 @@ interface ActivityItem {
   navTarget: string;
 }
 
-const TYPE_CONFIG: Record<ActivityType, { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }> = {
-  like:    { icon: 'heart',      color: '#EF4444',      label: 'liked your profile' },
-  match:   { icon: 'flame',      color: COLORS.primary, label: 'matched with you 🔥' },
-  view:    { icon: 'eye',        color: COLORS.earth,   label: 'viewed your profile' },
-  message: { icon: 'chatbubble', color: '#3B82F6',      label: 'sent you a message' },
+const TYPE_CONFIG: Record<
+  ActivityType,
+  { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }
+> = {
+  like: { icon: 'heart', color: '#EF4444', label: 'liked your profile' },
+  match: { icon: 'flame', color: COLORS.primary, label: 'matched with you 🔥' },
+  view: { icon: 'eye', color: COLORS.earth, label: 'viewed your profile' },
+  message: { icon: 'chatbubble', color: '#3B82F6', label: 'sent you a message' },
 };
 
 function avatarFor(p: any): string {
-  return p?.avatar_url
-    || p?.profile_photos?.[0]
-    || `${DEFAULT_AVATAR}${encodeURIComponent((p?.full_name ?? '?').charAt(0))}`;
+  return (
+    p?.avatar_url ||
+    p?.profile_photos?.[0] ||
+    `${DEFAULT_AVATAR}${encodeURIComponent((p?.full_name ?? '?').charAt(0))}`
+  );
 }
 
 const ROW_HEIGHT = 88; // 52 avatar + 14*2 padding + 8 marginBottom
@@ -87,10 +92,14 @@ const ActivityRow = memo(function ActivityRow({
       </View>
 
       <View style={{ flex: 1, marginLeft: 14 }}>
-        <Text style={s.name} numberOfLines={1}>{item.name}</Text>
+        <Text style={s.name} numberOfLines={1}>
+          {item.name}
+        </Text>
         <Text style={[s.action, { color: cfg.color }]}>{cfg.label}</Text>
         {item.preview ? (
-          <Text style={s.preview} numberOfLines={1}>{item.preview}</Text>
+          <Text style={s.preview} numberOfLines={1}>
+            {item.preview}
+          </Text>
         ) : null}
       </View>
 
@@ -152,7 +161,9 @@ export default function ActivityScreen() {
 
       setItems(results);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not load activity. Pull down to retry.');
+      setLoadError(
+        err instanceof Error ? err.message : 'Could not load activity. Pull down to retry.',
+      );
     }
   }, [user]);
 
@@ -171,14 +182,26 @@ export default function ActivityScreen() {
 
     const channel = supabase
       .channel(`activity-realtime-${user.id}`)
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'likes',
-        filter: `to_user_id=eq.${user.id}`,
-      }, scheduleReload)
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'profile_views',
-        filter: `viewed_id=eq.${user.id}`,
-      }, scheduleReload)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'likes',
+          filter: `to_user_id=eq.${user.id}`,
+        },
+        scheduleReload,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'profile_views',
+          filter: `viewed_id=eq.${user.id}`,
+        },
+        scheduleReload,
+      )
       .subscribe();
 
     return () => {
@@ -205,19 +228,22 @@ export default function ActivityScreen() {
     return out;
   }, [items]);
 
-  const handlePress = useCallback((item: ActivityItem) => {
-    if (item.navTarget.startsWith('/(profile)/')) {
-      useProfileBrowseStore.getState().setOrderedUserIds(activityProfileBrowseIds);
+  const handlePress = useCallback(
+    (item: ActivityItem) => {
+      if (item.navTarget.startsWith('/(profile)/')) {
+        useProfileBrowseStore.getState().setOrderedUserIds(activityProfileBrowseIds);
+        router.push(item.navTarget as any);
+        return;
+      }
+      if (item.type === 'message' && item.navTarget.startsWith('/(chat)/')) {
+        const chatId = item.navTarget.slice('/(chat)/'.length);
+        router.push({ pathname: '/(chat)/[id]', params: { id: chatId, otherUserId: item.userId } });
+        return;
+      }
       router.push(item.navTarget as any);
-      return;
-    }
-    if (item.type === 'message' && item.navTarget.startsWith('/(chat)/')) {
-      const chatId = item.navTarget.slice('/(chat)/'.length);
-      router.push({ pathname: '/(chat)/[id]', params: { id: chatId, otherUserId: item.userId } });
-      return;
-    }
-    router.push(item.navTarget as any);
-  }, [activityProfileBrowseIds]);
+    },
+    [activityProfileBrowseIds],
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: ActivityItem }) => <ActivityRow item={item} onPress={handlePress} />,
@@ -246,7 +272,19 @@ export default function ActivityScreen() {
         </Text>
       </View>
       {loadError ? (
-        <View style={{ margin: 12, padding: 14, backgroundColor: '#FEF2F2', borderRadius: 12, borderWidth: 1, borderColor: '#FECACA', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View
+          style={{
+            margin: 12,
+            padding: 14,
+            backgroundColor: '#FEF2F2',
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: '#FECACA',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
           <Ionicons name="alert-circle-outline" size={18} color="#991B1B" />
           <Text style={{ flex: 1, fontSize: 13, color: '#991B1B' }}>{loadError}</Text>
         </View>
@@ -264,13 +302,24 @@ export default function ActivityScreen() {
         contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+          />
         }
         ListEmptyComponent={
           <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
             <Ionicons name="notifications-outline" size={52} color={COLORS.border} />
             <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>Nothing yet</Text>
-            <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20 }}>
+            <Text
+              style={{
+                fontSize: 14,
+                color: COLORS.textSecondary,
+                textAlign: 'center',
+                lineHeight: 20,
+              }}
+            >
               When someone likes or views your profile,{'\n'}it will appear here.
             </Text>
           </View>
@@ -289,7 +338,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  title:    { fontSize: 24, fontWeight: '800', color: COLORS.text },
+  title: { fontSize: 24, fontWeight: '800', color: COLORS.text },
   subtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   card: {
     flexDirection: 'row',
@@ -317,8 +366,8 @@ const s = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FFF',
   },
-  name:    { fontSize: 15, fontWeight: '700', color: COLORS.text },
-  action:  { fontSize: 13, fontWeight: '500', marginTop: 2 },
+  name: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  action: { fontSize: 13, fontWeight: '500', marginTop: 2 },
   preview: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  time:    { fontSize: 11, color: COLORS.textMuted },
+  time: { fontSize: 11, color: COLORS.textMuted },
 });

@@ -23,10 +23,7 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
   const toCenter = (v: number) => minCenter + ((v - min) / valueSpan) * usableWidth;
   const toVal = (center: number) =>
     Math.round(
-      Math.max(
-        min,
-        Math.min(max, min + ((center - minCenter) / usableWidth) * valueSpan)
-      )
+      Math.max(min, Math.min(max, min + ((center - minCenter) / usableWidth) * valueSpan)),
     );
 
   // Keep a ref that always holds the latest computed values so PanResponder
@@ -57,7 +54,10 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
       },
       onPanResponderMove: (_, gs) => {
         const { minCenter: mc, minGapPos: mgp, toVal: tv, onChange: oc } = cv.current;
-        const newLow = Math.max(mc, Math.min(startRef.current.low + gs.dx, posRef.current.high - mgp));
+        const newLow = Math.max(
+          mc,
+          Math.min(startRef.current.low + gs.dx, posRef.current.high - mgp),
+        );
         posRef.current.low = newLow;
         setPositions({ low: newLow, high: posRef.current.high });
         oc(tv(newLow), tv(posRef.current.high));
@@ -68,7 +68,7 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
       onPanResponderTerminate: () => {
         draggingRef.current = null;
       },
-    })
+    }),
   ).current;
 
   const highPan = useRef(
@@ -81,7 +81,10 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
       },
       onPanResponderMove: (_, gs) => {
         const { maxCenter: xc, minGapPos: mgp, toVal: tv, onChange: oc } = cv.current;
-        const newHigh = Math.max(posRef.current.low + mgp, Math.min(startRef.current.high + gs.dx, xc));
+        const newHigh = Math.max(
+          posRef.current.low + mgp,
+          Math.min(startRef.current.high + gs.dx, xc),
+        );
         posRef.current.high = newHigh;
         setPositions({ low: posRef.current.low, high: newHigh });
         oc(tv(posRef.current.low), tv(newHigh));
@@ -92,7 +95,7 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
       onPanResponderTerminate: () => {
         draggingRef.current = null;
       },
-    })
+    }),
   ).current;
 
   const lowVal = toVal(positions.low);

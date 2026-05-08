@@ -4,13 +4,29 @@ export type LookingFor = 'relationship' | 'friendship' | 'marriage' | 'pen_pal';
 export type OnlineStatus = 'online' | 'offline';
 export type MaritalStatus = 'single' | 'divorced' | 'widowed' | 'separated';
 export type Religion =
-  | 'christianity' | 'islam' | 'catholicism' | 'protestantism' | 'pentecostal'
-  | 'orthodox_christian' | 'traditional_african' | 'judaism' | 'buddhism'
-  | 'hinduism' | 'atheist' | 'agnostic' | 'spiritual' | 'other';
+  | 'christianity'
+  | 'islam'
+  | 'catholicism'
+  | 'protestantism'
+  | 'pentecostal'
+  | 'orthodox_christian'
+  | 'traditional_african'
+  | 'judaism'
+  | 'buddhism'
+  | 'hinduism'
+  | 'atheist'
+  | 'agnostic'
+  | 'spiritual'
+  | 'other';
 export type Education =
-  | 'high_school' | 'some_college' | 'vocational' | 'bachelors'
-  | 'masters' | 'phd' | 'other';
-export type WantChildren = 'yes' | 'no' ;
+  | 'high_school'
+  | 'some_college'
+  | 'vocational'
+  | 'bachelors'
+  | 'masters'
+  | 'phd'
+  | 'other';
+export type WantChildren = 'yes' | 'no';
 export type VerificationStatus = 'pending' | 'approved' | 'rejected';
 export type PhysicalCondition =
   | 'slim'
@@ -47,13 +63,13 @@ export interface User extends OriginLocationFields {
   religion: Religion | null;
   education: Education | null;
   marital_status: MaritalStatus | null;
-  height_cm: number | null;          // e.g. 175
+  height_cm: number | null; // e.g. 175
   weight_kg?: number | null;
   body_type?: PhysicalCondition | null;
-  ethnicity: string | null;          // free text
-  occupation: string | null;         // free text
-  languages: string[];               // e.g. ['English','Amharic']
-  hobbies?: string[];                // e.g. ['Music','Travel']
+  ethnicity: string | null; // free text
+  occupation: string | null; // free text
+  languages: string[]; // e.g. ['English','Amharic']
+  hobbies?: string[]; // e.g. ['Music','Travel']
   has_children: boolean | null;
   want_children: WantChildren | null;
   verified?: boolean;

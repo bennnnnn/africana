@@ -46,13 +46,21 @@ export function ChatPeerOverflowMenu({
       >
         <TouchableOpacity style={s.menuItem} onPress={onLike}>
           <View style={s.menuIcon}>
-            <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={17} color={COLORS.textStrong} />
+            <Ionicons
+              name={isLiked ? 'heart' : 'heart-outline'}
+              size={17}
+              color={COLORS.textStrong}
+            />
           </View>
           <Text style={s.menuLabel}>{isLiked ? 'Unlike' : 'Like'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.menuItem} onPress={onFavourite}>
           <View style={s.menuIcon}>
-            <Ionicons name={isFavourite ? 'star' : 'star-outline'} size={17} color={COLORS.textStrong} />
+            <Ionicons
+              name={isFavourite ? 'star' : 'star-outline'}
+              size={17}
+              color={COLORS.textStrong}
+            />
           </View>
           <Text style={s.menuLabel}>{isFavourite ? 'Unfavourite' : 'Favourite'}</Text>
         </TouchableOpacity>

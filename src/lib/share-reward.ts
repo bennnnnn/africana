@@ -16,7 +16,9 @@ export const SHARE_REWARD_TOAST =
 
 export async function growthShareRewardsCurrentlyApplies(): Promise<boolean> {
   if (!GROWTH_SHARE_REWARD_ACTIVE) return false;
-  const { count, error } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+  const { count, error } = await supabase
+    .from('profiles')
+    .select('*', { count: 'exact', head: true });
   if (error) return false;
   return (count ?? 0) < GROWTH_SHARE_REWARD_UNTIL_PROFILE_COUNT;
 }
@@ -33,7 +35,7 @@ export async function userHasRecordedProfileShare(sharerId: string): Promise<boo
 export async function recordProfileShareEvent(
   sharerId: string,
   sharedProfileId: string,
-  source: string = 'profile'
+  source: string = 'profile',
 ): Promise<{ ok: boolean; error?: string }> {
   if (!GROWTH_SHARE_REWARD_ACTIVE) return { ok: true };
   const { error } = await supabase.from('profile_share_events').insert({

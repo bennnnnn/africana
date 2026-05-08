@@ -1,12 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Modal,
-  FlatList,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, TouchableOpacity, Modal, FlatList, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@/constants';
@@ -43,14 +36,29 @@ export function SelectPicker({
     <View style={s.wrapper}>
       {label && <Text style={s.label}>{label}</Text>}
 
-      <TouchableOpacity style={[s.trigger, selected && s.triggerOn]} onPress={() => setOpen(true)} activeOpacity={0.8}>
+      <TouchableOpacity
+        style={[s.trigger, selected && s.triggerOn]}
+        onPress={() => setOpen(true)}
+        activeOpacity={0.8}
+      >
         <Text style={[s.triggerText, !selected && s.placeholder, selected && s.triggerTextOn]}>
-          {selected ? `${selected.emoji ? selected.emoji + '  ' : ''}${selected.label}` : placeholder}
+          {selected
+            ? `${selected.emoji ? selected.emoji + '  ' : ''}${selected.label}`
+            : placeholder}
         </Text>
-        <Ionicons name="chevron-down" size={18} color={selected ? ACTIVE_COLOR : COLORS.textSecondary} />
+        <Ionicons
+          name="chevron-down"
+          size={18}
+          color={selected ? ACTIVE_COLOR : COLORS.textSecondary}
+        />
       </TouchableOpacity>
 
-      <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setOpen(false)}>
+      <Modal
+        visible={open}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setOpen(false)}
+      >
         <SafeAreaView style={s.modal}>
           {/* Modal header */}
           <View style={s.modalHeader}>
@@ -68,10 +76,15 @@ export function SelectPicker({
               clearable && value ? (
                 <TouchableOpacity
                   style={s.clearRow}
-                  onPress={() => { onChange(null); setOpen(false); }}
+                  onPress={() => {
+                    onChange(null);
+                    setOpen(false);
+                  }}
                 >
                   <Ionicons name="close-circle-outline" size={20} color={COLORS.error} />
-                  <Text style={{ fontSize: 14, color: COLORS.error, fontWeight: '600', marginLeft: 8 }}>
+                  <Text
+                    style={{ fontSize: 14, color: COLORS.error, fontWeight: '600', marginLeft: 8 }}
+                  >
                     Clear selection
                   </Text>
                 </TouchableOpacity>
@@ -82,17 +95,21 @@ export function SelectPicker({
               return (
                 <TouchableOpacity
                   style={[s.option, isSelected && s.optionOn]}
-                  onPress={() => { onChange(item.value); setOpen(false); }}
+                  onPress={() => {
+                    onChange(item.value);
+                    setOpen(false);
+                  }}
                   activeOpacity={0.75}
                 >
-                  {item.emoji ? (
-                    <Text style={s.emoji}>{item.emoji}</Text>
-                  ) : null}
-                  <Text style={[s.optionText, isSelected && s.optionTextOn]}>
-                    {item.label}
-                  </Text>
+                  {item.emoji ? <Text style={s.emoji}>{item.emoji}</Text> : null}
+                  <Text style={[s.optionText, isSelected && s.optionTextOn]}>{item.label}</Text>
                   {isSelected && (
-                    <Ionicons name="checkmark-circle" size={20} color={ACTIVE_COLOR} style={{ marginLeft: 'auto' }} />
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color={ACTIVE_COLOR}
+                      style={{ marginLeft: 'auto' }}
+                    />
                   )}
                 </TouchableOpacity>
               );

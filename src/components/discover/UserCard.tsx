@@ -1,11 +1,5 @@
 import React, { useRef, useEffect, memo, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,10 +28,16 @@ interface UserCardProps {
 
 const NEW_MEMBER_WINDOW_MS = 10 * 24 * 60 * 60 * 1000; // 10 days
 
-function UserCardInner({ user, cardWidth, cardHeight, beforeNavigate, onLongPress }: UserCardProps) {
+function UserCardInner({
+  user,
+  cardWidth,
+  cardHeight,
+  beforeNavigate,
+  onLongPress,
+}: UserCardProps) {
   const photoUrl = user.profile_photos?.[0] || user.avatar_url || null;
   const optimizedPhoto = useMemo(
-    () => (photoUrl ? profileImageUrlForList(photoUrl) ?? photoUrl : null),
+    () => (photoUrl ? (profileImageUrlForList(photoUrl) ?? photoUrl) : null),
     [photoUrl],
   );
   const [displayPhoto, setDisplayPhoto] = useState<string | null>(optimizedPhoto);
@@ -66,18 +66,25 @@ function UserCardInner({ user, cardWidth, cardHeight, beforeNavigate, onLongPres
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.9, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1,   duration: 900, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
       ]),
     );
     loop.start();
     return () => loop.stop();
   }, [isOnline]);
 
-  const isNew = useMemo(() => {
-    if (!user.created_at) return false;
+  const [isNew, setIsNew] = useState(false);
+  useEffect(() => {
+    if (!user.created_at) {
+      setIsNew(false);
+      return;
+    }
     const created = new Date(user.created_at).getTime();
-    if (!Number.isFinite(created)) return false;
-    return Date.now() - created <= NEW_MEMBER_WINDOW_MS;
+    if (!Number.isFinite(created)) {
+      setIsNew(false);
+      return;
+    }
+    setIsNew(Date.now() - created <= NEW_MEMBER_WINDOW_MS);
   }, [user.created_at]);
 
   const profileLabel = `View profile: ${user.full_name ?? 'Member'}${user.age ? `, ${user.age}` : ''}`;
@@ -137,13 +144,15 @@ function UserCardInner({ user, cardWidth, cardHeight, beforeNavigate, onLongPres
       {/* ── Online pulse dot — top-right ── */}
       {isOnline && (
         <View style={s.onlineDotWrap}>
-          <Animated.View style={[
-            s.onlinePulse,
-            {
-              transform: [{ scale: pulseAnim }],
-              opacity: pulseAnim.interpolate({ inputRange: [1, 1.9], outputRange: [0.55, 0] }),
-            },
-          ]} />
+          <Animated.View
+            style={[
+              s.onlinePulse,
+              {
+                transform: [{ scale: pulseAnim }],
+                opacity: pulseAnim.interpolate({ inputRange: [1, 1.9], outputRange: [0.55, 0] }),
+              },
+            ]}
+          />
           <View style={s.onlineDot} />
         </View>
       )}
@@ -156,14 +165,17 @@ function UserCardInner({ user, cardWidth, cardHeight, beforeNavigate, onLongPres
       >
         <View style={s.nameRow}>
           <Text style={s.name} numberOfLines={1}>
-            {user.full_name}{user.age ? `, ${user.age}` : ''}
+            {user.full_name}
+            {user.age ? `, ${user.age}` : ''}
           </Text>
           {user.verified && <VerifiedBadge size={13} style={s.verifiedInline} />}
         </View>
         {shortLocation ? (
           <View style={s.locationRow}>
             <Ionicons name="location-sharp" size={10} color="rgba(255,255,255,0.78)" />
-            <Text style={s.locationText} numberOfLines={1}>{shortLocation}</Text>
+            <Text style={s.locationText} numberOfLines={1}>
+              {shortLocation}
+            </Text>
           </View>
         ) : null}
       </LinearGradient>
@@ -180,7 +192,7 @@ const s = StyleSheet.create({
     backgroundColor: COLORS.savanna,
     shadowColor: '#3A2A1E',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 4,
   },

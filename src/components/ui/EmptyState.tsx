@@ -26,11 +26,27 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
       >
         <Ionicons name={icon} size={36} color={COLORS.primary} />
       </View>
-      <Text style={{ fontSize: 18, fontWeight: '700', color: COLORS.text, textAlign: 'center', marginBottom: 8 }}>
+      <Text
+        style={{
+          fontSize: 18,
+          fontWeight: '700',
+          color: COLORS.text,
+          textAlign: 'center',
+          marginBottom: 8,
+        }}
+      >
         {title}
       </Text>
       {description && (
-        <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+        <Text
+          style={{
+            fontSize: 14,
+            color: COLORS.textSecondary,
+            textAlign: 'center',
+            lineHeight: 20,
+            marginBottom: 24,
+          }}
+        >
           {description}
         </Text>
       )}

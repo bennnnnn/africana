@@ -40,6 +40,14 @@ module.exports = {
     // React Native: no inline styles (performance)
     'react-native/no-inline-styles': 'warn',
 
+    // This rule is too noisy for our current codebase (many intentional effects
+    // initialize derived state). Keep it off until we refactor the flagged screens.
+    'react-hooks/set-state-in-effect': 'off',
+
+    // RN + Animated commonly use `useRef(...).current` during render; exhaustive refactors
+    // are tracked separately — keep as warnings so real hook errors still fail CI.
+    'react-hooks/refs': 'warn',
+
     // React prop-types not needed — TypeScript handles this
     'react/prop-types': 'off',
   },

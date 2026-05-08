@@ -16,7 +16,12 @@ interface ScreenTitleProps {
  *
  * On Android, custom fonts ignore the `fontWeight` prop, so we don't pass one.
  */
-export function ScreenTitle({ children, size = FONT.xxl + 4, color = COLORS.textStrong, style }: ScreenTitleProps) {
+export function ScreenTitle({
+  children,
+  size = FONT.xxl + 4,
+  color = COLORS.textStrong,
+  style,
+}: ScreenTitleProps) {
   return (
     <Text
       accessibilityRole="header"

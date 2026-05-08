@@ -1,7 +1,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, Modal, FlatList,
-  TextInput, StyleSheet, Pressable, SectionList,
+  View,
+  Text,
+  TouchableOpacity,
+  Modal,
+  FlatList,
+  TextInput,
+  StyleSheet,
+  Pressable,
+  SectionList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -43,8 +50,12 @@ export function LocationPicker({
   const [search, setSearch] = useState('');
   const [countryCityMap, setCountryCityMap] = useState<AfricaCountryCityMap | null>(null);
 
-  const selectedCountry = value.country ? ALL_COUNTRIES.find((c) => c.name === value.country) : null;
-  const selectedSubdivision = selectedCountry?.subdivisions.find((s) => s.name === value.subdivision);
+  const selectedCountry = value.country
+    ? ALL_COUNTRIES.find((c) => c.name === value.country)
+    : null;
+  const selectedSubdivision = selectedCountry?.subdivisions.find(
+    (s) => s.name === value.subdivision,
+  );
 
   const subdivisionLabel = selectedCountry?.subdivisionLabel ?? 'Region';
 
@@ -74,7 +85,9 @@ export function LocationPicker({
     if (exact) return exact;
 
     const target = normalizeLocationString(value.subdivision);
-    const matchedKey = Object.keys(countryCityMap).find((key) => normalizeLocationString(key) === target);
+    const matchedKey = Object.keys(countryCityMap).find(
+      (key) => normalizeLocationString(key) === target,
+    );
     return matchedKey ? countryCityMap[matchedKey] : null;
   }, [countryCityMap, value.subdivision]);
 
@@ -140,60 +153,81 @@ export function LocationPicker({
       )}
 
       {/* Subdivision button — only after country is selected and country has subdivisions */}
-      {!countryOnly && value.country && selectedCountry && selectedCountry.subdivisions.length > 0 && (
-        <PickerButton
-          label={subdivisionLabel}
-          value={value.subdivision || null}
-          placeholder={`Select ${subdivisionLabel}`}
-          icon="map-outline"
-          onPress={() => openPicker('subdivision')}
-        />
-      )}
+      {!countryOnly &&
+        value.country &&
+        selectedCountry &&
+        selectedCountry.subdivisions.length > 0 && (
+          <PickerButton
+            label={subdivisionLabel}
+            value={value.subdivision || null}
+            placeholder={`Select ${subdivisionLabel}`}
+            icon="map-outline"
+            onPress={() => openPicker('subdivision')}
+          />
+        )}
 
       {/* Free-text subdivision for countries with no data */}
-      {!countryOnly && value.country && selectedCountry && selectedCountry.subdivisions.length === 0 && (
-        <View style={s.inputWrap}>
-          <Text style={s.inputLabel}>{subdivisionLabel} (optional)</Text>
-          <View style={s.textInputRow}>
-            <Ionicons name="map-outline" size={16} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
-            <TextInput
-              style={s.textInput}
-              value={value.subdivision ?? ''}
-              onChangeText={(t) => onChange({ ...value, subdivision: t })}
-              placeholder={`Enter ${subdivisionLabel}`}
-              placeholderTextColor={COLORS.textMuted}
-            />
+      {!countryOnly &&
+        value.country &&
+        selectedCountry &&
+        selectedCountry.subdivisions.length === 0 && (
+          <View style={s.inputWrap}>
+            <Text style={s.inputLabel}>{subdivisionLabel} (optional)</Text>
+            <View style={s.textInputRow}>
+              <Ionicons
+                name="map-outline"
+                size={16}
+                color={COLORS.textSecondary}
+                style={{ marginRight: 8 }}
+              />
+              <TextInput
+                style={s.textInput}
+                value={value.subdivision ?? ''}
+                onChangeText={(t) => onChange({ ...value, subdivision: t })}
+                placeholder={`Enter ${subdivisionLabel}`}
+                placeholderTextColor={COLORS.textMuted}
+              />
+            </View>
           </View>
-        </View>
-      )}
+        )}
 
       {/* City button — only after subdivision is chosen */}
-      {!countryOnly && value.subdivision && selectedSubdivision && selectedSubdivision.cities.length > 0 && (
-        <PickerButton
-          label="City / Town"
-          value={value.city || null}
-          placeholder="Select city"
-          icon="business-outline"
-          onPress={() => openPicker('city')}
-        />
-      )}
+      {!countryOnly &&
+        value.subdivision &&
+        selectedSubdivision &&
+        selectedSubdivision.cities.length > 0 && (
+          <PickerButton
+            label="City / Town"
+            value={value.city || null}
+            placeholder="Select city"
+            icon="business-outline"
+            onPress={() => openPicker('city')}
+          />
+        )}
 
       {/* Free-text city */}
-      {!countryOnly && value.subdivision && (!selectedSubdivision || selectedSubdivision.cities.length === 0) && (
-        <View style={s.inputWrap}>
-          <Text style={s.inputLabel}>City (optional)</Text>
-          <View style={s.textInputRow}>
-            <Ionicons name="business-outline" size={16} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
-            <TextInput
-              style={s.textInput}
-              value={value.city ?? ''}
-              onChangeText={(t) => onChange({ ...value, city: t })}
-              placeholder="Enter your city"
-              placeholderTextColor={COLORS.textMuted}
-            />
+      {!countryOnly &&
+        value.subdivision &&
+        (!selectedSubdivision || selectedSubdivision.cities.length === 0) && (
+          <View style={s.inputWrap}>
+            <Text style={s.inputLabel}>City (optional)</Text>
+            <View style={s.textInputRow}>
+              <Ionicons
+                name="business-outline"
+                size={16}
+                color={COLORS.textSecondary}
+                style={{ marginRight: 8 }}
+              />
+              <TextInput
+                style={s.textInput}
+                value={value.city ?? ''}
+                onChangeText={(t) => onChange({ ...value, city: t })}
+                placeholder="Enter your city"
+                placeholderTextColor={COLORS.textMuted}
+              />
+            </View>
           </View>
-        </View>
-      )}
+        )}
 
       {/* ── Country modal ── */}
       <PickerModal
@@ -278,15 +312,33 @@ export function LocationPicker({
 
 // ── Sub-components ──────────────────────────────────────────
 
-function PickerButton({ label, value, placeholder, icon, onPress }: {
-  label: string; value: string | null; placeholder: string;
-  icon: keyof typeof Ionicons.glyphMap; onPress: () => void;
+function PickerButton({
+  label,
+  value,
+  placeholder,
+  icon,
+  onPress,
+}: {
+  label: string;
+  value: string | null;
+  placeholder: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
 }) {
   return (
     <View style={{ marginBottom: 14 }}>
       {label.trim().length > 0 ? <Text style={s.inputLabel}>{label}</Text> : null}
-      <TouchableOpacity onPress={onPress} style={[s.dropdownBtn, value && s.dropdownBtnOn]} activeOpacity={0.8}>
-        <Ionicons name={icon} size={17} color={value ? ACTIVE_COLOR : COLORS.textSecondary} style={{ marginRight: 10 }} />
+      <TouchableOpacity
+        onPress={onPress}
+        style={[s.dropdownBtn, value && s.dropdownBtnOn]}
+        activeOpacity={0.8}
+      >
+        <Ionicons
+          name={icon}
+          size={17}
+          color={value ? ACTIVE_COLOR : COLORS.textSecondary}
+          style={{ marginRight: 10 }}
+        />
         <Text style={[s.dropdownText, value && s.dropdownTextOn]} numberOfLines={1}>
           {value || placeholder}
         </Text>
@@ -296,13 +348,30 @@ function PickerButton({ label, value, placeholder, icon, onPress }: {
   );
 }
 
-function PickerModal({ visible, title, onClose, search, onSearch, searchPlaceholder, children }: {
-  visible: boolean; title: string; onClose: () => void;
-  search: string; onSearch: (t: string) => void; searchPlaceholder: string;
+function PickerModal({
+  visible,
+  title,
+  onClose,
+  search,
+  onSearch,
+  searchPlaceholder,
+  children,
+}: {
+  visible: boolean;
+  title: string;
+  onClose: () => void;
+  search: string;
+  onSearch: (t: string) => void;
+  searchPlaceholder: string;
   children: React.ReactNode;
 }) {
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
       <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
         <View style={s.modalHeader}>
           <TouchableOpacity onPress={onClose}>
@@ -312,7 +381,12 @@ function PickerModal({ visible, title, onClose, search, onSearch, searchPlacehol
           <View style={{ width: 24 }} />
         </View>
         <View style={s.searchBar}>
-          <Ionicons name="search-outline" size={15} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
+          <Ionicons
+            name="search-outline"
+            size={15}
+            color={COLORS.textSecondary}
+            style={{ marginRight: 8 }}
+          />
           <TextInput
             value={search}
             onChangeText={onSearch}
@@ -333,28 +407,55 @@ function PickerModal({ visible, title, onClose, search, onSearch, searchPlacehol
   );
 }
 
-function RowItem({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+function RowItem({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
   return (
     <Pressable onPress={onPress} style={[s.row, selected && s.rowOn]}>
-      <Text style={[s.rowText, selected && s.rowTextOn]} numberOfLines={1}>{label}</Text>
+      <Text style={[s.rowText, selected && s.rowTextOn]} numberOfLines={1}>
+        {label}
+      </Text>
       {selected && <Ionicons name="checkmark-circle" size={20} color={ACTIVE_COLOR} />}
     </Pressable>
   );
 }
 
 const s = StyleSheet.create({
-  inputLabel: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
   inputWrap: { marginBottom: 14 },
   textInputRow: {
-    flexDirection: 'row', alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 13, backgroundColor: '#FFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    backgroundColor: '#FFF',
   },
   textInput: { flex: 1, fontSize: 15, color: COLORS.text },
   dropdownBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 14, backgroundColor: '#FFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: '#FFF',
   },
   dropdownBtnOn: {
     borderColor: ACTIVE_COLOR,
@@ -363,23 +464,49 @@ const s = StyleSheet.create({
   dropdownText: { flex: 1, fontSize: 15, color: COLORS.textSecondary },
   dropdownTextOn: { color: COLORS.text, fontWeight: '700' },
   modalHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: 18, borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: '#FFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: '#FFF',
   },
   modalTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   searchBar: {
-    flexDirection: 'row', alignItems: 'center',
-    margin: 12, paddingHorizontal: 14, paddingVertical: 10,
-    borderRadius: 12, backgroundColor: COLORS.savanna,
-    borderWidth: 1, borderColor: COLORS.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: COLORS.savanna,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   searchInput: { flex: 1, fontSize: 14, color: COLORS.text },
-  sectionHeader: { backgroundColor: COLORS.surface, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  sectionHeaderText: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionHeader: {
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  sectionHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   row: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
   rowOn: { backgroundColor: `${ACTIVE_COLOR}10` },
   rowText: { fontSize: 15, color: COLORS.text, flex: 1 },

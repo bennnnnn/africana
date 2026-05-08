@@ -28,19 +28,31 @@ export function SettingsHeaderBar({
         accessibilityLabel={backAccessibilityLabel}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       >
-        <Ionicons name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'} size={24} color={COLORS.text} />
+        <Ionicons
+          name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'}
+          size={24}
+          color={COLORS.text}
+        />
       </TouchableOpacity>
       {titleAlign === 'center' ? (
         <>
           <View style={styles.titleCenterWrap}>
-            <Text style={[styles.title, styles.titleCentered]} numberOfLines={1} accessibilityRole="header">
+            <Text
+              style={[styles.title, styles.titleCentered]}
+              numberOfLines={1}
+              accessibilityRole="header"
+            >
               {title}
             </Text>
           </View>
           <View style={styles.sideSpacer} />
         </>
       ) : (
-        <Text style={[styles.title, styles.titleLeading]} numberOfLines={1} accessibilityRole="header">
+        <Text
+          style={[styles.title, styles.titleLeading]}
+          numberOfLines={1}
+          accessibilityRole="header"
+        >
           {title}
         </Text>
       )}

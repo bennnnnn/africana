@@ -29,7 +29,8 @@ export function PostOnboardingProfileBanner({
       <View style={{ flex: 1 }}>
         <Text style={styles.title}>Pick up where you left off</Text>
         <Text style={styles.sub}>
-          During setup you skipped {list}. Add {reminders.length === 1 ? 'it' : 'them'} on your profile when you have a minute — it really helps.
+          During setup you skipped {list}. Add {reminders.length === 1 ? 'it' : 'them'} on your
+          profile when you have a minute — it really helps.
         </Text>
         <TouchableOpacity onPress={onProfilePress} style={styles.cta} activeOpacity={0.85}>
           <Text style={styles.ctaText}>Open profile</Text>

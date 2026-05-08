@@ -106,7 +106,11 @@ export default function LikesHubScreen() {
         contentContainerStyle={{ paddingBottom: tabBarHeight + 16 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+          />
         }
         ItemSeparatorComponent={() => <View style={s.sep} />}
         ListEmptyComponent={renderEmpty}

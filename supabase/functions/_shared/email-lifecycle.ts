@@ -111,7 +111,8 @@ export function escapeHtml(value: string): string {
 }
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  const apiKey = Deno.env.get('re_JiniE9pa_CmHvfFsSiXKt1UVw5LXqCYcp');
+  // Stored as a Supabase Function secret (never hardcode API keys).
+  const apiKey = Deno.env.get('RESEND_API_KEY');
   const from = Deno.env.get('RESEND_FROM') ?? 'Africana <noreply@africana.app>';
   if (!apiKey) return false;
 
@@ -140,11 +141,7 @@ export async function getRecipientContext(recipientId: string): Promise<Recipien
       )
       .eq('user_id', recipientId)
       .maybeSingle(),
-    supabaseAdmin
-      .from('profiles')
-      .select('full_name')
-      .eq('id', recipientId)
-      .maybeSingle(),
+    supabaseAdmin.from('profiles').select('full_name').eq('id', recipientId).maybeSingle(),
     supabaseAdmin.auth.admin.getUserById(recipientId),
   ]);
 

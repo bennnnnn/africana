@@ -1,5 +1,7 @@
 /** Normalized text blob for substring checks on PostgREST / Postgres errors. */
-export function pgErrorBlob(err: { message?: string; details?: string; hint?: string } | null): string {
+export function pgErrorBlob(
+  err: { message?: string; details?: string; hint?: string } | null,
+): string {
   if (!err) return '';
   return `${err.message ?? ''} ${err.details ?? ''} ${err.hint ?? ''}`.toLowerCase();
 }

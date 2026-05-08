@@ -109,13 +109,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             new Set(
               visible
                 .map((conv) => conv.participant_ids.find((id: string) => id !== userId))
-                .filter(Boolean)
-            )
+                .filter(Boolean),
+            ),
           ) as string[];
 
           const [profilesResult, unreadResult] = await Promise.all([
             otherUserIds.length > 0
-              ? supabase.from('profiles').select(PROFILE_LIST_SELECT as '*').in('id', otherUserIds)
+              ? supabase
+                  .from('profiles')
+                  .select(PROFILE_LIST_SELECT as '*')
+                  .in('id', otherUserIds)
               : Promise.resolve({ data: [] as User[] }),
             conversationIds.length > 0
               ? supabase
@@ -128,7 +131,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           ]);
 
           const profilesById = new Map(
-            ((profilesResult.data ?? []) as User[]).map((profile) => [profile.id, profile])
+            ((profilesResult.data ?? []) as User[]).map((profile) => [profile.id, profile]),
           );
           const unreadCounts = new Map<string, number>();
           for (const row of (unreadResult.data ?? []) as { conversation_id: string }[]) {
@@ -240,14 +243,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         return;
       }
       if (data !== null && data !== undefined) {
-      const userId = useAuthStore.getState().user?.id;
+        const userId = useAuthStore.getState().user?.id;
 
-      // Server returns newest→oldest; flip back to chronological for the UI.
-      // Also strip out any messages the current user has soft-deleted.
-      const rawRows = (data as Message[]).slice().reverse();
-      const rows = userId
-        ? rawRows.filter((m) => !(m.deleted_for ?? []).includes(userId))
-        : rawRows;
+        // Server returns newest→oldest; flip back to chronological for the UI.
+        // Also strip out any messages the current user has soft-deleted.
+        const rawRows = (data as Message[]).slice().reverse();
+        const rows = userId
+          ? rawRows.filter((m) => !(m.deleted_for ?? []).includes(userId))
+          : rawRows;
         const hasMore = (data as Message[]).length === MESSAGE_PAGE_SIZE;
 
         // Preserve any optimistic messages that are newer than the page we
@@ -255,9 +258,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         const previous = get().messages[conversationId] ?? [];
         const newestServerTs = rows.length > 0 ? rows[rows.length - 1].created_at : null;
         const trailingOptimistic = previous.filter(
-          (m) =>
-            m.id.startsWith('temp-') &&
-            (!newestServerTs || m.created_at > newestServerTs),
+          (m) => m.id.startsWith('temp-') && (!newestServerTs || m.created_at > newestServerTs),
         );
         const merged = trailingOptimistic.length > 0 ? [...rows, ...trailingOptimistic] : rows;
 
@@ -278,7 +279,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     try {
       await p;
     } finally {
-      if (fetchMessagesPending.get(conversationId) === p) fetchMessagesPending.delete(conversationId);
+      if (fetchMessagesPending.get(conversationId) === p)
+        fetchMessagesPending.delete(conversationId);
     }
   },
 
@@ -385,8 +387,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       created_at: new Date().toISOString(),
     };
     // Snapshot the current last_message so we can roll it back on failure
-    const previousConvLastMessage = get().conversations.find((c) => c.id === conversationId)?.last_message ?? null;
-    const previousConvLastMessageAt = get().conversations.find((c) => c.id === conversationId)?.last_message_at ?? null;
+    const previousConvLastMessage =
+      get().conversations.find((c) => c.id === conversationId)?.last_message ?? null;
+    const previousConvLastMessageAt =
+      get().conversations.find((c) => c.id === conversationId)?.last_message_at ?? null;
     set((state) => ({
       messages: {
         ...state.messages,
@@ -395,14 +399,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       conversations: state.conversations.map((c) =>
         c.id === conversationId
           ? { ...c, last_message: content, last_message_at: tempMsg.created_at }
-          : c
+          : c,
       ),
     }));
-    enqueueReplaceCachedMessages(conversationId, tailForCache(get().messages[conversationId] ?? []));
-
-    let recipientId = get().conversations.find((c) => c.id === conversationId)?.participant_ids?.find(
-      (pid) => pid !== senderId,
+    enqueueReplaceCachedMessages(
+      conversationId,
+      tailForCache(get().messages[conversationId] ?? []),
     );
+
+    let recipientId = get()
+      .conversations.find((c) => c.id === conversationId)
+      ?.participant_ids?.find((pid) => pid !== senderId);
     if (!recipientId) {
       const { data: convRow } = await supabase
         .from('conversations')
@@ -428,8 +435,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         },
         conversations: state.conversations.map((c) =>
           c.id === conversationId
-            ? { ...c, last_message: previousConvLastMessage, last_message_at: previousConvLastMessageAt }
-            : c
+            ? {
+                ...c,
+                last_message: previousConvLastMessage,
+                last_message_at: previousConvLastMessageAt,
+              }
+            : c,
         ),
       }));
       enqueueReplaceCachedMessages(
@@ -450,17 +461,26 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     set((state) => ({
       messages: {
         ...state.messages,
-        [conversationId]: (state.messages[conversationId] ?? []).map(
-          (m) => m.id === tempId ? confirmed : m
+        [conversationId]: (state.messages[conversationId] ?? []).map((m) =>
+          m.id === tempId ? confirmed : m,
         ),
       },
     }));
-    enqueueReplaceCachedMessages(conversationId, tailForCache(get().messages[conversationId] ?? []));
+    enqueueReplaceCachedMessages(
+      conversationId,
+      tailForCache(get().messages[conversationId] ?? []),
+    );
 
     // DB trigger `trg_messages_refresh_conversation_preview_*` keeps `conversations.last_message*` in sync.
 
     if (recipientId) {
-      void notifyUser({ type: 'message', recipientId, senderId, senderName, extra: { conversationId } });
+      void notifyUser({
+        type: 'message',
+        recipientId,
+        senderId,
+        senderName,
+        extra: { conversationId },
+      });
       void notifyLifecycleEmail({
         campaign: 'first_message',
         recipientId,
@@ -531,10 +551,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       throw new Error('Not authenticated');
     }
 
-    const { error: hideErr } = await supabase.from('conversation_hidden').upsert(
-      { user_id: userId, conversation_id: conversationId },
-      { onConflict: 'user_id,conversation_id' },
-    );
+    const { error: hideErr } = await supabase
+      .from('conversation_hidden')
+      .upsert(
+        { user_id: userId, conversation_id: conversationId },
+        { onConflict: 'user_id,conversation_id' },
+      );
     if (hideErr) {
       logError('[deleteConversation] Failed to hide conversation', hideErr);
       set({ conversations: previousConversations, messages: previousMessages });
@@ -544,7 +566,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
   deleteMessage: async (conversationId, messageId) => {
     const currentMessages = get().messages[conversationId] ?? [];
-    const isLast = currentMessages.length > 0 && currentMessages[currentMessages.length - 1].id === messageId;
+    const isLast =
+      currentMessages.length > 0 && currentMessages[currentMessages.length - 1].id === messageId;
 
     // Hard delete: remove row for everyone (sender-only via RLS).
     const updatedMessages = currentMessages.filter((m) => m.id !== messageId);
@@ -552,11 +575,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     set((state) => {
       let nextConversations = state.conversations;
       if (isLast) {
-        const newLast = updatedMessages.length > 0 ? updatedMessages[updatedMessages.length - 1] : null;
-        nextConversations = state.conversations.map(c =>
+        const newLast =
+          updatedMessages.length > 0 ? updatedMessages[updatedMessages.length - 1] : null;
+        nextConversations = state.conversations.map((c) =>
           c.id === conversationId
-            ? { ...c, last_message: newLast ? newLast.content : null, last_message_at: newLast ? newLast.created_at : null }
-            : c
+            ? {
+                ...c,
+                last_message: newLast ? newLast.content : null,
+                last_message_at: newLast ? newLast.created_at : null,
+              }
+            : c,
         );
       }
       return {
@@ -568,10 +596,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       };
     });
 
-    enqueueReplaceCachedMessages(
-      conversationId,
-      tailForCache(updatedMessages),
-    );
+    enqueueReplaceCachedMessages(conversationId, tailForCache(updatedMessages));
 
     await supabase.from('messages').delete().eq('id', messageId);
 
@@ -580,17 +605,23 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
   softDeleteMessageForSelf: async (conversationId, messageId) => {
     const currentMessages = get().messages[conversationId] ?? [];
-    const isLast = currentMessages.length > 0 && currentMessages[currentMessages.length - 1].id === messageId;
+    const isLast =
+      currentMessages.length > 0 && currentMessages[currentMessages.length - 1].id === messageId;
 
     // Optimistic local removal.
     const updatedMessages = currentMessages.filter((m) => m.id !== messageId);
     set((state) => {
       let nextConversations = state.conversations;
       if (isLast) {
-        const newLast = updatedMessages.length > 0 ? updatedMessages[updatedMessages.length - 1] : null;
+        const newLast =
+          updatedMessages.length > 0 ? updatedMessages[updatedMessages.length - 1] : null;
         nextConversations = state.conversations.map((c) =>
           c.id === conversationId
-            ? { ...c, last_message: newLast ? newLast.content : null, last_message_at: newLast ? newLast.created_at : null }
+            ? {
+                ...c,
+                last_message: newLast ? newLast.content : null,
+                last_message_at: newLast ? newLast.created_at : null,
+              }
             : c,
         );
       }
@@ -612,20 +643,21 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     const readAt = new Date().toISOString();
     set((state) => ({
       conversations: state.conversations.map((conversation) =>
-        conversation.id === conversationId
-          ? { ...conversation, unread_count: 0 }
-          : conversation
+        conversation.id === conversationId ? { ...conversation, unread_count: 0 } : conversation,
       ),
       messages: {
         ...state.messages,
         [conversationId]: (state.messages[conversationId] ?? []).map((message) =>
           message.sender_id !== userId && !message.read_at
             ? { ...message, read_at: readAt }
-            : message
+            : message,
         ),
       },
     }));
-    enqueueReplaceCachedMessages(conversationId, tailForCache(get().messages[conversationId] ?? []));
+    enqueueReplaceCachedMessages(
+      conversationId,
+      tailForCache(get().messages[conversationId] ?? []),
+    );
     // Persist only the zeroed-unread conversation so a cold start doesn't revive
     // the badge from a stale snapshot — much cheaper than re-writing ALL convos.
     const updatedConv = get().conversations.find((c) => c.id === conversationId);

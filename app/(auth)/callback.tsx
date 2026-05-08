@@ -8,7 +8,10 @@ import { redirectAfterAuth } from '@/lib/profile-completion';
 export default function AuthCallback() {
   const params = useLocalSearchParams();
   const { hydrateUserFromServer, setSession } = useAuthStore(
-    useShallow((s) => ({ hydrateUserFromServer: s.hydrateUserFromServer, setSession: s.setSession })),
+    useShallow((s) => ({
+      hydrateUserFromServer: s.hydrateUserFromServer,
+      setSession: s.setSession,
+    })),
   );
 
   useEffect(() => {

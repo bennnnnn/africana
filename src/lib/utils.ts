@@ -11,9 +11,7 @@ export const ONLINE_FRESHNESS_MINUTES = 3;
  * "currently online" rows. Pair with `online_status = 'online'` for the
  * fastest path, but the freshness check is the source of truth.
  */
-export function getOnlineFreshnessCutoffISO(
-  freshnessMinutes = ONLINE_FRESHNESS_MINUTES,
-): string {
+export function getOnlineFreshnessCutoffISO(freshnessMinutes = ONLINE_FRESHNESS_MINUTES): string {
   return new Date(Date.now() - freshnessMinutes * 60 * 1000).toISOString();
 }
 export const DEFAULT_MIN_AGE_PREFERENCE = 18;
@@ -49,13 +47,13 @@ export function formatLastSeen(lastSeen: string | null | undefined): string | nu
   if (Number.isNaN(seenAt)) return null;
   const diffMs = Date.now() - seenAt;
   const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1)  return 'seen just now';
+  if (diffMin < 1) return 'seen just now';
   if (diffMin < 60) return `seen ${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24)  return `seen ${diffHr}h ago`;
+  if (diffHr < 24) return `seen ${diffHr}h ago`;
   const diffDay = Math.floor(diffHr / 24);
   if (diffDay === 1) return 'seen yesterday';
-  if (diffDay < 7)  return `seen ${diffDay} days ago`;
+  if (diffDay < 7) return `seen ${diffDay} days ago`;
   return 'seen a while ago';
 }
 
@@ -104,8 +102,7 @@ export function getEffectiveAgePreferenceRange(
   // TODO(2026-07-01): delete once all persisted defaults are migrated off
   // (min=DEFAULT_MIN_AGE_PREFERENCE and max=40/60).
   const looksLikeLegacyDefault =
-    normalizedMin === DEFAULT_MIN_AGE_PREFERENCE &&
-    (normalizedMax === 40 || normalizedMax === 60);
+    normalizedMin === DEFAULT_MIN_AGE_PREFERENCE && (normalizedMax === 40 || normalizedMax === 60);
 
   if ((normalizedMin === null && normalizedMax === null) || looksLikeLegacyDefault) {
     return {
@@ -144,8 +141,7 @@ export function isLikesActivityNew(
   return a > s;
 }
 
-const UUID_V4ISH_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_V4ISH_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Safe for Postgres `uuid` columns and route params (rejects literal `"undefined"`). */
 export function isUuidString(value: string | null | undefined): value is string {

@@ -14,7 +14,14 @@ interface AvatarProps {
   style?: ViewStyle;
 }
 
-export function Avatar({ uri, name = '?', size = 48, onlineStatus, showStatus = false, style }: AvatarProps) {
+export function Avatar({
+  uri,
+  name = '?',
+  size = 48,
+  onlineStatus,
+  showStatus = false,
+  style,
+}: AvatarProps) {
   const statusColor = onlineStatus === 'online' ? COLORS.online : COLORS.offline;
 
   const fallback = `${DEFAULT_AVATAR}${encodeURIComponent(name.charAt(0).toUpperCase())}`;

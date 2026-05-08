@@ -47,9 +47,7 @@ async function persistNow(): Promise<void> {
   try {
     // Trim to MAX_ENTRIES, keeping the most recently seeded.
     if (cache.size > MAX_ENTRIES) {
-      const entries = Array.from(cache.entries()).sort(
-        (a, b) => b[1].savedAt - a[1].savedAt,
-      );
+      const entries = Array.from(cache.entries()).sort((a, b) => b[1].savedAt - a[1].savedAt);
       cache.clear();
       for (const [id, entry] of entries.slice(0, MAX_ENTRIES)) {
         cache.set(id, entry);

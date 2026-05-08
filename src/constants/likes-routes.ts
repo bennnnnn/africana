@@ -4,7 +4,12 @@ import type { LikesTab } from '@/constants/likes-screen';
  * When opening the Likes hub root (`/(tabs)/likes` → index), land on the first
  * tab that still has unseen items so new likes/views/stars surface immediately.
  */
-export const LIKES_LANDING_TAB_PRIORITY: LikesTab[] = ['received', 'viewers', 'favourites', 'matches'];
+export const LIKES_LANDING_TAB_PRIORITY: LikesTab[] = [
+  'received',
+  'viewers',
+  'favourites',
+  'matches',
+];
 
 export function pickLandingLikesTab(counts: Record<LikesTab, number>): LikesTab {
   for (const t of LIKES_LANDING_TAB_PRIORITY) {

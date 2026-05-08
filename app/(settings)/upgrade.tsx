@@ -1,12 +1,5 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONT } from '@/constants';
@@ -21,8 +14,7 @@ export default function UpgradeScreen() {
     if (!PAYMENTS_ENABLED) {
       appDialog({
         title: 'Coming soon',
-        message:
-          "Premium features are launching soon. You'll be notified when they're available!",
+        message: "Premium features are launching soon. You'll be notified when they're available!",
         icon: 'rocket-outline',
       });
       return;
@@ -50,7 +42,8 @@ export default function UpgradeScreen() {
           <View style={s.growthCallout}>
             <Ionicons name="share-social-outline" size={20} color={COLORS.primary} />
             <Text style={s.growthCalloutText}>
-              Help Africana grow: share someone’s profile from their screen. Early supporters can earn Gold-level access while we’re still small.
+              Help Africana grow: share someone’s profile from their screen. Early supporters can
+              earn Gold-level access while we’re still small.
             </Text>
           </View>
         </View>
@@ -66,16 +59,26 @@ export default function UpgradeScreen() {
                   <Text style={s.popularText}>MOST POPULAR</Text>
                 </View>
               )}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }}
+              >
                 <Text style={{ fontSize: 28 }}>{plan.emoji}</Text>
-                <Text style={[s.planName, isPopular && { color: COLORS.primary }]}>{plan.name}</Text>
+                <Text style={[s.planName, isPopular && { color: COLORS.primary }]}>
+                  {plan.name}
+                </Text>
                 <View style={{ flex: 1 }} />
-                <Text style={[s.planPrice, isPopular && { color: COLORS.primary }]}>{plan.monthlyPrice}/mo</Text>
+                <Text style={[s.planPrice, isPopular && { color: COLORS.primary }]}>
+                  {plan.monthlyPrice}/mo
+                </Text>
               </View>
               <View style={s.divider} />
               {plan.features.map((feat) => (
                 <View key={feat} style={s.featRow}>
-                  <Ionicons name="checkmark-circle" size={18} color={isPopular ? COLORS.primary : COLORS.success} />
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={18}
+                    color={isPopular ? COLORS.primary : COLORS.success}
+                  />
                   <Text style={s.featText}>{feat}</Text>
                 </View>
               ))}
@@ -86,7 +89,9 @@ export default function UpgradeScreen() {
               >
                 <Text style={[s.buyBtnText, isPopular && { color: '#FFF' }]}>
                   {PAYMENTS_ENABLED
-                    ? (isPopular ? `Get ${plan.name} →` : `Try ${plan.name}`)
+                    ? isPopular
+                      ? `Get ${plan.name} →`
+                      : `Try ${plan.name}`
                     : 'Notify Me 🔔'}
                 </Text>
               </TouchableOpacity>
@@ -95,8 +100,8 @@ export default function UpgradeScreen() {
         })}
 
         <Text style={s.note}>
-          All plans auto-renew monthly. Cancel anytime in App Store / Google Play Settings.
-          Prices may vary by region.
+          All plans auto-renew monthly. Cancel anytime in App Store / Google Play Settings. Prices
+          may vary by region.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -108,7 +113,13 @@ const s = StyleSheet.create({
   hero: { alignItems: 'center', marginBottom: 28 },
   heroEmoji: { fontSize: 56, marginBottom: 10 },
   heroTitle: { fontSize: 26, fontWeight: '900', color: COLORS.text, marginBottom: 8 },
-  heroSub: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 21, paddingHorizontal: 16 },
+  heroSub: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 21,
+    paddingHorizontal: 16,
+  },
   growthCallout: {
     flexDirection: 'row',
     alignItems: 'flex-start',

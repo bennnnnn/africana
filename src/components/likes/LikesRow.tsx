@@ -42,7 +42,10 @@ export const LikesRow = memo(function LikesRow({
     return years;
   }, [u.birthdate]);
 
-  const location = useMemo(() => [u.city, u.country].filter(Boolean).join(', '), [u.city, u.country]);
+  const location = useMemo(
+    () => [u.city, u.country].filter(Boolean).join(', '),
+    [u.city, u.country],
+  );
 
   const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
   const isOnline =
@@ -71,7 +74,9 @@ export const LikesRow = memo(function LikesRow({
           transition={0}
           recyclingKey={u.id}
         />
-        <View style={[s.onlineDot, { backgroundColor: isOnline ? COLORS.online : COLORS.offline }]} />
+        <View
+          style={[s.onlineDot, { backgroundColor: isOnline ? COLORS.online : COLORS.offline }]}
+        />
       </View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

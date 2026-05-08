@@ -12,9 +12,18 @@ import {
   Animated,
   Platform,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListProps } from '@shopify/flash-list';
 
-const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
+/** One row = two Discover cards (manual 2-column layout). */
+type DiscoverGridRow = [User, User | null];
+
+type AnimatedDiscoverFlashListProps = FlashListProps<DiscoverGridRow> & {
+  onScroll?: (...args: unknown[]) => void;
+};
+
+const AnimatedFlashList = Animated.createAnimatedComponent(
+  FlashList,
+) as React.ComponentType<AnimatedDiscoverFlashListProps>;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -101,13 +110,10 @@ export default function DiscoverScreen() {
     [scrollY],
   );
 
-  const agePref = useMemo(
-    () =>
-      user?.min_age_pref != null && user?.max_age_pref != null
-        ? { min: user.min_age_pref, max: user.max_age_pref }
-        : undefined,
-    [user?.min_age_pref, user?.max_age_pref],
-  );
+  const agePref =
+    user?.min_age_pref != null && user?.max_age_pref != null
+      ? { min: user.min_age_pref, max: user.max_age_pref }
+      : undefined;
 
   useEffect(() => {
     if (!user) return;
@@ -116,7 +122,14 @@ export default function DiscoverScreen() {
     return () => {
       unsubscribeFromOnlineStatus();
     };
-  }, [user?.id, user?.interested_in, agePref, fetchUsers, subscribeToOnlineStatus, unsubscribeFromOnlineStatus]);
+  }, [
+    user?.id,
+    user?.interested_in,
+    agePref,
+    fetchUsers,
+    subscribeToOnlineStatus,
+    unsubscribeFromOnlineStatus,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -147,7 +160,8 @@ export default function DiscoverScreen() {
   }, [user, fetchUsers, agePref]);
 
   const handleLoadMore = useCallback(() => {
-    if (!isLoading && hasMore && user) void fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: false, agePref });
+    if (!isLoading && hasMore && user)
+      void fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: false, agePref });
   }, [isLoading, hasMore, user, fetchUsers, agePref]);
 
   const browseOrderIds = useMemo(() => users.map((u) => u.id), [users]);
@@ -160,48 +174,71 @@ export default function DiscoverScreen() {
   const activeFilterChips = useMemo(() => {
     const chips: { key: string; label: string; clear: () => void }[] = [];
     if (filters.online_only) {
-      chips.push({ key: 'online', label: 'Online now', clear: () => setFilters({ online_only: false }) });
+      chips.push({
+        key: 'online',
+        label: 'Online now',
+        clear: () => setFilters({ online_only: false }),
+      });
     }
     if (filters.country) {
       const loc = [filters.city, filters.state, filters.country].filter(Boolean).join(', ');
-      chips.push({ key: 'loc', label: loc, clear: () => setFilters({ country: null, state: null, city: null }) });
+      chips.push({
+        key: 'loc',
+        label: loc,
+        clear: () => setFilters({ country: null, state: null, city: null }),
+      });
     }
     if (filters.religion) {
-      const label = RELIGION_OPTIONS.find((o) => o.value === filters.religion)?.label ?? String(filters.religion);
+      const label =
+        RELIGION_OPTIONS.find((o) => o.value === filters.religion)?.label ??
+        String(filters.religion);
       chips.push({ key: 'religion', label, clear: () => setFilters({ religion: null }) });
     }
     if (filters.min_age !== 18 || filters.max_age !== 100) {
-      chips.push({ key: 'age', label: `Age ${filters.min_age}–${filters.max_age}`, clear: () => setFilters({ min_age: 18, max_age: 100 } as Partial<FilterOptions>) });
+      chips.push({
+        key: 'age',
+        label: `Age ${filters.min_age}–${filters.max_age}`,
+        clear: () => setFilters({ min_age: 18, max_age: 100 } as Partial<FilterOptions>),
+      });
     }
     return chips;
   }, [filters, setFilters]);
   const activeFilterCount = activeFilterChips.length;
 
-  const handleApplyFilters = useCallback((next: FilterOptions) => {
-    haptics.tapLight();
-    setFilters(next);
-    if (user) fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
-  }, [setFilters, fetchUsers, user, agePref]);
+  const handleApplyFilters = useCallback(
+    (next: FilterOptions) => {
+      haptics.tapLight();
+      setFilters(next);
+      if (user)
+        fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
+    },
+    [setFilters, fetchUsers, user, agePref],
+  );
 
   const handleResetFilters = useCallback(() => {
     resetFilters();
-    if (user) fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
+    if (user)
+      fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
   }, [resetFilters, fetchUsers, user, agePref]);
 
   const handleChipClear = useCallback(
     (clear: () => void) => {
       haptics.tapLight();
       clear();
-      if (user) fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
+      if (user)
+        fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
     },
     [user, fetchUsers, agePref],
   );
 
-  const handleLongPressUser = useCallback((selectedUser: User) => {
-    const idx = users.findIndex((u) => u.id === selectedUser.id);
-    setPreviewStartIndex(idx >= 0 ? idx : 0);
-    setShowPreview(true);
-  }, [users]);
+  const handleLongPressUser = useCallback(
+    (selectedUser: User) => {
+      const idx = users.findIndex((u) => u.id === selectedUser.id);
+      setPreviewStartIndex(idx >= 0 ? idx : 0);
+      setShowPreview(true);
+    },
+    [users],
+  );
 
   const handleClosePreview = useCallback(() => {
     setShowPreview(false);
@@ -241,13 +278,13 @@ export default function DiscoverScreen() {
   const listPaddingTop = insets.top + HEADER_BAR_TOP_PAD + filterChipsHeight + 10 + HEADER_ROW;
 
   const screenWidth = Dimensions.get('window').width;
-  const GRID_PADDING = 16;  // padding on each side of the list
-  const GRID_GUTTER  = 16;  // gap between the two columns
-  const CARD_WIDTH   = Math.floor((screenWidth - GRID_PADDING * 2 - GRID_GUTTER) / 2);
-  const CARD_HEIGHT  = Math.round(CARD_WIDTH * 1.45);
+  const GRID_PADDING = 16; // padding on each side of the list
+  const GRID_GUTTER = 16; // gap between the two columns
+  const CARD_WIDTH = Math.floor((screenWidth - GRID_PADDING * 2 - GRID_GUTTER) / 2);
+  const CARD_HEIGHT = Math.round(CARD_WIDTH * 1.45);
   // Group users into pairs for manual 2-column rows
-  const rowPairs = useMemo(() => {
-    const pairs: [typeof users[number], typeof users[number] | null][] = [];
+  const rowPairs = useMemo((): DiscoverGridRow[] => {
+    const pairs: DiscoverGridRow[] = [];
     for (let i = 0; i < users.length; i += 2) {
       pairs.push([users[i], users[i + 1] ?? null]);
     }
@@ -256,7 +293,6 @@ export default function DiscoverScreen() {
 
   return (
     <View style={s.screen}>
-
       {/* ── Full-screen scrollable grid (stays under header in z-order) ── */}
       <View style={[s.flex, s.listUnderHeader]}>
         <AnimatedFlashList
@@ -286,28 +322,28 @@ export default function DiscoverScreen() {
             />
           }
           renderItem={({ item }) => {
-            const pair = item as [User, User | null];
+            const pair: DiscoverGridRow = item;
             return (
-            <View style={s.gridRow}>
-              <UserCard
-                user={pair[0]}
-                cardWidth={CARD_WIDTH}
-                cardHeight={CARD_HEIGHT}
-                beforeNavigate={beforeProfileNavigate}
-                onLongPress={handleLongPressUser}
-              />
-              {pair[1] ? (
+              <View style={s.gridRow}>
                 <UserCard
-                  user={pair[1]}
+                  user={pair[0]}
                   cardWidth={CARD_WIDTH}
                   cardHeight={CARD_HEIGHT}
                   beforeNavigate={beforeProfileNavigate}
                   onLongPress={handleLongPressUser}
                 />
-              ) : (
-                <View style={[s.gridRowSpacer, { width: CARD_WIDTH }]} />
-              )}
-            </View>
+                {pair[1] ? (
+                  <UserCard
+                    user={pair[1]}
+                    cardWidth={CARD_WIDTH}
+                    cardHeight={CARD_HEIGHT}
+                    beforeNavigate={beforeProfileNavigate}
+                    onLongPress={handleLongPressUser}
+                  />
+                ) : (
+                  <View style={[s.gridRowSpacer, { width: CARD_WIDTH }]} />
+                )}
+              </View>
             );
           }}
           ListEmptyComponent={
@@ -320,16 +356,18 @@ export default function DiscoverScreen() {
             ) : fetchError ? (
               <View style={s.emptyState}>
                 <Ionicons name="cloud-offline-outline" size={44} color={COLORS.textMuted} />
-                <Text style={s.emptyTitle}>
-                  Could not load Discover
-                </Text>
-                <Text style={s.emptyBody}>
-                  {fetchError}
-                </Text>
+                <Text style={s.emptyTitle}>Could not load Discover</Text>
+                <Text style={s.emptyBody}>{fetchError}</Text>
                 <TouchableOpacity
                   onPress={() => {
                     clearFetchError();
-                    if (user) void fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
+                    if (user)
+                      void fetchUsers({
+                        userId: user.id,
+                        interestedIn: user.interested_in,
+                        reset: true,
+                        agePref,
+                      });
                   }}
                   style={s.primaryCta}
                 >
@@ -339,9 +377,7 @@ export default function DiscoverScreen() {
             ) : (
               <View style={[s.emptyState, s.emptyStateTight]}>
                 <Text style={s.emptyEmoji}>🌍</Text>
-                <Text style={s.emptyTitle}>
-                  No members found
-                </Text>
+                <Text style={s.emptyTitle}>No members found</Text>
                 <Text style={s.emptyBody}>
                   Try widening your filters and more Africana members will appear.
                 </Text>
@@ -349,7 +385,13 @@ export default function DiscoverScreen() {
                   <TouchableOpacity
                     onPress={() => {
                       resetFilters();
-                      if (user) void fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
+                      if (user)
+                        void fetchUsers({
+                          userId: user.id,
+                          interestedIn: user.interested_in,
+                          reset: true,
+                          agePref,
+                        });
                     }}
                     style={s.primaryCta}
                   >
@@ -368,7 +410,13 @@ export default function DiscoverScreen() {
                     <TouchableOpacity
                       onPress={() => {
                         clearFetchError();
-                        if (user) void fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
+                        if (user)
+                          void fetchUsers({
+                            userId: user.id,
+                            interestedIn: user.interested_in,
+                            reset: true,
+                            agePref,
+                          });
                       }}
                       style={s.footerRetryBtn}
                     >
@@ -382,9 +430,7 @@ export default function DiscoverScreen() {
                   </View>
                 ) : !hasMore ? (
                   <View style={s.footerEnd}>
-                    <Text style={s.footerEndText}>
-                      All caught up
-                    </Text>
+                    <Text style={s.footerEndText}>All caught up</Text>
                   </View>
                 ) : null}
               </View>
@@ -408,21 +454,23 @@ export default function DiscoverScreen() {
         >
           <View style={s.headerRow}>
             <View style={s.headerTitleWrap}>
-              <Text
-                accessibilityRole="header"
-                style={s.headerTitle}
-                numberOfLines={1}
-              >
+              <Text accessibilityRole="header" style={s.headerTitle} numberOfLines={1}>
                 Discover
               </Text>
             </View>
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : 'Open filters'}
+              accessibilityLabel={
+                activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : 'Open filters'
+              }
               onPress={() => setShowFilters(true)}
               style={[s.filterBtn, activeFilterCount > 0 && s.filterBtnActive]}
             >
-              <Ionicons name="options-outline" size={18} color={activeFilterCount > 0 ? COLORS.primary : COLORS.earth} />
+              <Ionicons
+                name="options-outline"
+                size={18}
+                color={activeFilterCount > 0 ? COLORS.primary : COLORS.earth}
+              />
               <Text style={[s.filterTxt, activeFilterCount > 0 && { color: COLORS.primary }]}>
                 Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
               </Text>
@@ -442,7 +490,9 @@ export default function DiscoverScreen() {
                   activeOpacity={0.7}
                   hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                 >
-                  <Text style={s.chipTxt} numberOfLines={1}>{chip.label}</Text>
+                  <Text style={s.chipTxt} numberOfLines={1}>
+                    {chip.label}
+                  </Text>
                   <Ionicons name="close" size={13} color={COLORS.primary} />
                 </TouchableOpacity>
               ))}

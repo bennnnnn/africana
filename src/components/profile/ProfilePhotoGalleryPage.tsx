@@ -43,7 +43,15 @@ export function ProfilePhotoGalleryPage({
 
   if (loading) {
     return (
-      <View style={{ width: winWidth, height: winHeight, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+      <View
+        style={{
+          width: winWidth,
+          height: winHeight,
+          backgroundColor: '#000',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
         <ActivityIndicator color="#FFF" />
       </View>
     );

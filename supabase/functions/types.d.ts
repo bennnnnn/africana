@@ -10,7 +10,5 @@ declare namespace Deno {
     set(key: string, value: string): void;
     toObject(): Record<string, string>;
   };
-  export function serve(
-    handler: (req: Request) => Response | Promise<Response>,
-  ): void;
+  export function serve(handler: (req: Request) => Response | Promise<Response>): void;
 }

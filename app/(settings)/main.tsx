@@ -10,7 +10,10 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
       <SettingsHeaderBar title="Settings" titleAlign="leading" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={settingsStyles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={settingsStyles.scrollContent}
+      >
         <Text style={settingsStyles.screenIntro}>
           Manage privacy, alerts, premium options, and your account.
         </Text>

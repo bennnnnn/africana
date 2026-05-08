@@ -21,7 +21,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  fieldLabel: { fontSize: FONT.xs, color: COLORS.textSecondary, fontWeight: FONT.semibold, marginBottom: 2 },
+  fieldLabel: {
+    fontSize: FONT.xs,
+    color: COLORS.textSecondary,
+    fontWeight: FONT.semibold,
+    marginBottom: 2,
+  },
   fieldValue: { fontSize: FONT.md, color: COLORS.textStrong, fontWeight: FONT.semibold },
 });
 

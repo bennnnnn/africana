@@ -76,11 +76,17 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   const isOwn = item.sender_id === userId;
   const isTemp = item.id.startsWith('temp-');
   const bubbleBg = isSelected
-    ? (isOwn ? COLORS.primaryDark : COLORS.savannaDark)
-    : (isOwn ? COLORS.primary : COLORS.savanna);
+    ? isOwn
+      ? COLORS.primaryDark
+      : COLORS.savannaDark
+    : isOwn
+      ? COLORS.primary
+      : COLORS.savanna;
   const tailCornerOverride = isGroupEnd
     ? null
-    : (isOwn ? { borderBottomRightRadius: 18 } : { borderBottomLeftRadius: 18 });
+    : isOwn
+      ? { borderBottomRightRadius: 18 }
+      : { borderBottomLeftRadius: 18 };
   const metaColor = isOwn ? 'rgba(255,255,255,0.78)' : COLORS.textMuted;
   const readColor = item.read_at
     ? COLORS.gold
@@ -90,7 +96,13 @@ export const ChatMessageRow = memo(function ChatMessageRow({
 
   return (
     <View style={{ marginBottom: isGroupEnd ? 10 : 2, marginTop: isGroupStart ? 4 : 0 }}>
-      <View style={{ flexDirection: 'row', justifyContent: isOwn ? 'flex-end' : 'flex-start', alignItems: 'center' }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: isOwn ? 'flex-end' : 'flex-start',
+          alignItems: 'center',
+        }}
+      >
         {!isOwn && isSelected && (
           <View style={{ marginRight: 8, marginLeft: 12 }}>
             <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
@@ -112,7 +124,9 @@ export const ChatMessageRow = memo(function ChatMessageRow({
                 tailCornerOverride,
               ]}
             >
-              <Text style={[msgS.bubbleText, { color: isOwn ? COLORS.white : COLORS.textStrong }]}>{item.content}</Text>
+              <Text style={[msgS.bubbleText, { color: isOwn ? COLORS.white : COLORS.textStrong }]}>
+                {item.content}
+              </Text>
               <View style={[msgS.bubbleMetaRow, { alignSelf: 'flex-end' }]}>
                 <Text style={[msgS.bubbleMetaText, { color: metaColor }]}>
                   {dayjs(item.created_at).format('h:mm A')}
@@ -125,12 +139,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
               </View>
             </View>
             {isGroupEnd && (
-              <View
-                style={[
-                  isOwn ? msgS.tailOwn : msgS.tailOther,
-                  { borderTopColor: bubbleBg },
-                ]}
-              />
+              <View style={[isOwn ? msgS.tailOwn : msgS.tailOther, { borderTopColor: bubbleBg }]} />
             )}
             {msgReactions.length > 0 && (
               <View

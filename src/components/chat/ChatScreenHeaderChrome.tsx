@@ -33,43 +33,53 @@ type PeerProps = {
 
 type Props = SelectionProps | PeerProps;
 
-export function ChatScreenHeaderChrome(props: Props) {
-  if (props.mode === 'selection') {
-    const { selectionCount, showDelete, onCloseSelection, onCopy, onDelete } = props;
-    return (
-      <View style={s.header}>
+function ChatScreenHeaderSelectionChrome({
+  selectionCount,
+  showDelete,
+  onCloseSelection,
+  onCopy,
+  onDelete,
+}: Omit<SelectionProps, 'mode'>) {
+  return (
+    <View style={s.header}>
+      <TouchableOpacity
+        onPress={onCloseSelection}
+        style={s.backBtn}
+        accessibilityLabel="Cancel selection"
+        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+      >
+        <Ionicons name="close" size={24} color={COLORS.textStrong} />
+      </TouchableOpacity>
+      <Text style={[s.headerName, { flex: 1, marginLeft: 8 }]}>{selectionCount} selected</Text>
+      <TouchableOpacity
+        onPress={onCopy}
+        style={s.iconBtn}
+        accessibilityLabel="Copy message"
+        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+      >
+        <Ionicons name="copy-outline" size={22} color={COLORS.textStrong} />
+      </TouchableOpacity>
+      {showDelete ? (
         <TouchableOpacity
-          onPress={onCloseSelection}
-          style={s.backBtn}
-          accessibilityLabel="Cancel selection"
-          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-        >
-          <Ionicons name="close" size={24} color={COLORS.textStrong} />
-        </TouchableOpacity>
-        <Text style={[s.headerName, { flex: 1, marginLeft: 8 }]}>{selectionCount} selected</Text>
-        <TouchableOpacity
-          onPress={onCopy}
+          onPress={onDelete}
           style={s.iconBtn}
-          accessibilityLabel="Copy message"
+          accessibilityLabel="Delete message"
           hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
         >
-          <Ionicons name="copy-outline" size={22} color={COLORS.textStrong} />
+          <Ionicons name="trash-outline" size={22} color={COLORS.error} />
         </TouchableOpacity>
-        {showDelete ? (
-          <TouchableOpacity
-            onPress={onDelete}
-            style={s.iconBtn}
-            accessibilityLabel="Delete message"
-            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-          >
-            <Ionicons name="trash-outline" size={22} color={COLORS.error} />
-          </TouchableOpacity>
-        ) : null}
-      </View>
-    );
-  }
+      ) : null}
+    </View>
+  );
+}
 
-  const { peer, avatar, avatarFallback, peerTyping, onOpenMenu } = props;
+function ChatScreenHeaderPeerChrome({
+  peer,
+  avatar,
+  avatarFallback,
+  peerTyping,
+  onOpenMenu,
+}: Omit<PeerProps, 'mode'>) {
   const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
   const displayOnline =
     peer &&
@@ -157,10 +167,39 @@ export function ChatScreenHeaderChrome(props: Props) {
       )}
 
       {peer ? (
-        <TouchableOpacity onPress={onOpenMenu} style={s.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+        <TouchableOpacity
+          onPress={onOpenMenu}
+          style={s.iconBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+        >
           <Ionicons name="ellipsis-vertical" size={22} color={COLORS.textStrong} />
         </TouchableOpacity>
       ) : null}
     </View>
+  );
+}
+
+export function ChatScreenHeaderChrome(props: Props) {
+  if (props.mode === 'selection') {
+    const { selectionCount, showDelete, onCloseSelection, onCopy, onDelete } = props;
+    return (
+      <ChatScreenHeaderSelectionChrome
+        selectionCount={selectionCount}
+        showDelete={showDelete}
+        onCloseSelection={onCloseSelection}
+        onCopy={onCopy}
+        onDelete={onDelete}
+      />
+    );
+  }
+  const { peer, avatar, avatarFallback, peerTyping, onOpenMenu } = props;
+  return (
+    <ChatScreenHeaderPeerChrome
+      peer={peer}
+      avatar={avatar}
+      avatarFallback={avatarFallback}
+      peerTyping={peerTyping}
+      onOpenMenu={onOpenMenu}
+    />
   );
 }

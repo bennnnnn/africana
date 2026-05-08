@@ -168,7 +168,10 @@ export async function getCachedConversationSnapshot(
   });
 }
 
-export async function replaceCachedConversations(userId: string, conversations: Conversation[]): Promise<void> {
+export async function replaceCachedConversations(
+  userId: string,
+  conversations: Conversation[],
+): Promise<void> {
   if (!userId) return;
   await runSerialized(async () => {
     const db = await getDb();
@@ -215,7 +218,10 @@ export async function getCachedMessages(conversationId: string): Promise<Message
   });
 }
 
-export async function replaceCachedMessages(conversationId: string, messages: Message[]): Promise<void> {
+export async function replaceCachedMessages(
+  conversationId: string,
+  messages: Message[],
+): Promise<void> {
   if (!conversationId) return;
   await runSerialized(async () => {
     const db = await getDb();
@@ -246,27 +252,34 @@ export async function clearCachedMessages(conversationId: string): Promise<void>
   });
 }
 
-export async function deleteCachedConversation(userId: string, conversationId: string): Promise<void> {
+export async function deleteCachedConversation(
+  userId: string,
+  conversationId: string,
+): Promise<void> {
   if (!userId || !conversationId) return;
   await runSerialized(async () => {
     const db = await getDb();
     if (!db) return;
-    await db.runAsync('DELETE FROM cached_conversations WHERE user_id = ? AND conversation_id = ?', userId, conversationId);
-    
+    await db.runAsync(
+      'DELETE FROM cached_conversations WHERE user_id = ? AND conversation_id = ?',
+      userId,
+      conversationId,
+    );
+
     // Also remove from snapshot
     const snapshotRow = await db.getFirstAsync<{ payload: string }>(
       'SELECT payload FROM cached_conversation_snapshots WHERE user_id = ?',
-      userId
+      userId,
     );
     if (snapshotRow?.payload) {
       try {
         const parsed = JSON.parse(snapshotRow.payload);
         if (Array.isArray(parsed)) {
-          const filtered = parsed.filter(c => c.id !== conversationId);
+          const filtered = parsed.filter((c) => c.id !== conversationId);
           await db.runAsync(
             'UPDATE cached_conversation_snapshots SET payload = ? WHERE user_id = ?',
             JSON.stringify(filtered),
-            userId
+            userId,
           );
         }
       } catch (e) {

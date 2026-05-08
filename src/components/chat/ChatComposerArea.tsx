@@ -35,8 +35,11 @@ export function ChatComposerArea({
   if (variant === 'outgoing-off') {
     return (
       <View style={[s.disabledBar, { paddingBottom: disabledBarBottomPad }]}>
-        <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}>
-          Your messages are turned off. Open Settings → Privacy and turn on Receive messages to send.
+        <Text
+          style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}
+        >
+          Your messages are turned off. Open Settings → Privacy and turn on Receive messages to
+          send.
         </Text>
       </View>
     );
@@ -44,7 +47,9 @@ export function ChatComposerArea({
   if (variant === 'blocked') {
     return (
       <View style={[s.disabledBar, { paddingBottom: disabledBarBottomPad }]}>
-        <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}>
+        <Text
+          style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}
+        >
           {UI_TOAST.openChatBlocked}
         </Text>
       </View>
@@ -53,7 +58,9 @@ export function ChatComposerArea({
   if (variant === 'peer-off') {
     return (
       <View style={[s.disabledBar, { paddingBottom: disabledBarBottomPad }]}>
-        <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}>
+        <Text
+          style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}
+        >
           This person has turned off receiving messages in their settings.
         </Text>
       </View>

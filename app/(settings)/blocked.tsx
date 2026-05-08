@@ -1,12 +1,5 @@
 import React, { memo, useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -207,7 +200,12 @@ export default function BlockedUsersScreen() {
             title="Something went wrong"
             description={loadError}
           />
-          <Button title="Try again" fullWidth onPress={() => void fetchBlockedUsers()} style={{ marginTop: 20 }} />
+          <Button
+            title="Try again"
+            fullWidth
+            onPress={() => void fetchBlockedUsers()}
+            style={{ marginTop: 20 }}
+          />
         </View>
       ) : (
         <FlatList

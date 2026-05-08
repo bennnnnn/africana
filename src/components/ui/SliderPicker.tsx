@@ -39,14 +39,30 @@ export function SliderPicker({
 
   return (
     <View style={{ marginBottom: 20 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 8,
+        }}
+      >
         <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.text }}>{label}</Text>
-        <View style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: COLORS.primarySurface }}>
+        <View
+          style={{
+            paddingHorizontal: 14,
+            paddingVertical: 7,
+            borderRadius: 20,
+            backgroundColor: COLORS.primarySurface,
+          }}
+        >
           <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.primary }}>{display}</Text>
         </View>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={{ fontSize: 11, color: COLORS.textMuted, width: 32, textAlign: 'right' }}>{min}</Text>
+        <Text style={{ fontSize: 11, color: COLORS.textMuted, width: 32, textAlign: 'right' }}>
+          {min}
+        </Text>
         <View
           style={{ flex: 1, height: 52, justifyContent: 'center' }}
           onLayout={(event) => setSliderWidth(event.nativeEvent.layout.width)}
@@ -137,19 +153,30 @@ export function RangeSlider({
 }: RangeSliderProps) {
   const fallbackWidth = width - horizontalPadding * 2;
   const [containerWidth, setContainerWidth] = useState(fallbackWidth);
-  const trackWidth = useMemo(
-    () => Math.max(180, containerWidth - 36),
-    [containerWidth],
-  );
+  const trackWidth = useMemo(() => Math.max(180, containerWidth - 36), [containerWidth]);
 
   return (
     <View
       style={{ marginBottom: 20, width: '100%', alignSelf: 'stretch' }}
       onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
     >
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 14,
+        }}
+      >
         <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.text }}>{label}</Text>
-        <View style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: COLORS.primarySurface }}>
+        <View
+          style={{
+            paddingHorizontal: 14,
+            paddingVertical: 7,
+            borderRadius: 20,
+            backgroundColor: COLORS.primarySurface,
+          }}
+        >
           <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.primary }}>
             {minValue} – {maxValue} {unit}
           </Text>

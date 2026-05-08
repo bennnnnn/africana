@@ -37,7 +37,11 @@ export function MultiChipSelect({
         {options.map((opt) => {
           const on = values.includes(opt);
           return (
-            <Pressable key={opt} onPress={() => onToggle(opt)} style={[styles.chip, on && styles.chipOn]}>
+            <Pressable
+              key={opt}
+              onPress={() => onToggle(opt)}
+              style={[styles.chip, on && styles.chipOn]}
+            >
               <Text style={[styles.chipTxt, on && styles.chipTxtOn]}>{opt}</Text>
             </Pressable>
           );

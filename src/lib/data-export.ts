@@ -16,8 +16,7 @@ import { supabase } from '@/lib/supabase';
  * machine-readable format" requirement.
  */
 export async function exportAndShareUserData(): Promise<
-  | { ok: true }
-  | { ok: false; reason: 'unauthenticated' | 'rpc_failed' | 'share_cancelled' }
+  { ok: true } | { ok: false; reason: 'unauthenticated' | 'rpc_failed' | 'share_cancelled' }
 > {
   const { data, error } = await supabase.rpc('export_user_data');
 

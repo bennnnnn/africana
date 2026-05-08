@@ -5,7 +5,10 @@ import type { User } from '@/types';
 
 export function useMeProfileCultureData(user: User | null) {
   const [cultureEthnicityOpts, setCultureEthnicityOpts] = useState<string[]>([]);
-  const [cultureLanguageOpts, setCultureLanguageOpts] = useState<{ suggested: string[]; all: string[] }>({
+  const [cultureLanguageOpts, setCultureLanguageOpts] = useState<{
+    suggested: string[];
+    all: string[];
+  }>({
     suggested: [],
     all: [],
   });
@@ -14,7 +17,9 @@ export function useMeProfileCultureData(user: User | null) {
   const loadCultureData = useCallback(async () => {
     if (!user) return;
     const livingCountryData = resolveCountryFromStored(user.country ?? '');
-    const livesInAfrica = livingCountryData ? AFRICAN_COUNTRY_CODES.has(livingCountryData.code) : false;
+    const livesInAfrica = livingCountryData
+      ? AFRICAN_COUNTRY_CODES.has(livingCountryData.code)
+      : false;
 
     let countryCode: string | undefined;
     let subdivision: string;

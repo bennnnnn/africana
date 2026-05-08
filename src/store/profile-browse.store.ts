@@ -9,7 +9,6 @@ type ProfileBrowseState = {
 
 export const useProfileBrowseStore = create<ProfileBrowseState>((set) => ({
   orderedUserIds: [],
-  setOrderedUserIds: (ids) =>
-    set({ orderedUserIds: [...new Set(ids.filter(Boolean))] }),
+  setOrderedUserIds: (ids) => set({ orderedUserIds: [...new Set(ids.filter(Boolean))] }),
   clearOrderedUserIds: () => set({ orderedUserIds: [] }),
 }));

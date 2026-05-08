@@ -1,9 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-} from 'react-native';
+import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,9 +28,7 @@ function hasAppleIdentity(identities: { provider?: string }[] | undefined): bool
 }
 
 export default function DeleteAccountScreen() {
-  const { user, session } = useAuthStore(
-    useShallow((s) => ({ user: s.user, session: s.session })),
-  );
+  const { user, session } = useAuthStore(useShallow((s) => ({ user: s.user, session: s.session })));
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -61,7 +55,8 @@ export default function DeleteAccountScreen() {
         setLoading(false);
         appDialog({
           title: 'Can’t verify sign-in',
-          message: 'We couldn’t find an email on this account. Please contact support to delete your account.',
+          message:
+            'We couldn’t find an email on this account. Please contact support to delete your account.',
           icon: 'help-circle-outline',
         });
         return;
@@ -99,7 +94,9 @@ export default function DeleteAccountScreen() {
           message:
             'The Apple ID you used does not match this Africana profile. You have been signed out for your security.',
           icon: 'alert-circle-outline',
-          actions: [{ label: 'OK', style: 'primary', onPress: () => router.replace('/(auth)/welcome') }],
+          actions: [
+            { label: 'OK', style: 'primary', onPress: () => router.replace('/(auth)/welcome') },
+          ],
         });
         return;
       }
@@ -123,7 +120,9 @@ export default function DeleteAccountScreen() {
           message:
             'The Google account you picked does not match this Africana profile. You have been signed out for your security.',
           icon: 'alert-circle-outline',
-          actions: [{ label: 'OK', style: 'primary', onPress: () => router.replace('/(auth)/welcome') }],
+          actions: [
+            { label: 'OK', style: 'primary', onPress: () => router.replace('/(auth)/welcome') },
+          ],
         });
         return;
       }
@@ -155,7 +154,9 @@ export default function DeleteAccountScreen() {
       title: 'Account deleted',
       message: 'Your account has been permanently deleted.',
       icon: 'checkmark-circle-outline',
-      actions: [{ label: 'OK', style: 'primary', onPress: () => router.replace('/(auth)/welcome') }],
+      actions: [
+        { label: 'OK', style: 'primary', onPress: () => router.replace('/(auth)/welcome') },
+      ],
     });
   };
 
@@ -197,12 +198,27 @@ export default function DeleteAccountScreen() {
           <Ionicons name="warning-outline" size={32} color={COLORS.error} />
         </View>
 
-        <Text style={{ fontSize: FONT.xxl, fontWeight: FONT.extrabold, color: COLORS.text, marginBottom: 12 }}>
+        <Text
+          style={{
+            fontSize: FONT.xxl,
+            fontWeight: FONT.extrabold,
+            color: COLORS.text,
+            marginBottom: 12,
+          }}
+        >
           Delete your account?
         </Text>
 
-        <Text style={{ fontSize: FONT.md, color: COLORS.textSecondary, lineHeight: 22, marginBottom: 24 }}>
-          This action is permanent and cannot be undone. Once deleted, all of your data will be erased, including:
+        <Text
+          style={{
+            fontSize: FONT.md,
+            color: COLORS.textSecondary,
+            lineHeight: 22,
+            marginBottom: 24,
+          }}
+        >
+          This action is permanent and cannot be undone. Once deleted, all of your data will be
+          erased, including:
         </Text>
 
         {[
@@ -211,7 +227,10 @@ export default function DeleteAccountScreen() {
           'Your likes and connections',
           'Account settings and preferences',
         ].map((item, i) => (
-          <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <View
+            key={i}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}
+          >
             <Ionicons name="close-circle" size={18} color={COLORS.error} />
             <Text style={{ fontSize: FONT.sm, color: COLORS.text }}>{item}</Text>
           </View>

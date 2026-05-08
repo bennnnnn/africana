@@ -1,11 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,18 +12,19 @@ import { appDialog } from '@/lib/app-dialog';
 
 export default function ResetPasswordScreen() {
   const params = useLocalSearchParams<{ url?: string }>();
-  const [password, setPassword]     = useState('');
-  const [confirm, setConfirm]       = useState('');
-  const [loading, setLoading]       = useState(false);
-  const [done, setDone]             = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
   const [restoringSession, setRestoringSession] = useState(Boolean(params.url));
 
   useEffect(() => {
     let active = true;
 
     if (!params.url) {
-      setRestoringSession(false);
+      const t = setTimeout(() => setRestoringSession(false), 0);
       return () => {
+        clearTimeout(t);
         active = false;
       };
     }
@@ -55,7 +50,11 @@ export default function ResetPasswordScreen() {
   const handleReset = async () => {
     if (restoringSession) return;
     if (password.length < 6) {
-      appDialog({ title: 'Weak password', message: 'Password must be at least 6 characters.', icon: 'key-outline' });
+      appDialog({
+        title: 'Weak password',
+        message: 'Password must be at least 6 characters.',
+        icon: 'key-outline',
+      });
       return;
     }
     if (password !== confirm) {
@@ -69,7 +68,11 @@ export default function ResetPasswordScreen() {
       // updateUser updates the password for the currently authenticated user.
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
-        appDialog({ title: 'Something went wrong', message: error.message, icon: 'alert-circle-outline' });
+        appDialog({
+          title: 'Something went wrong',
+          message: error.message,
+          icon: 'alert-circle-outline',
+        });
       } else {
         setDone(true);
       }
@@ -80,25 +83,44 @@ export default function ResetPasswordScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, padding: 24 }}>
-
-        <TouchableOpacity onPress={() => router.replace('/(auth)/login')} style={{ marginBottom: 32 }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, padding: 24 }}
+      >
+        <TouchableOpacity
+          onPress={() => router.replace('/(auth)/login')}
+          style={{ marginBottom: 32 }}
+        >
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
 
         {done ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-            <View style={{
-              width: 80, height: 80, borderRadius: 40,
-              backgroundColor: COLORS.successSurface,
-              alignItems: 'center', justifyContent: 'center',
-            }}>
+            <View
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                backgroundColor: COLORS.successSurface,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               <Ionicons name="checkmark-circle-outline" size={40} color={COLORS.success} />
             </View>
-            <Text style={{ fontSize: 24, fontWeight: '800', color: COLORS.text, textAlign: 'center' }}>
+            <Text
+              style={{ fontSize: 24, fontWeight: '800', color: COLORS.text, textAlign: 'center' }}
+            >
               Password updated!
             </Text>
-            <Text style={{ fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 }}>
+            <Text
+              style={{
+                fontSize: 15,
+                color: COLORS.textSecondary,
+                textAlign: 'center',
+                lineHeight: 22,
+              }}
+            >
               Your password has been changed successfully.
             </Text>
             <TouchableOpacity
@@ -106,7 +128,8 @@ export default function ResetPasswordScreen() {
               style={{
                 marginTop: 16,
                 backgroundColor: COLORS.primary,
-                paddingHorizontal: 32, paddingVertical: 14,
+                paddingHorizontal: 32,
+                paddingVertical: 14,
                 borderRadius: 14,
               }}
             >
@@ -118,7 +141,14 @@ export default function ResetPasswordScreen() {
             <Text style={{ fontSize: 30, fontWeight: '800', color: COLORS.text, marginBottom: 8 }}>
               Set new password
             </Text>
-            <Text style={{ fontSize: 15, color: COLORS.textSecondary, marginBottom: 32, lineHeight: 22 }}>
+            <Text
+              style={{
+                fontSize: 15,
+                color: COLORS.textSecondary,
+                marginBottom: 32,
+                lineHeight: 22,
+              }}
+            >
               Choose a strong password for your account.
             </Text>
             {restoringSession ? (
@@ -154,7 +184,6 @@ export default function ResetPasswordScreen() {
             />
           </>
         )}
-
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

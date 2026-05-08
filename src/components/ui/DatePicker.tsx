@@ -17,7 +17,20 @@ const { width } = Dimensions.get('window');
 const ITEM_HEIGHT = 48;
 const VISIBLE_ITEMS = 5;
 
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
 
 function daysInMonth(month: number, year: number) {
   return new Date(year, month, 0).getDate();
@@ -57,12 +70,7 @@ function Wheel({ items, selectedIndex, onSelect }: WheelProps) {
       >
         {items.map((item, i) => (
           <View key={i} style={styles.wheelItem}>
-            <Text
-              style={[
-                styles.wheelText,
-                i === selectedIndex && styles.wheelTextSelected,
-              ]}
-            >
+            <Text style={[styles.wheelText, i === selectedIndex && styles.wheelTextSelected]}>
               {item}
             </Text>
           </View>
@@ -79,23 +87,31 @@ interface DatePickerProps {
   placeholder?: string;
 }
 
-export function DatePicker({ value, onChange, label, placeholder = 'Select date' }: DatePickerProps) {
+export function DatePicker({
+  value,
+  onChange,
+  label,
+  placeholder = 'Select date',
+}: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const now = new Date();
 
   const [day, setDay] = useState(value ? value.getDate() - 1 : 0);
   const [month, setMonth] = useState(value ? value.getMonth() : 0);
   const [year, setYear] = useState(() => {
-    if (value) return now.getFullYear() - value.getFullYear() > 0
-      ? now.getFullYear() - value.getFullYear()
-      : 25;
+    if (value)
+      return now.getFullYear() - value.getFullYear() > 0
+        ? now.getFullYear() - value.getFullYear()
+        : 25;
     return 25; // default ~25 years ago
   });
 
   const minYear = 1940;
   const maxYear = now.getFullYear() - 18;
   const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => String(maxYear - i));
-  const days = Array.from({ length: daysInMonth(month + 1, Number(years[year])) }, (_, i) => String(i + 1).padStart(2, '0'));
+  const days = Array.from({ length: daysInMonth(month + 1, Number(years[year])) }, (_, i) =>
+    String(i + 1).padStart(2, '0'),
+  );
 
   const handleDone = () => {
     const selectedYear = Number(years[year]);
@@ -110,14 +126,26 @@ export function DatePicker({ value, onChange, label, placeholder = 'Select date'
     : null;
 
   const age = value
-    ? now.getFullYear() - value.getFullYear() - (now < new Date(now.getFullYear(), value.getMonth(), value.getDate()) ? 1 : 0)
+    ? now.getFullYear() -
+      value.getFullYear() -
+      (now < new Date(now.getFullYear(), value.getMonth(), value.getDate()) ? 1 : 0)
     : null;
 
   return (
     <View style={{ marginBottom: 16 }}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <TouchableOpacity style={[styles.trigger, displayDate && styles.triggerOn]} onPress={() => setOpen(true)} activeOpacity={0.8}>
-        <Text style={[styles.triggerText, !displayDate && styles.placeholder, displayDate && styles.triggerTextOn]}>
+      <TouchableOpacity
+        style={[styles.trigger, displayDate && styles.triggerOn]}
+        onPress={() => setOpen(true)}
+        activeOpacity={0.8}
+      >
+        <Text
+          style={[
+            styles.triggerText,
+            !displayDate && styles.placeholder,
+            displayDate && styles.triggerTextOn,
+          ]}
+        >
           {displayDate ? `${displayDate}${age ? `  •  ${age} years old` : ''}` : placeholder}
         </Text>
         <Text style={{ fontSize: 18 }}>{displayDate ? '✅' : '📅'}</Text>

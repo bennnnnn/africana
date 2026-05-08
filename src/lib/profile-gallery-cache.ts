@@ -11,7 +11,10 @@ export function resetProfileGalleryModuleState(): void {
   prefetchedPhotoUris.clear();
 }
 
-export function buildFallbackPhotoList(fullName?: string | null, avatarUrl?: string | null): string[] {
+export function buildFallbackPhotoList(
+  fullName?: string | null,
+  avatarUrl?: string | null,
+): string[] {
   return avatarUrl
     ? [avatarUrl]
     : [`${DEFAULT_AVATAR}${encodeURIComponent((fullName ?? '?').charAt(0))}`];

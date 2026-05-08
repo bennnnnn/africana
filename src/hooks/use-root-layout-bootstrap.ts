@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { AppState, type AppStateStatus, InteractionManager } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Linking from 'expo-linking';
@@ -32,22 +32,39 @@ export function useRootLayoutBootstrap(params: {
   fontsLoaded: boolean;
   setInitialized: () => void;
   setSession: (session: any) => void;
-  hydrateUserFromServer: (userId: string, options?: { continueOnPartialFailure?: boolean }) => Promise<void>;
+  hydrateUserFromServer: (
+    userId: string,
+    options?: { continueOnPartialFailure?: boolean },
+  ) => Promise<void>;
 }) {
   const { router, fontsLoaded, setInitialized, setSession, hydrateUserFromServer } = params;
 
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const notifResponseSub = useRef<any>(null);
   const notifReceivedSub = useRef<any>(null);
+  const bootHydratedUserId = useRef<string | null>(null);
 
-  // Do not `require('expo-notifications')` in Expo Go — it logs noisy errors.
-  const isExpoGo = Constants.appOwnership === 'expo';
-  let Notifications: typeof import('expo-notifications') | null = null;
-  if (!isExpoGo) {
+  const expectedScheme = useMemo(() => {
+    // Expo Go uses exp+<scheme>. In builds, it's usually just <scheme>.
+    // We accept both but reject anything else.
+    const scheme = Linking.createURL('')?.split('://')[0] ?? 'africana';
+    // When Linking.createURL returns e.g. "exp+africana://", split gives "exp+africana".
+    // The base scheme for this app is "africana".
+    return scheme.includes('africana') ? 'africana' : scheme;
+  }, []);
+
+  function isTrustedInboundUrl(url: string): boolean {
     try {
-      Notifications = require('expo-notifications');
+      const parsed = Linking.parse(url);
+      const schemeOk = parsed.scheme === 'africana' || parsed.scheme === `exp+africana`;
+      if (!schemeOk) return false;
+      // Only accept the specific in-app auth/reset endpoints.
+      const path = (parsed.path ?? '').replace(/^\//, '');
+      if (path === 'auth/callback') return true;
+      if (path === 'reset-password') return true;
+      return false;
     } catch {
-      // unsupported environment
+      return false;
     }
   }
 
@@ -62,6 +79,7 @@ export function useRootLayoutBootstrap(params: {
   }
 
   useEffect(() => {
+    let cancelled = false;
     initSentry();
     void hydrateProfileSeedCache().catch(() => {});
     void initAnalytics();
@@ -79,17 +97,24 @@ export function useRootLayoutBootstrap(params: {
         try {
           setSession(session);
           if (session?.user?.id) {
-            await hydrateUserFromServer(session.user.id);
             const uid = session.user.id;
+            // Avoid double-hydration when onAuthStateChange fires INITIAL_SESSION.
+            bootHydratedUserId.current = uid;
+            await hydrateUserFromServer(uid);
             setSentryUser(uid);
             useAuthStore.getState().patchUser({ online_status: 'online' });
             InteractionManager.runAfterInteractions(() => {
               void setOnlineStatus(uid, 'online').catch(() => {});
-              void joinAppPresenceChannel(uid).catch((e) => logWarn('[presence] bootstrap join', e));
+              void joinAppPresenceChannel(uid).catch((e) =>
+                logWarn('[presence] bootstrap join', e),
+              );
               queueWelcomeEmail(uid);
               void registerForPushNotifications(uid).then((r) => {
                 if (!r.ok && r.reason !== 'expo_go') {
-                  logWarn('[push] register on bootstrap', { reason: r.reason, detail: r.detail ?? '' });
+                  logWarn('[push] register on bootstrap', {
+                    reason: r.reason,
+                    detail: r.detail ?? '',
+                  });
                 }
               });
               identify(uid);
@@ -106,20 +131,36 @@ export function useRootLayoutBootstrap(params: {
         finishBootstrap();
       });
 
-    if (Notifications?.addNotificationResponseReceivedListener) {
-      notifResponseSub.current = Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data as Record<string, string> | undefined;
-        if (data?.conversationId) {
-          router.push(`/(chat)/${data.conversationId}`);
-        } else if (data?.likesSegment && /^(matches|received|viewers|stars)$/.test(data.likesSegment)) {
-          router.push({ pathname: '/(tabs)/likes', params: { tab: data.likesSegment } });
-        } else if (data?.userId && isUuidString(data.userId)) {
-          router.push(`/(profile)/${data.userId}`);
-        }
-      });
-    }
-    if (Notifications?.addNotificationReceivedListener) {
-      notifReceivedSub.current = Notifications.addNotificationReceivedListener(() => {});
+    if (Constants.appOwnership !== 'expo') {
+      void import('expo-notifications')
+        .then((Notifications) => {
+          if (cancelled) return;
+          if (Notifications.addNotificationResponseReceivedListener) {
+            notifResponseSub.current = Notifications.addNotificationResponseReceivedListener(
+              (response) => {
+                const data = response.notification.request.content.data as
+                  | Record<string, string>
+                  | undefined;
+                if (data?.conversationId) {
+                  router.push(`/(chat)/${data.conversationId}`);
+                } else if (
+                  data?.likesSegment &&
+                  /^(matches|received|viewers|stars)$/.test(data.likesSegment)
+                ) {
+                  router.push({ pathname: '/(tabs)/likes', params: { tab: data.likesSegment } });
+                } else if (data?.userId && isUuidString(data.userId)) {
+                  router.push(`/(profile)/${data.userId}`);
+                }
+              },
+            );
+          }
+          if (Notifications.addNotificationReceivedListener) {
+            notifReceivedSub.current = Notifications.addNotificationReceivedListener(() => {});
+          }
+        })
+        .catch(() => {
+          /* native module unavailable */
+        });
     }
 
     const appStateSub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
@@ -130,12 +171,18 @@ export function useRootLayoutBootstrap(params: {
         .then(({ data: { session } }) => {
           if (!session?.user?.id) return;
           if (nextState === 'active' && prev !== 'active') {
-            void setOnlineStatus(session.user.id, 'online').catch((e) => logError('setOnlineStatus', e));
+            void setOnlineStatus(session.user.id, 'online').catch((e) =>
+              logError('setOnlineStatus', e),
+            );
             useAuthStore.getState().patchUser({ online_status: 'online' });
-            void joinAppPresenceChannel(session.user.id).catch((e) => logWarn('[presence] foreground join', e));
+            void joinAppPresenceChannel(session.user.id).catch((e) =>
+              logWarn('[presence] foreground join', e),
+            );
           } else if (nextState === 'background' || nextState === 'inactive') {
             void leaveAppPresenceChannel().catch(() => {});
-            void setOnlineStatus(session.user.id, 'offline').catch((e) => logError('setOnlineStatus', e));
+            void setOnlineStatus(session.user.id, 'offline').catch((e) =>
+              logError('setOnlineStatus', e),
+            );
             useAuthStore.getState().patchUser({ online_status: 'offline' });
           }
         })
@@ -149,13 +196,20 @@ export function useRootLayoutBootstrap(params: {
       if (session?.user?.id) {
         if (event === 'TOKEN_REFRESHED') return;
         const uid = session.user.id;
+        if (event === 'INITIAL_SESSION' && bootHydratedUserId.current === uid) {
+          // Boot path already hydrated this user.
+          return;
+        }
         setSentryUser(uid);
         void hydrateUserFromServer(uid, { continueOnPartialFailure: true });
         InteractionManager.runAfterInteractions(() => {
           queueWelcomeEmail(uid);
           void registerForPushNotifications(uid).then((r) => {
             if (!r.ok && r.reason !== 'expo_go') {
-              logWarn('[push] register on auth change', { reason: r.reason, detail: r.detail ?? '' });
+              logWarn('[push] register on auth change', {
+                reason: r.reason,
+                detail: r.detail ?? '',
+              });
             }
           });
           identify(uid);
@@ -175,6 +229,8 @@ export function useRootLayoutBootstrap(params: {
     });
 
     const handleUrl = async ({ url }: { url: string }) => {
+      if (!isTrustedInboundUrl(url)) return;
+
       if (url.includes('reset-password') || url.includes('type=recovery')) {
         router.push({ pathname: '/(auth)/reset-password', params: { url } });
         return;
@@ -188,7 +244,10 @@ export function useRootLayoutBootstrap(params: {
             queueWelcomeEmail(session.user.id);
             void registerForPushNotifications(session.user.id).then((r) => {
               if (!r.ok && r.reason !== 'expo_go') {
-                logWarn('[push] register on deep link', { reason: r.reason, detail: r.detail ?? '' });
+                logWarn('[push] register on deep link', {
+                  reason: r.reason,
+                  detail: r.detail ?? '',
+                });
               }
             });
             const { user } = useAuthStore.getState();
@@ -210,6 +269,7 @@ export function useRootLayoutBootstrap(params: {
     });
 
     return () => {
+      cancelled = true;
       subscription.unsubscribe();
       linkSub.remove();
       appStateSub.remove();
@@ -226,4 +286,3 @@ export function useRootLayoutBootstrap(params: {
     }
   }, [fontsLoaded]);
 }
-

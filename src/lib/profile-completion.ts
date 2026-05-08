@@ -45,7 +45,9 @@ export function getProfileStrength(user: User | null | undefined): {
   return { percent, nextMissing, items };
 }
 
-export function onboardingHrefFromSession(session: { user: { id: string; email?: string | null } }) {
+export function onboardingHrefFromSession(session: {
+  user: { id: string; email?: string | null };
+}) {
   return {
     pathname: '/(auth)/onboarding' as const,
     params: { userId: session.user.id, email: session.user.email ?? '' },

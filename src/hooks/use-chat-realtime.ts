@@ -94,6 +94,7 @@ export function useChatRealtime(params: {
           event: '*',
           schema: 'public',
           table: 'message_reactions',
+          filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
           const row = (payload.new ?? payload.old) as

@@ -63,8 +63,9 @@ export async function filterVisibleUserEntities<T extends EntityWithId>(
   userId: string,
   entities: T[],
 ): Promise<T[]> {
-  const unique = entities.filter((entity, index, arr) =>
-    !!entity?.id && arr.findIndex((candidate) => candidate.id === entity.id) === index,
+  const unique = entities.filter(
+    (entity, index, arr) =>
+      !!entity?.id && arr.findIndex((candidate) => candidate.id === entity.id) === index,
   );
 
   if (unique.length === 0) return [];

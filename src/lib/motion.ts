@@ -12,13 +12,15 @@ import type { Animated } from 'react-native';
 
 type SpringConfig = Pick<
   Animated.SpringAnimationConfig,
-  'tension' | 'friction' | 'useNativeDriver' | 'overshootClamping' | 'restDisplacementThreshold' | 'restSpeedThreshold'
+  | 'tension'
+  | 'friction'
+  | 'useNativeDriver'
+  | 'overshootClamping'
+  | 'restDisplacementThreshold'
+  | 'restSpeedThreshold'
 >;
 
-type TimingConfig = Pick<
-  Animated.TimingAnimationConfig,
-  'duration' | 'useNativeDriver' | 'easing'
->;
+type TimingConfig = Pick<Animated.TimingAnimationConfig, 'duration' | 'useNativeDriver' | 'easing'>;
 
 /** Default spring — buttons, taps, sheet pop-ins. iOS-native feel. */
 export const SPRING: SpringConfig = {

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Session } from '@supabase/supabase-js';
-import { User, UserSettings, type Gender } from '@/types';
+import { User, UserSettings } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { resetRateLimitWarnings } from '@/lib/rate-limit-warn';
 import {
@@ -70,8 +70,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   hydrateUserFromServer: async (userId, options) => {
     if (options?.continueOnPartialFailure) {
       await Promise.all([
-        get().fetchProfile(userId).catch((e) => console.error('fetchProfile (auth change)', e)),
-        get().fetchSettings(userId).catch((e) => console.error('fetchSettings (auth change)', e)),
+        get()
+          .fetchProfile(userId)
+          .catch((e) => console.error('fetchProfile (auth change)', e)),
+        get()
+          .fetchSettings(userId)
+          .catch((e) => console.error('fetchSettings (auth change)', e)),
       ]);
       return;
     }
@@ -91,7 +95,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (error) throw new Error(error.message);
     if (data) {
-      set({ user: { ...user, ...data, profile_photos: data.profile_photos ?? [], languages: data.languages ?? [], hobbies: data.hobbies ?? [] } });
+      set({
+        user: {
+          ...user,
+          ...data,
+          profile_photos: data.profile_photos ?? [],
+          languages: data.languages ?? [],
+          hobbies: data.hobbies ?? [],
+        },
+      });
     }
   },
 
@@ -131,18 +143,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     const { user } = get();
     if (user) {
-      await supabase
-        .from('user_settings')
-        .update({ push_token: null })
-        .eq('user_id', user.id);
-
-      await supabase
-        .from('profiles')
-        .update({ online_status: 'offline', last_seen: new Date().toISOString() })
-        .eq('id', user.id);
+      const results = await Promise.allSettled([
+        supabase.from('user_settings').update({ push_token: null }).eq('user_id', user.id),
+        supabase
+          .from('profiles')
+          .update({ online_status: 'offline', last_seen: new Date().toISOString() })
+          .eq('id', user.id),
+      ]);
+      for (const r of results) {
+        if (r.status === 'rejected') {
+          console.warn('[signOut] best-effort profile/settings update failed', r.reason);
+        } else if (r.value.error) {
+          console.warn('[signOut]', r.value.error.message);
+        }
+      }
     }
-    await supabase.auth.signOut();
-    resetRateLimitWarnings();
-    set({ session: null, user: null, settings: null });
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('[signOut] auth.signOut failed', e);
+    } finally {
+      resetRateLimitWarnings();
+      set({ session: null, user: null, settings: null });
+    }
   },
 }));

@@ -3,8 +3,7 @@ import { logWarn } from '@/lib/logger';
 
 export function isDuplicateSocialError(message?: string | null) {
   return (
-    typeof message === 'string' &&
-    (message.includes('duplicate key') || message.includes('23505'))
+    typeof message === 'string' && (message.includes('duplicate key') || message.includes('23505'))
   );
 }
 

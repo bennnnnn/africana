@@ -25,14 +25,14 @@ import { appDialog } from '@/lib/app-dialog';
 export default function LoginScreen() {
   const hydrateUserFromServer = useAuthStore((s) => s.hydrateUserFromServer);
   const [showEmailForm, setShowEmailForm] = useState(false);
-  const [email, setEmail]       = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const [touched, setTouched] = useState<{ email: boolean; password: boolean }>({
     email: false,
     password: false,
   });
-  const [loading, setLoading]   = useState(false);
+  const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const emailValidation = validateEmail(email);
   const passwordValidation = password
@@ -48,7 +48,10 @@ export default function LoginScreen() {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
     setLoading(false);
     if (error) {
       appDialog({ title: 'Sign in failed', message: error.message, icon: 'alert-circle-outline' });
@@ -96,8 +99,14 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, paddingBottom: 36 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, padding: 24, paddingBottom: 36 }}
+          keyboardShouldPersistTaps="handled"
+        >
           <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
             <Ionicons name="arrow-back" size={20} color={COLORS.text} />
           </TouchableOpacity>
@@ -107,7 +116,12 @@ export default function LoginScreen() {
             <Text style={s.subtitle}>Sign in to continue where you left off.</Text>
           </View>
 
-          <TouchableOpacity style={s.googleBtn} onPress={handleGoogle} disabled={googleLoading} activeOpacity={0.85}>
+          <TouchableOpacity
+            style={s.googleBtn}
+            onPress={handleGoogle}
+            disabled={googleLoading}
+            activeOpacity={0.85}
+          >
             {googleLoading ? (
               <ActivityIndicator size="small" color="#4285F4" />
             ) : (
@@ -125,7 +139,11 @@ export default function LoginScreen() {
           </View>
 
           {!showEmailForm ? (
-            <TouchableOpacity style={s.emailBtn} onPress={() => setShowEmailForm(true)} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={s.emailBtn}
+              onPress={() => setShowEmailForm(true)}
+              activeOpacity={0.85}
+            >
               <Ionicons name="mail-outline" size={20} color="#FFF" />
               <Text style={s.emailBtnText}>Continue with Email</Text>
             </TouchableOpacity>
@@ -143,7 +161,11 @@ export default function LoginScreen() {
                 autoCapitalize="none"
                 leftIcon="mail-outline"
                 placeholder="your@email.com"
-                validationState={getValidationState(showEmailState, emailValidation, Boolean(normalizedEmail))}
+                validationState={getValidationState(
+                  showEmailState,
+                  emailValidation,
+                  Boolean(normalizedEmail),
+                )}
                 error={showEmailState ? emailValidation.message : undefined}
                 autoFocus
               />
@@ -158,7 +180,11 @@ export default function LoginScreen() {
                 isPassword
                 leftIcon="lock-closed-outline"
                 placeholder="Your password"
-                validationState={getValidationState(showPasswordState, passwordValidation, Boolean(password))}
+                validationState={getValidationState(
+                  showPasswordState,
+                  passwordValidation,
+                  Boolean(password),
+                )}
                 error={showPasswordState ? passwordValidation.message : undefined}
               />
               <TouchableOpacity
@@ -174,9 +200,13 @@ export default function LoginScreen() {
           )}
 
           <View style={s.signupRow}>
-            <Text style={{ color: COLORS.textSecondary, fontSize: 14 }}>Don't have an account? </Text>
+            <Text style={{ color: COLORS.textSecondary, fontSize: 14 }}>
+              Don&apos;t have an account?{' '}
+            </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-              <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 14 }}>Sign Up</Text>
+              <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 14 }}>
+                Sign Up
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -197,8 +227,8 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  hero:     { marginBottom: 24 },
-  title:    { fontSize: 32, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
+  hero: { marginBottom: 24 },
+  title: { fontSize: 32, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
   subtitle: { fontSize: 15, color: COLORS.textSecondary, lineHeight: 22 },
   googleBtn: {
     flexDirection: 'row',

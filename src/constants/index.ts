@@ -9,50 +9,50 @@ export const COLORS = {
   primaryBorder: '#9FE3C6',
 
   /** Muted accent (labels, secondary chips) — neutral graphite */
-  earth:        '#3A3A3C',
-  earthLight:   '#8E8E93',
+  earth: '#3A3A3C',
+  earthLight: '#8E8E93',
   /** Subtle neutral surface tint for pills / icon wells (iOS-like) */
-  savanna:      '#F2F2F4',
-  savannaDark:  '#E5E5E7',
+  savanna: '#F2F2F4',
+  savannaDark: '#E5E5E7',
 
   /** Single accent: gold for highlights (premium, stars) */
-  gold:         '#F5A623',
-  goldSurface:  '#FFF4DE',
+  gold: '#F5A623',
+  goldSurface: '#FFF4DE',
   /** Forest green retained for nature accents */
-  green:        '#0E9F6E',
+  green: '#0E9F6E',
 
   // ── Surfaces ────────────────────────────────────────────────────────────────
   /** App background — clean near-white (big-company neutral) */
-  surface:  '#FFFFFF',
+  surface: '#FFFFFF',
   /** Secondary surface — grouped sections, subtle wells */
   surfaceAlt: '#F7F7F8',
-  card:     '#FFFFFF',
-  white:    '#FFFFFF',
-  inputBg:  '#FFFFFF',
+  card: '#FFFFFF',
+  white: '#FFFFFF',
+  inputBg: '#FFFFFF',
 
   // ── Text ───────────────────────────────────────────────────────────────────
   /** Apple-style neutral scale — crisp, high contrast */
-  text:          '#0B0B0C',
+  text: '#0B0B0C',
   textSecondary: '#4A4A4F',
-  textMuted:     '#8E8E93',
-  textInverse:   '#FFFFFF',
-  textStrong:    '#000000',
+  textMuted: '#8E8E93',
+  textInverse: '#FFFFFF',
+  textStrong: '#000000',
 
   // ── Borders ────────────────────────────────────────────────────────────────
   /** Neutral hairline divider — clean, non-tinted */
-  border:       '#EBEBED',
+  border: '#EBEBED',
   borderStrong: '#D6D6D9',
 
   // ── Semantic ───────────────────────────────────────────────────────────────
-  error:          '#E53935',
-  errorSurface:   '#FDECEC',
-  errorBorder:    '#F6BFBF',
-  success:        '#0E9F6E',
+  error: '#E53935',
+  errorSurface: '#FDECEC',
+  errorBorder: '#F6BFBF',
+  success: '#0E9F6E',
   successSurface: '#E1F7EE',
-  successBorder:  '#9FE3C6',
-  warning:        '#F5A623',
+  successBorder: '#9FE3C6',
+  warning: '#F5A623',
   warningSurface: '#FFF4DE',
-  warningBorder:  '#F6D48A',
+  warningBorder: '#F6D48A',
 
   /** Settings hub / in-app info accent (e.g. notifications icon) */
   notificationsAccent: '#3B82F6',
@@ -63,23 +63,23 @@ export const COLORS = {
   emptyFieldBorder: 'rgba(229, 57, 53, 0.35)',
 
   // ── Status ─────────────────────────────────────────────────────────────────
-  online:  '#0E9F6E',
+  online: '#0E9F6E',
   offline: '#C7C7CC',
 
   // ── Overlays ───────────────────────────────────────────────────────────────
-  overlay:      'rgba(0,0,0,0.72)',
+  overlay: 'rgba(0,0,0,0.72)',
   overlayLight: 'rgba(0,0,0,0.32)',
-  toastBg:      'rgba(17,17,20,0.94)',
+  toastBg: 'rgba(17,17,20,0.94)',
 } as const;
 
 // ── Spacing & radius scale ──────────────────────────────────────────────────
 export const RADIUS = {
-  xs:   4,
-  sm:   8,
-  md:   12,
-  lg:   16,
-  xl:   20,
-  xxl:  24,
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
   full: 9999,
 } as const;
 
@@ -91,21 +91,21 @@ export const RADIUS = {
  */
 export const FONT = {
   // sizes
-  xs:      11,
-  sm:      13,
-  md:      15,
-  lg:      17,
-  xl:      20,
-  xxl:     24,
-  xxxl:    30,
+  xs: 11,
+  sm: 13,
+  md: 15,
+  lg: 17,
+  xl: 20,
+  xxl: 24,
+  xxxl: 30,
   display: 36,
   // weights — capped at 4 (regular / medium / semibold / extrabold)
-  regular:   '400' as const,
-  medium:    '500' as const,
-  semibold:  '600' as const,
-  bold:      '700' as const,
+  regular: '400' as const,
+  medium: '500' as const,
+  semibold: '600' as const,
+  bold: '700' as const,
   extrabold: '800' as const,
-  black:     '900' as const,
+  black: '900' as const,
   // families
   displayFamily: 'DMSerifDisplay_400Regular',
 } as const;
@@ -156,7 +156,7 @@ export const AFRICAN_COUNTRIES = [
   { code: 'KM', name: 'Comoros' },
   { code: 'CG', name: 'Congo' },
   { code: 'CD', name: 'DR Congo' },
-  { code: 'CI', name: 'Côte d\'Ivoire' },
+  { code: 'CI', name: "Côte d'Ivoire" },
   { code: 'DJ', name: 'Djibouti' },
   { code: 'EG', name: 'Egypt' },
   { code: 'GQ', name: 'Equatorial Guinea' },
@@ -219,23 +219,23 @@ export const AFRICAN_COUNTRIES = [
 ];
 
 export const GENDER_OPTIONS = [
-  { value: 'male',   label: 'Male' },
+  { value: 'male', label: 'Male' },
   { value: 'female', label: 'Female' },
 ];
 
 export const INTERESTED_IN_OPTIONS = [
   { value: 'women', label: 'Women' },
-  { value: 'men',   label: 'Men' },
+  { value: 'men', label: 'Men' },
 ];
 
 export const HAS_CHILDREN_OPTIONS = [
-  { value: 'true',  label: 'Yes' },
+  { value: 'true', label: 'Yes' },
   { value: 'false', label: 'No' },
 ];
 
 export const WANT_CHILDREN_YES_NO = [
   { value: 'yes', label: 'Yes' },
-  { value: 'no',  label: 'No' },
+  { value: 'no', label: 'No' },
 ];
 
 /** Prefer this name; `WANT_CHILDREN_YES_NO` is kept for backwards compatibility. */
@@ -249,28 +249,28 @@ export const LOOKING_FOR_OPTIONS = [
 ];
 
 export const RELIGION_OPTIONS = [
-  { value: 'christianity',       label: 'Christianity',        emoji: '✝️' },
-  { value: 'catholicism',        label: 'Catholic',            emoji: '✝️' },
-  { value: 'protestantism',      label: 'Protestant',          emoji: '✝️' },
-  { value: 'pentecostal',        label: 'Pentecostal',         emoji: '✝️' },
-  { value: 'orthodox_christian', label: 'Orthodox Christian',  emoji: '☦️' },
-  { value: 'islam',              label: 'Islam',               emoji: '☪️' },
-  { value: 'traditional_african',label: 'Traditional African', emoji: '🌿' },
-  { value: 'judaism',            label: 'Judaism',             emoji: '✡️' },
-  { value: 'buddhism',           label: 'Buddhism',            emoji: '☸️' },
-  { value: 'hinduism',           label: 'Hinduism',            emoji: '🕉️' },
-  { value: 'atheist',            label: 'Atheist',             emoji: '⚛️' },
-  { value: 'other',              label: 'Other',               emoji: '🙏' },
+  { value: 'christianity', label: 'Christianity', emoji: '✝️' },
+  { value: 'catholicism', label: 'Catholic', emoji: '✝️' },
+  { value: 'protestantism', label: 'Protestant', emoji: '✝️' },
+  { value: 'pentecostal', label: 'Pentecostal', emoji: '✝️' },
+  { value: 'orthodox_christian', label: 'Orthodox Christian', emoji: '☦️' },
+  { value: 'islam', label: 'Islam', emoji: '☪️' },
+  { value: 'traditional_african', label: 'Traditional African', emoji: '🌿' },
+  { value: 'judaism', label: 'Judaism', emoji: '✡️' },
+  { value: 'buddhism', label: 'Buddhism', emoji: '☸️' },
+  { value: 'hinduism', label: 'Hinduism', emoji: '🕉️' },
+  { value: 'atheist', label: 'Atheist', emoji: '⚛️' },
+  { value: 'other', label: 'Other', emoji: '🙏' },
 ];
 
 export const EDUCATION_OPTIONS = [
-  { value: 'high_school',    label: 'High School' },
-  { value: 'some_college',   label: 'Some College' },
-  { value: 'vocational',     label: 'Vocational / Trade' },
-  { value: 'bachelors',      label: "Bachelor's Degree" },
-  { value: 'masters',        label: "Master's Degree" },
-  { value: 'phd',            label: 'PhD / Doctorate' },
-  { value: 'other',          label: 'Other' },
+  { value: 'high_school', label: 'High School' },
+  { value: 'some_college', label: 'Some College' },
+  { value: 'vocational', label: 'Vocational / Trade' },
+  { value: 'bachelors', label: "Bachelor's Degree" },
+  { value: 'masters', label: "Master's Degree" },
+  { value: 'phd', label: 'PhD / Doctorate' },
+  { value: 'other', label: 'Other' },
 ];
 
 export const OCCUPATION_OPTIONS = [
@@ -333,9 +333,9 @@ export const PHYSICAL_CONDITION_OPTIONS = [
 ] as const;
 
 export const MARITAL_STATUS_OPTIONS = [
-  { value: 'single',    label: 'Single',    emoji: '🙂' },
-  { value: 'divorced',  label: 'Divorced',  emoji: '💔' },
-  { value: 'widowed',   label: 'Widowed',   emoji: '🕊️' },
+  { value: 'single', label: 'Single', emoji: '🙂' },
+  { value: 'divorced', label: 'Divorced', emoji: '💔' },
+  { value: 'widowed', label: 'Widowed', emoji: '🕊️' },
   { value: 'separated', label: 'Separated', emoji: '↔️' },
 ];
 
@@ -353,7 +353,8 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw err;
 }
 
-export const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?background=0E9F6E&color=fff&size=200&name=';
+export const DEFAULT_AVATAR =
+  'https://ui-avatars.com/api/?background=0E9F6E&color=fff&size=200&name=';
 export const MAX_PROFILE_PHOTOS = 6;
 export const MIN_AGE = 18;
 export const MAX_AGE = 100;

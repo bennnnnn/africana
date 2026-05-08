@@ -123,10 +123,7 @@ const ConversationRow = memo(function ConversationRow({
               Typing…
             </Text>
           ) : (
-            <Text
-              style={[s.cardPreview, hasUnread && s.cardPreviewUnread]}
-              numberOfLines={1}
-            >
+            <Text style={[s.cardPreview, hasUnread && s.cardPreviewUnread]} numberOfLines={1}>
               {item.last_message ?? 'Start a conversation'}
             </Text>
           )}
@@ -208,22 +205,23 @@ export default function MessagesScreen() {
       // `supabase.removeChannel(...)` directly, which killed the shared
       // object — exactly why "typing" stopped showing up after navigating
       // from inbox into a chat.
-      const releases = subscribedConvIds.map((convId) =>
-        acquireTypingChannel(convId, ({ userId }) => {
-          if (!userId || userId === user.id) return;
-          setTypingMap((prev) => (prev[convId] ? prev : { ...prev, [convId]: true }));
-          const existing = typingTimersRef.current.get(convId);
-          if (existing) clearTimeout(existing);
-          const t = setTimeout(() => {
-            setTypingMap((prev) => {
-              if (!prev[convId]) return prev;
-              const { [convId]: _omit, ...rest } = prev;
-              return rest;
-            });
-            typingTimersRef.current.delete(convId);
-          }, TYPING_TTL_MS);
-          typingTimersRef.current.set(convId, t);
-        }).release,
+      const releases = subscribedConvIds.map(
+        (convId) =>
+          acquireTypingChannel(convId, ({ userId }) => {
+            if (!userId || userId === user.id) return;
+            setTypingMap((prev) => (prev[convId] ? prev : { ...prev, [convId]: true }));
+            const existing = typingTimersRef.current.get(convId);
+            if (existing) clearTimeout(existing);
+            const t = setTimeout(() => {
+              setTypingMap((prev) => {
+                if (!prev[convId]) return prev;
+                const { [convId]: _omit, ...rest } = prev;
+                return rest;
+              });
+              typingTimersRef.current.delete(convId);
+            }, TYPING_TTL_MS);
+            typingTimersRef.current.set(convId, t);
+          }).release,
       );
 
       return () => {
@@ -288,7 +286,10 @@ export default function MessagesScreen() {
                 await deleteConversation(item.id);
                 showToast({ message: UI_TOAST.chatDeleted, icon: 'trash-outline' });
               } catch {
-                showToast({ message: 'Failed to delete chat. Please try again.', icon: 'alert-circle-outline' });
+                showToast({
+                  message: 'Failed to delete chat. Please try again.',
+                  icon: 'alert-circle-outline',
+                });
               }
             },
           },
@@ -313,7 +314,10 @@ export default function MessagesScreen() {
           autoCapitalize="none"
         />
         {search.length > 0 ? (
-          <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity
+            onPress={() => setSearch('')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Ionicons name="close-circle" size={15} color={COLORS.textMuted} />
           </TouchableOpacity>
         ) : null}
@@ -343,7 +347,11 @@ export default function MessagesScreen() {
         ListHeaderComponent={conversations.length > 0 ? ListHeader : null}
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+          />
         }
         ItemSeparatorComponent={ItemSeparator}
         ListEmptyComponent={
@@ -439,18 +447,18 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  cardName:        { fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.text, flex: 1 },
-  cardNameUnread:  { fontWeight: FONT.extrabold, color: COLORS.text },
-  cardTime:        { fontSize: FONT.xs, color: COLORS.textMuted, marginLeft: 8 },
-  cardTimeUnread:  { color: COLORS.primary, fontWeight: FONT.bold },
+  cardName: { fontSize: FONT.md, fontWeight: FONT.semibold, color: COLORS.text, flex: 1 },
+  cardNameUnread: { fontWeight: FONT.extrabold, color: COLORS.text },
+  cardTime: { fontSize: FONT.xs, color: COLORS.textMuted, marginLeft: 8 },
+  cardTimeUnread: { color: COLORS.primary, fontWeight: FONT.bold },
   cardBottom: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 3,
   },
-  cardPreview:        { fontSize: FONT.sm, color: COLORS.textSecondary, flex: 1 },
-  cardPreviewUnread:  { color: COLORS.text, fontWeight: FONT.medium },
+  cardPreview: { fontSize: FONT.sm, color: COLORS.textSecondary, flex: 1 },
+  cardPreviewUnread: { color: COLORS.text, fontWeight: FONT.medium },
   cardTyping: {
     fontSize: FONT.sm,
     color: COLORS.primary,

@@ -94,7 +94,7 @@ export default function TabLayout() {
 
   useEffect(() => {
     setUnreadMessages(
-      conversations.reduce((sum, conversation) => sum + (conversation.unread_count ?? 0), 0)
+      conversations.reduce((sum, conversation) => sum + (conversation.unread_count ?? 0), 0),
     );
   }, [conversations]);
 
@@ -133,7 +133,10 @@ export default function TabLayout() {
     const ch = supabase.channel(`tab-conversations:${uid}:${realtimeUniqueSuffix()}`);
     channelRef.current = ch;
 
-    ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+    ch.on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'messages' },
+      (payload) => {
         const message = payload.new as {
           sender_id?: string;
           conversation_id?: string;
@@ -153,19 +156,32 @@ export default function TabLayout() {
         const preview = (message.content ?? '').trim();
         void sendLocalNotification(
           `💬 ${senderName}`,
-          preview ? (preview.length > 100 ? `${preview.slice(0, 97)}…` : preview) : 'sent you a message',
+          preview
+            ? preview.length > 100
+              ? `${preview.slice(0, 97)}…`
+              : preview
+            : 'sent you a message',
           'message',
           message.conversation_id ? { conversationId: message.conversation_id } : undefined,
         );
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, (payload) => {
-        const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
-        if (ids.includes(uid)) scheduleConvRefresh();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, (payload) => {
-        const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
-        if (ids.includes(uid)) scheduleConvRefresh();
-      })
+      },
+    )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'conversations' },
+        (payload) => {
+          const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
+          if (ids.includes(uid)) scheduleConvRefresh();
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'conversations' },
+        (payload) => {
+          const ids = (payload.new as { participant_ids?: string[] })?.participant_ids ?? [];
+          if (ids.includes(uid)) scheduleConvRefresh();
+        },
+      )
       .subscribe((status) => {
         // In dev / Expo Go, the realtime websocket can silently time out.
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -269,7 +285,7 @@ export default function TabLayout() {
   }, [user?.id]);
   // On Android with edgeToEdgeEnabled, insets.bottom is the system nav bar height
   const tabBarHeight = 56 + insets.bottom;
-  const tabBarPaddingBottom = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 20 : 8);
+  const tabBarPaddingBottom = insets.bottom > 0 ? insets.bottom : Platform.OS === 'ios' ? 20 : 8;
 
   return (
     <Tabs
@@ -319,7 +335,9 @@ export default function TabLayout() {
         name="messages"
         options={{
           title: 'Messages',
-          tabBarIcon: ({ focused }) => <TabIcon name="chatbubbles" focused={focused} badge={unreadMessages} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="chatbubbles" focused={focused} badge={unreadMessages} />
+          ),
         }}
       />
       {/* Activity tab — hidden until launch */}

@@ -32,15 +32,20 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
   const { showToast } = useDialog();
   const getOrCreateConversation = useChatStore((s) => s.getOrCreateConversation);
 
-  const scaleAnim   = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
-  const heartAnim   = useRef(new Animated.Value(1)).current;
+  const heartAnim = useRef(new Animated.Value(1)).current;
 
   const startHeartbeat = () => {
     Animated.loop(
       Animated.sequence([
-        Animated.spring(heartAnim, { toValue: 1.3, useNativeDriver: true, speed: 30, bounciness: 10 }),
-        Animated.spring(heartAnim, { toValue: 1,   useNativeDriver: true, speed: 20, bounciness: 4  }),
+        Animated.spring(heartAnim, {
+          toValue: 1.3,
+          useNativeDriver: true,
+          speed: 30,
+          bounciness: 10,
+        }),
+        Animated.spring(heartAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 4 }),
       ]),
       { iterations: 6 },
     ).start();
@@ -81,9 +86,13 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
 
   if (!matchedUser) return null;
 
-  const myAvatar    = user?.avatar_url || `${DEFAULT_AVATAR}${encodeURIComponent((user?.full_name ?? '?').charAt(0))}`;
-  const theirAvatar = matchedUser.avatar_url || (matchedUser.profile_photos ?? [])[0]
-    || `${DEFAULT_AVATAR}${encodeURIComponent(matchedUser.full_name.charAt(0))}`;
+  const myAvatar =
+    user?.avatar_url ||
+    `${DEFAULT_AVATAR}${encodeURIComponent((user?.full_name ?? '?').charAt(0))}`;
+  const theirAvatar =
+    matchedUser.avatar_url ||
+    (matchedUser.profile_photos ?? [])[0] ||
+    `${DEFAULT_AVATAR}${encodeURIComponent(matchedUser.full_name.charAt(0))}`;
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
@@ -102,10 +111,9 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
             <View style={s.kickerLine} />
           </View>
 
-          <Text style={s.title}>It's a Match!</Text>
+          <Text style={s.title}>It{"'"}s a Match!</Text>
           <Text style={s.subtitle}>
-            You and{' '}
-            <Text style={s.subtitleStrong}>{matchedUser.full_name}</Text>
+            You and <Text style={s.subtitleStrong}>{matchedUser.full_name}</Text>
             {'\n'}liked each other
           </Text>
 
@@ -135,7 +143,7 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
   );
 }
 
-const AVATAR_SIZE = width * 0.30;
+const AVATAR_SIZE = width * 0.3;
 
 const s = StyleSheet.create({
   overlay: {
@@ -247,11 +255,16 @@ const s = StyleSheet.create({
     marginBottom: 8,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.30,
+    shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 6,
   },
-  msgBtnText: { fontSize: FONT.md + 1, fontWeight: FONT.bold, color: COLORS.white, letterSpacing: 0.2 },
+  msgBtnText: {
+    fontSize: FONT.md + 1,
+    fontWeight: FONT.bold,
+    color: COLORS.white,
+    letterSpacing: 0.2,
+  },
   laterBtn: { paddingVertical: 12 },
   laterText: { fontSize: FONT.sm, color: COLORS.textSecondary, fontWeight: FONT.semibold },
 });

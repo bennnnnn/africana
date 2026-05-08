@@ -38,7 +38,10 @@ export default function PhotosScreen() {
   const addPhotos = async () => {
     const remaining = MAX_PROFILE_PHOTOS - photos.length;
     if (remaining <= 0) {
-      appDialog({ title: 'Limit reached', message: `You can have at most ${MAX_PROFILE_PHOTOS} photos.` });
+      appDialog({
+        title: 'Limit reached',
+        message: `You can have at most ${MAX_PROFILE_PHOTOS} photos.`,
+      });
       return;
     }
 
@@ -72,7 +75,11 @@ export default function PhotosScreen() {
       }
 
       if (uploaded.length === 0) {
-        appDialog({ title: 'Upload failed', message: "Couldn't upload photos. Try again.", icon: 'cloud-offline-outline' });
+        appDialog({
+          title: 'Upload failed',
+          message: "Couldn't upload photos. Try again.",
+          icon: 'cloud-offline-outline',
+        });
         return;
       }
 
@@ -159,7 +166,14 @@ export default function PhotosScreen() {
       </View>
 
       <View style={{ padding: 16 }}>
-        <Text style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 16, textAlign: 'center' }}>
+        <Text
+          style={{
+            fontSize: 13,
+            color: COLORS.textSecondary,
+            marginBottom: 16,
+            textAlign: 'center',
+          }}
+        >
           {uploading
             ? uploadProgress
             : `${photos.length}/${MAX_PROFILE_PHOTOS} photos • First is your main picture • Long press to remove`}
@@ -182,7 +196,11 @@ export default function PhotosScreen() {
                 onLongPress={() => removePhoto(photo)}
                 delayLongPress={450}
               >
-                <Image source={{ uri: photo }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                <Image
+                  source={{ uri: photo }}
+                  style={{ width: '100%', height: '100%' }}
+                  contentFit="cover"
+                />
                 {i === 0 && (
                   <View
                     style={{
@@ -237,7 +255,9 @@ export default function PhotosScreen() {
               }}
             >
               <Ionicons name="add" size={28} color={COLORS.earth} />
-              <Text style={{ fontSize: 12, color: COLORS.textSecondary, textAlign: 'center' }}>Add photo</Text>
+              <Text style={{ fontSize: 12, color: COLORS.textSecondary, textAlign: 'center' }}>
+                Add photo
+              </Text>
             </TouchableOpacity>
           )}
         </View>

@@ -16,8 +16,7 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function isUuidString(value: unknown): value is string {
   return typeof value === 'string' && UUID_RE.test(value);
@@ -44,19 +43,25 @@ interface CampaignNotifyPayload {
 
 type NotifyPayload = ActivityNotifyPayload | CampaignNotifyPayload;
 
-const PUSH_TEMPLATES: Record<ActivityNotifyType, (name: string) => { title: string; body: string }> = {
-  message:   (name) => ({ title: '💬 New message',        body: `${name} sent you a message` }),
-  like:      (name) => ({ title: '❤️ Someone liked you!', body: `${name} liked your profile` }),
-  match:     (name) => ({ title: '🔥 It\'s a Match!',     body: `You and ${name} liked each other` }),
-  view:      (name) => ({ title: '👀 Profile view',       body: `${name} viewed your profile` }),
-  favourite: (name) => ({ title: '⭐ You were starred',   body: `${name} added you to their favourites` }),
+const PUSH_TEMPLATES: Record<
+  ActivityNotifyType,
+  (name: string) => { title: string; body: string }
+> = {
+  message: (name) => ({ title: '💬 New message', body: `${name} sent you a message` }),
+  like: (name) => ({ title: '❤️ Someone liked you!', body: `${name} liked your profile` }),
+  match: (name) => ({ title: "🔥 It's a Match!", body: `You and ${name} liked each other` }),
+  view: (name) => ({ title: '👀 Profile view', body: `${name} viewed your profile` }),
+  favourite: (name) => ({
+    title: '⭐ You were starred',
+    body: `${name} added you to their favourites`,
+  }),
 };
 
 const EMAIL_SUBJECTS: Record<ActivityNotifyType, (name: string) => string> = {
-  message:   (name) => `💬 ${name} sent you a message on Africana`,
-  like:      (name) => `❤️ ${name} liked your Africana profile`,
-  match:     (name) => `🔥 It's a Match! You and ${name} liked each other`,
-  view:      (name) => `👀 ${name} viewed your Africana profile`,
+  message: (name) => `💬 ${name} sent you a message on Africana`,
+  like: (name) => `❤️ ${name} liked your Africana profile`,
+  match: (name) => `🔥 It's a Match! You and ${name} liked each other`,
+  view: (name) => `👀 ${name} viewed your Africana profile`,
   favourite: (name) => `⭐ ${name} starred your Africana profile`,
 };
 
@@ -156,12 +161,17 @@ Deno.serve(async (req) => {
     const { data: blockRow } = await supabaseAdmin
       .from('blocks')
       .select('id')
-      .or(`and(blocker_id.eq.${recipientId},blocked_id.eq.${senderId}),and(blocker_id.eq.${senderId},blocked_id.eq.${recipientId})`)
+      .or(
+        `and(blocker_id.eq.${recipientId},blocked_id.eq.${senderId}),and(blocker_id.eq.${senderId},blocked_id.eq.${recipientId})`,
+      )
       .limit(1)
       .maybeSingle();
 
     if (blockRow) {
-      return new Response(JSON.stringify({ ok: false, reason: 'blocked' }), { status: 200, headers: CORS_HEADERS });
+      return new Response(JSON.stringify({ ok: false, reason: 'blocked' }), {
+        status: 200,
+        headers: CORS_HEADERS,
+      });
     }
 
     // Fetch recipient's push token, notification preferences, and display name.
@@ -175,22 +185,30 @@ Deno.serve(async (req) => {
     const settings = recipient.settings;
 
     if (type === 'message' && settings?.receive_messages === false) {
-      return new Response(JSON.stringify({ ok: false, reason: 'recipient_not_accepting_messages' }), {
-        status: 200,
-        headers: CORS_HEADERS,
-      });
+      return new Response(
+        JSON.stringify({ ok: false, reason: 'recipient_not_accepting_messages' }),
+        {
+          status: 200,
+          headers: CORS_HEADERS,
+        },
+      );
     }
 
     // Check per-type push preference (explicit conditionals avoid TS index issues).
     // Favourites honour `notify_likes` until/unless we ship a dedicated column;
     // this keeps the toggle UX simple (one "Stars & Likes" switch on the client).
     const pushPrefEnabled =
-      type === 'message'   ? settings?.notify_messages !== false :
-      type === 'like'      ? settings?.notify_likes    !== false :
-      type === 'match'     ? settings?.notify_matches  !== false :
-      type === 'view'      ? settings?.notify_views    !== false :
-      type === 'favourite' ? settings?.notify_likes    !== false :
-      true;
+      type === 'message'
+        ? settings?.notify_messages !== false
+        : type === 'like'
+          ? settings?.notify_likes !== false
+          : type === 'match'
+            ? settings?.notify_matches !== false
+            : type === 'view'
+              ? settings?.notify_views !== false
+              : type === 'favourite'
+                ? settings?.notify_likes !== false
+                : true;
     const pushEnabled = pushPrefEnabled && !!settings?.push_token;
     const emailEnabled = settings?.email_notifications === true && !!recipient.email;
 
@@ -217,7 +235,11 @@ Deno.serve(async (req) => {
 
     // ── Email notification (re-engagement only for non-message types) ──────────
     // Only send email for likes, matches, and stars (not every message — too spammy).
-    if (emailEnabled && (type === 'like' || type === 'match' || type === 'favourite') && recipient.email) {
+    if (
+      emailEnabled &&
+      (type === 'like' || type === 'match' || type === 'favourite') &&
+      recipient.email
+    ) {
       const subject = EMAIL_SUBJECTS[type](senderName);
       const recipientName = recipient.fullName ?? 'there';
       const safeRecipient = escapeHtml(recipientName);
@@ -238,10 +260,16 @@ Deno.serve(async (req) => {
     }
 
     if (!pushEnabled && !emailEnabled) {
-      return new Response(JSON.stringify({ ok: false, reason: 'disabled_or_no_token' }), { status: 200, headers: CORS_HEADERS });
+      return new Response(JSON.stringify({ ok: false, reason: 'disabled_or_no_token' }), {
+        status: 200,
+        headers: CORS_HEADERS,
+      });
     }
 
-    return new Response(JSON.stringify({ ok: true, results }), { status: 200, headers: CORS_HEADERS });
+    return new Response(JSON.stringify({ ok: true, results }), {
+      status: 200,
+      headers: CORS_HEADERS,
+    });
   } catch (err) {
     console.error('[notify]', err);
     return new Response(JSON.stringify({ ok: false, error: 'internal' }), {
