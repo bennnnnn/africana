@@ -1,0 +1,2 @@
+-- Dev-only seed data (optional). `supabase db reset` runs this after migrations.
+-- Keep empty for parity with production; add fixtures locally if needed.

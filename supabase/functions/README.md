@@ -18,8 +18,9 @@ supabase functions deploy notify
 # Deploy the daily away-email sweep
 supabase functions deploy email-lifecycle-sweep
 
-# Set the required env vars (only service_role key is needed — SUPABASE_URL is auto-set)
-# No extra secrets needed; the function uses SUPABASE_SERVICE_ROLE_KEY which is auto-injected.
+# Set Edge Function secrets (Dashboard → Edge Functions → Secrets, or `supabase secrets set`):
+#   RESEND_API_KEY   — Resend API key (emails are skipped if unset)
+#   RESEND_FROM      — optional, default `Africana <noreply@africana.app>` (use your verified domain)
 ```
 
 ## Functions
@@ -48,12 +49,16 @@ Sends push notifications, optional activity emails, and lifecycle emails.
 ```
 
 ### `email-lifecycle-sweep`
-Runs the daily away-email milestones for users who have not opened the app for 3, 7, 14, 21, or 30 days.
+Runs daily **re-engagement** milestones for users whose `profiles.last_seen` is older than **7, 14, or 30 days**. Each milestone sends an **Expo push first** (if the user has a stored push token); a **Resend email** is sent only when **Settings → Email updates** is on. Welcome / first-message / first-like campaigns are triggered from the client via `notify`, not this sweep.
 
 ## Environment Variables
 
-The function uses:
-- `SUPABASE_URL` — auto-injected
-- `SUPABASE_SERVICE_ROLE_KEY` — auto-injected (used to bypass RLS for reading user settings)
+Auto-injected on every function:
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-No additional configuration needed.
+Email (set manually):
+- `RESEND_API_KEY` — required for any Resend delivery
+- `RESEND_FROM` — optional verified sender
+
+Activity and lifecycle pushes use [Expo’s push API](https://docs.expo.dev/push-notifications/sending-notifications/); ensure the project’s FCM credentials are configured for Android.

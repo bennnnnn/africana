@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Africana — Open profile</title>
+    <style>
+      :root { font-family: system-ui, -apple-system, sans-serif; color: #111; background: #fafafa; }
+      body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
+      .card { max-width: 400px; background: #fff; border-radius: 16px; padding: 28px; box-shadow: 0 4px 24px rgba(0,0,0,.08); text-align: center; }
+      h1 { font-size: 1.35rem; margin: 0 0 8px; }
+      p { color: #555; line-height: 1.5; margin: 0 0 20px; font-size: 0.95rem; }
+      a.btn { display: inline-block; background: #c84b31; color: #fff; text-decoration: none; padding: 14px 24px; border-radius: 12px; font-weight: 600; margin: 6px; }
+      a.secondary { background: #eee; color: #111; }
+      .muted { font-size: 0.8rem; color: #888; margin-top: 20px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Open in Africana</h1>
+      <p>Get the app to view this profile. If you already have Africana installed, use the button below.</p>
+      <p>
+        <a class="btn" id="open-app" href="#">Open in app</a>
+      </p>
+      <p>
+        <a class="btn secondary" id="ios-store" href="https://apps.apple.com" target="_blank" rel="noopener">App Store</a>
+        <a class="btn secondary" id="android-store" href="https://play.google.com/store" target="_blank" rel="noopener">Google Play</a>
+      </p>
+      <p class="muted">Replace store URLs above when your listings are live. Host <code>apple-app-site-association</code> and <code>.well-known/assetlinks.json</code> on this domain for Universal / App Links.</p>
+    </div>
+    <script>
+      (function () {
+        var q = new URLSearchParams(window.location.search);
+        var id = q.get('id');
+        /* Match expo-router + scheme `africana` (see app.json). */
+        var deep = id ? 'africana:///(profile)/' + encodeURIComponent(id) : 'africana://';
+        var a = document.getElementById('open-app');
+        if (a) {
+          a.href = deep;
+          a.addEventListener('click', function (e) {
+            window.setTimeout(function () {
+              /* If app not installed, user stays on page and can use store links. */
+            }, 1500);
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

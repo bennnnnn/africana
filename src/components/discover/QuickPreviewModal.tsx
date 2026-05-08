@@ -44,7 +44,15 @@ function CardContent({ user, cardWidth, cardHeight }: { user: User; cardWidth: n
     const p = user.profile_photos ?? [];
     return p.length > 0 ? p : user.avatar_url ? [user.avatar_url] : [];
   }, [user]);
-  const heroUri = photos[0] ? profileImageUrlForList(photos[0]) ?? photos[0] : null;
+  const rawHero = photos[0] ?? null;
+  const optimizedHero = useMemo(
+    () => (rawHero ? profileImageUrlForList(rawHero) ?? rawHero : null),
+    [rawHero],
+  );
+  const [heroUri, setHeroUri] = useState<string | null>(optimizedHero);
+  useEffect(() => {
+    setHeroUri(optimizedHero);
+  }, [optimizedHero, user.id]);
 
   const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
   const isOnline =
@@ -73,6 +81,10 @@ function CardContent({ user, cardWidth, cardHeight }: { user: User; cardWidth: n
           contentFit="cover"
           transition={0}
           cachePolicy="memory-disk"
+          recyclingKey={`${user.id}:${rawHero ?? ''}`}
+          onError={() => {
+            if (rawHero != null && heroUri !== rawHero) setHeroUri(rawHero);
+          }}
         />
       ) : (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.savanna }]} />

@@ -6,17 +6,14 @@ export type LifecycleCampaign =
   | 'welcome'
   | 'first_message'
   | 'first_like'
-  | 'away_3d'
   | 'away_7d'
   | 'away_14d'
-  | 'away_21d'
   | 'away_30d';
 
+/** Inactivity milestones (by `profiles.last_seen`). Push is tried first; email only if opted in. */
 export const AWAY_CAMPAIGNS: ReadonlyArray<{ campaign: LifecycleCampaign; days: number }> = [
-  { campaign: 'away_3d', days: 3 },
   { campaign: 'away_7d', days: 7 },
   { campaign: 'away_14d', days: 14 },
-  { campaign: 'away_21d', days: 21 },
   { campaign: 'away_30d', days: 30 },
 ];
 
@@ -40,7 +37,7 @@ type LifecycleEmailResult =
   | { ok: true; reason: 'sent' }
   | {
       ok: false;
-      reason: 'missing_email' | 'already_sent' | 'delivery_unavailable' | 'email_opt_out';
+      reason: 'missing_email' | 'already_sent' | 'delivery_unavailable' | 'nothing_to_send';
     };
 
 export const supabaseAdmin = createClient(
@@ -49,6 +46,59 @@ export const supabaseAdmin = createClient(
 );
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
+const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+async function sendExpoPush(params: {
+  to: string;
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+}): Promise<boolean> {
+  const pushRes = await fetch(EXPO_PUSH_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      to: params.to,
+      title: params.title,
+      body: params.body,
+      sound: 'default',
+      priority: 'normal' as const,
+      data: params.data ?? {},
+      channelId: 'match',
+    }),
+  });
+  let json: unknown;
+  try {
+    json = await pushRes.json();
+  } catch {
+    return false;
+  }
+  if (!pushRes.ok) return false;
+  const data = json as { data?: Array<{ status?: string }> };
+  return Array.isArray(data.data) && data.data.some((d) => d.status === 'ok');
+}
+
+function getAwayPushCopy(campaign: LifecycleCampaign): { title: string; body: string } {
+  switch (campaign) {
+    case 'away_7d':
+      return {
+        title: 'Your matches miss you',
+        body: "It's been a week — open Africana and see who's ready to talk.",
+      };
+    case 'away_14d':
+      return {
+        title: 'Still time to reconnect',
+        body: "It's been two weeks. Jump back in and catch up on Africana.",
+      };
+    case 'away_30d':
+      return {
+        title: 'Ready to come back?',
+        body: "It's been a while — open Africana and see who's waiting.",
+      };
+    default:
+      return { title: 'We miss you', body: 'Open Africana to catch up.' };
+  }
+}
 
 /** Shared by Edge Functions that build HTML (activity emails, etc.). */
 export function escapeHtml(value: string): string {
@@ -61,7 +111,7 @@ export function escapeHtml(value: string): string {
 }
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  const apiKey = Deno.env.get('RESEND_API_KEY');
+  const apiKey = Deno.env.get('re_JiniE9pa_CmHvfFsSiXKt1UVw5LXqCYcp');
   const from = Deno.env.get('RESEND_FROM') ?? 'Africana <noreply@africana.app>';
   if (!apiKey) return false;
 
@@ -164,15 +214,6 @@ function getLifecycleTemplate(
           body: `${senderName} liked your profile. Open Africana to see who noticed you.`,
         }),
       };
-    case 'away_3d':
-      return {
-        subject: "It's been 3 days since you last opened Africana",
-        html: renderEmailHtml({
-          heading: 'Come back and see who is waiting',
-          recipientName: params.recipientName,
-          body: "It's been 3 days since your last visit. Open Africana to catch up on new likes, matches, and messages.",
-        }),
-      };
     case 'away_7d':
       return {
         subject: "It's been 7 days since you last opened Africana",
@@ -189,15 +230,6 @@ function getLifecycleTemplate(
           heading: 'There is still time to reconnect',
           recipientName: params.recipientName,
           body: "It's been 14 days since you last opened Africana. Come back and see what you have missed.",
-        }),
-      };
-    case 'away_21d':
-      return {
-        subject: "It's been 21 days since you last opened Africana",
-        html: renderEmailHtml({
-          heading: 'Your next connection could be waiting',
-          recipientName: params.recipientName,
-          body: "It's been 21 days since your last visit. Open Africana and meet the people who found you.",
         }),
       };
     case 'away_30d':
@@ -249,13 +281,68 @@ export async function sendLifecycleCampaignEmail(params: {
   metadata?: Record<string, unknown>;
 }): Promise<LifecycleEmailResult> {
   const recipient = await getRecipientContext(params.recipientId);
-  if (!recipient.email) {
-    return { ok: false, reason: 'missing_email' };
+  const isAwayCampaign = AWAY_CAMPAIGNS.some((c) => c.campaign === params.campaign);
+
+  if (isAwayCampaign) {
+    const canPush = !!recipient.settings?.push_token;
+    const canEmail = recipient.settings?.email_notifications === true && !!recipient.email;
+    if (!canPush && !canEmail) {
+      return { ok: false, reason: 'nothing_to_send' };
+    }
+
+    const claimed = await claimLifecycleCampaignEvent({
+      recipientId: params.recipientId,
+      campaign: params.campaign,
+      metadata: params.metadata,
+    });
+    if (!claimed) {
+      return { ok: false, reason: 'already_sent' };
+    }
+
+    const recipientName = recipient.fullName?.trim() || 'there';
+    const pushCopy = getAwayPushCopy(params.campaign);
+    let pushOk = false;
+    let emailOk = false;
+
+    if (canPush && recipient.settings?.push_token) {
+      try {
+        pushOk = await sendExpoPush({
+          to: recipient.settings.push_token,
+          title: pushCopy.title,
+          body: pushCopy.body,
+          data: { kind: 'lifecycle', campaign: params.campaign },
+        });
+      } catch {
+        pushOk = false;
+      }
+    }
+
+    if (canEmail && recipient.email) {
+      const template = getLifecycleTemplate(params.campaign, {
+        recipientName,
+        senderName: params.senderName,
+      });
+      try {
+        emailOk = await sendEmail(recipient.email, template.subject, template.html);
+      } catch {
+        emailOk = false;
+      }
+    }
+
+    if (!pushOk && !emailOk) {
+      await supabaseAdmin
+        .from('email_campaign_events')
+        .delete()
+        .eq('user_id', params.recipientId)
+        .eq('campaign_key', params.campaign);
+      return { ok: false, reason: 'delivery_unavailable' };
+    }
+
+    return { ok: true, reason: 'sent' };
   }
 
-  const isAwayCampaign = AWAY_CAMPAIGNS.some((c) => c.campaign === params.campaign);
-  if (isAwayCampaign && recipient.settings?.email_notifications !== true) {
-    return { ok: false, reason: 'email_opt_out' };
+  if (!recipient.email) {
+    return { ok: false, reason: 'missing_email' };
   }
 
   const claimed = await claimLifecycleCampaignEvent({

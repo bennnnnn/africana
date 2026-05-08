@@ -199,10 +199,8 @@ export type LifecycleEmailCampaign =
   | 'welcome'
   | 'first_message'
   | 'first_like'
-  | 'away_3d'
   | 'away_7d'
   | 'away_14d'
-  | 'away_21d'
   | 'away_30d';
 
 const queuedLifecycleEmails = new Set<string>();

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
@@ -8,7 +8,7 @@ import { COLORS } from '@/constants';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { formatLastSeen, getEffectivePresence } from '@/lib/utils';
 import { usePresenceStore } from '@/store/presence.store';
-import { profileImageUrlForList } from '@/lib/storage-image-url';
+import { storagePublicObjectUrlFromRender } from '@/lib/storage-image-url';
 import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
 
 type SelectionProps = {
@@ -23,7 +23,10 @@ type SelectionProps = {
 type PeerProps = {
   mode: 'peer';
   peer: User | null;
+  /** Display URL (e.g. list-sized transform). */
   avatar: string | null;
+  /** Pre-transform storage or CDN URL for `Image` onError fallback. */
+  avatarFallback?: string | null;
   peerTyping: boolean;
   onOpenMenu: () => void;
 };
@@ -66,7 +69,7 @@ export function ChatScreenHeaderChrome(props: Props) {
     );
   }
 
-  const { peer, avatar, peerTyping, onOpenMenu } = props;
+  const { peer, avatar, avatarFallback, peerTyping, onOpenMenu } = props;
   const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
   const displayOnline =
     peer &&
@@ -79,7 +82,10 @@ export function ChatScreenHeaderChrome(props: Props) {
       },
       peerOnlineIds,
     ) === 'online';
-  const headerImageUri = avatar ? profileImageUrlForList(avatar) ?? avatar : null;
+  const [headerImageUri, setHeaderImageUri] = useState<string | null>(avatar);
+  useEffect(() => {
+    setHeaderImageUri(avatar);
+  }, [avatar, peer?.id]);
 
   return (
     <View style={s.header}>
@@ -97,7 +103,24 @@ export function ChatScreenHeaderChrome(props: Props) {
         >
           {headerImageUri ? (
             <View>
-              <Image key={peer.id} source={{ uri: headerImageUri }} style={s.headerAvatar} contentFit="cover" />
+              <Image
+                key={`${peer.id}:${headerImageUri}`}
+                source={{ uri: headerImageUri }}
+                style={s.headerAvatar}
+                contentFit="cover"
+                transition={0}
+                cachePolicy="memory-disk"
+                recyclingKey={`${peer.id}:${headerImageUri}`}
+                onError={() => {
+                  const fb = avatarFallback?.trim();
+                  if (fb && headerImageUri !== fb) {
+                    setHeaderImageUri(fb);
+                    return;
+                  }
+                  const stripped = storagePublicObjectUrlFromRender(headerImageUri);
+                  if (stripped && stripped !== headerImageUri) setHeaderImageUri(stripped);
+                }}
+              />
               {displayOnline ? (
                 <View style={[s.onlineDot, { backgroundColor: COLORS.online }]} />
               ) : null}

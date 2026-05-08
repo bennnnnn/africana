@@ -1,11 +1,20 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-  View, Text, TouchableOpacity, Dimensions, Platform,
-  ActivityIndicator, RefreshControl, Animated, StyleSheet, ScrollView,
-  NativeScrollEvent, NativeSyntheticEvent,
+  View,
+  Text,
+  TouchableOpacity,
+  Dimensions,
+  ActivityIndicator,
+  RefreshControl,
+  StyleSheet,
+  ScrollView,
+  Animated,
+  Platform,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
+
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -20,22 +29,19 @@ import { SkeletonCard } from '@/components/ui/Skeleton';
 import { Image } from 'expo-image';
 import haptics from '@/lib/haptics';
 import { profileImageUrlForList } from '@/lib/storage-image-url';
-import { PostOnboardingProfileBanner } from '@/components/profile/PostOnboardingProfileBanner';
 import { COLORS, RADIUS, FONT, RELIGION_OPTIONS } from '@/constants';
 import { FilterOptions, User } from '@/types';
-import {
-  loadOnboardingSkippedHints,
-  clearOnboardingSkippedHints,
-  type SkippedOnboardingHints,
-} from '@/lib/post-onboarding-nudges';
 
-/** Discover title row — expanded vs compact (excludes status bar + filter chips). */
-const HEADER_EXPANDED = 64;
-const HEADER_COMPACT = 48;
-/** Scroll distance (px) over which the header eases from expanded → compact. */
-const COLLAPSE_SCROLL_RANGE = 56;
-
-const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
+/** Discover title row height (excludes status bar + filter chips). */
+const HEADER_ROW = 64;
+/** Breathing room below the status bar / notch before the title row. */
+const HEADER_BAR_TOP_PAD = 8;
+/** Vertical scroll (px) over which the header eases to its max upward shift — longer = slower, gentler motion. */
+const HEADER_PARALLAX_SCROLL_RANGE = 200;
+/** Max upward translation (px) of the bar below the safe area — keep small so nothing feels clipped. */
+const HEADER_PARALLAX_MAX_UP = 10;
+/** Slight downward shift when pulling past the top (overscroll). */
+const HEADER_OVERSCROLL_DOWN = 5;
 
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
@@ -71,35 +77,29 @@ export default function DiscoverScreen() {
     })),
   );
   const [showFilters, setShowFilters] = useState(false);
-  const [refreshing, setRefreshing]   = useState(false);
-  const [postOnboardHints, setPostOnboardHints] = useState<SkippedOnboardingHints | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [previewStartIndex, setPreviewStartIndex] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
 
-  // ── Scroll-driven header animations ─────────────────────────────────────────
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const scrollValueRef = useRef(0);
-
-  // On overscroll (pull down, scrollY goes negative) header gently stretches down — elastic feel
-  const headerTranslateY = scrollY.interpolate({
-    inputRange: [-80, 0],
-    outputRange: [28, 0],
-    extrapolate: 'clamp',
-  });
-
-  // Shadow fades in as soon as content scrolls under the header — gives depth
-  const headerShadowOpacity = scrollY.interpolate({
-    inputRange: [0, 24],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-
-  // Manual scroll handler for FlashList (doesn't support Animated.event natively)
-  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = event.nativeEvent.contentOffset.y;
-    scrollValueRef.current = y;
-    scrollY.setValue(y);
-  }, [scrollY]);
+  const scrollY = useMemo(() => new Animated.Value(0), []);
+  const headerTranslateY = useMemo(
+    () =>
+      scrollY.interpolate({
+        inputRange: [-40, 0, HEADER_PARALLAX_SCROLL_RANGE],
+        outputRange: [HEADER_OVERSCROLL_DOWN, 0, -HEADER_PARALLAX_MAX_UP],
+        extrapolate: 'clamp',
+      }),
+    [scrollY],
+  );
+  const headerShadowOpacity = useMemo(
+    () =>
+      scrollY.interpolate({
+        inputRange: [0, 36],
+        outputRange: [0.12, 0.22],
+        extrapolate: 'clamp',
+      }),
+    [scrollY],
+  );
 
   const agePref = useMemo(
     () =>
@@ -121,7 +121,6 @@ export default function DiscoverScreen() {
   useFocusEffect(
     useCallback(() => {
       if (user) fetchLikedUserIds(user.id);
-      loadOnboardingSkippedHints().then(setPostOnboardHints);
     }, [fetchLikedUserIds, user?.id]),
   );
 
@@ -136,29 +135,6 @@ export default function DiscoverScreen() {
       .map((url) => profileImageUrlForList(url) ?? url);
     if (urls.length > 0) void Image.prefetch(urls);
   }, [users.length > 0 ? users[0]?.id : null]);
-
-  const postOnboardReminders = useMemo(() => {
-    if (!postOnboardHints || !user) return [];
-    const r: string[] = [];
-    if (postOnboardHints.bio && !user.bio?.trim()) r.push('a short bio');
-    if (postOnboardHints.photo && !user.avatar_url && !(user.profile_photos?.length)) r.push('a profile photo');
-    if (postOnboardHints.goals && !(user.looking_for?.length)) r.push('what you’re looking for');
-    if (postOnboardHints.work && !user.education && !user.occupation?.trim()) r.push('work and education');
-    if (
-      postOnboardHints.moreDetails &&
-      (user.religion == null || user.has_children === null || user.want_children == null)
-    ) {
-      r.push('a bit more background (religion, family plans, etc.)');
-    }
-    return r;
-  }, [postOnboardHints, user]);
-
-  useEffect(() => {
-    if (!postOnboardHints) return;
-    if (postOnboardReminders.length === 0) {
-      clearOnboardingSkippedHints().then(() => setPostOnboardHints(null));
-    }
-  }, [postOnboardHints, postOnboardReminders]);
 
   const handleRefresh = useCallback(async () => {
     if (!user) return;
@@ -261,24 +237,9 @@ export default function DiscoverScreen() {
   }).current;
 
   const filterChipsHeight = activeFilterCount > 0 ? 44 : 0;
-  const totalHeaderExpanded = insets.top + HEADER_EXPANDED + filterChipsHeight;
+  const totalHeaderHeight = insets.top + HEADER_BAR_TOP_PAD + HEADER_ROW + filterChipsHeight;
+  const listPaddingTop = insets.top + HEADER_BAR_TOP_PAD + filterChipsHeight + 10 + HEADER_ROW;
 
-  const listPaddingTopAnim = useMemo(
-    () =>
-      scrollY.interpolate({
-        inputRange: [0, COLLAPSE_SCROLL_RANGE],
-        outputRange: [
-          insets.top + filterChipsHeight + 8 + HEADER_EXPANDED,
-          insets.top + filterChipsHeight + 8 + HEADER_COMPACT,
-        ],
-        extrapolate: 'clamp',
-      }),
-    [scrollY, insets.top, filterChipsHeight],
-  );
-
-  // Note: keep native-animated styles limited to transform/opacity. Layout props
-  // like padding/fontSize can trigger "not supported by native animated module"
-  // warnings in some runtimes.
   const screenWidth = Dimensions.get('window').width;
   const GRID_PADDING = 16;  // padding on each side of the list
   const GRID_GUTTER  = 16;  // gap between the two columns
@@ -296,19 +257,21 @@ export default function DiscoverScreen() {
   return (
     <View style={s.screen}>
 
-      {/* ── Full-screen scrollable grid ── */}
-      <View style={s.flex}>
+      {/* ── Full-screen scrollable grid (stays under header in z-order) ── */}
+      <View style={[s.flex, s.listUnderHeader]}>
         <AnimatedFlashList
           data={rowPairs}
           keyExtractor={(pair) => `${pair[0].id}-${pair[1]?.id ?? 'none'}`}
           style={s.flex}
           contentContainerStyle={{
-            paddingTop: listPaddingTopAnim,
+            paddingTop: listPaddingTop,
             paddingHorizontal: GRID_PADDING,
             paddingBottom: tabBarHeight + 16,
           }}
           showsVerticalScrollIndicator={false}
-          onScroll={handleScroll}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+            useNativeDriver: false,
+          })}
           scrollEventThrottle={16}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
@@ -319,20 +282,8 @@ export default function DiscoverScreen() {
               refreshing={refreshing}
               onRefresh={handleRefresh}
               tintColor={COLORS.primary}
-              progressViewOffset={totalHeaderExpanded + 8}
+              progressViewOffset={totalHeaderHeight + 8}
             />
-          }
-          ListHeaderComponent={
-            postOnboardReminders.length > 0 ? (
-              <PostOnboardingProfileBanner
-                reminders={postOnboardReminders}
-                onProfilePress={() => router.push('/(tabs)/me')}
-                onDismiss={async () => {
-                  await clearOnboardingSkippedHints();
-                  setPostOnboardHints(null);
-                }}
-              />
-            ) : null
           }
           renderItem={({ item }) => {
             const pair = item as [User, User | null];
@@ -442,58 +393,63 @@ export default function DiscoverScreen() {
         />
       </View>
 
-      {/* ── Fixed header with elastic overscroll + depth shadow ── */}
-      <Animated.View
-        style={[s.header, {
-          paddingTop: insets.top,
-          transform: [{ translateY: headerTranslateY }],
-        }]}
-      >
-        <Animated.View style={s.headerRow}>
-          <Text
-            accessibilityRole="header"
-            style={{
-              fontFamily: FONT.displayFamily,
-              fontSize: FONT.xxl + 4,
-              color: COLORS.textStrong,
-              letterSpacing: 0.2,
-            }}
-          >
-            Discover
-          </Text>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : 'Open filters'}
-            onPress={() => setShowFilters(true)}
-            style={[s.filterBtn, activeFilterCount > 0 && s.filterBtnActive]}
-          >
-            <Ionicons name="options-outline" size={18} color={activeFilterCount > 0 ? COLORS.primary : COLORS.earth} />
-            <Text style={[s.filterTxt, activeFilterCount > 0 && { color: COLORS.primary }]}>
-              Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-        {activeFilterCount > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.chipsRow}
-          >
-            {activeFilterChips.map((chip) => (
-              <TouchableOpacity
-                key={chip.key}
-                onPress={() => handleChipClear(chip.clear)}
-                style={s.chip}
-                activeOpacity={0.7}
-                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      {/* Safe top inset stays fixed; only the title row + chips parallax so nothing hides under the notch. */}
+      <View pointerEvents="box-none" style={s.headerWrap}>
+        <View style={[s.headerSafeTop, { height: insets.top }]} />
+        <Animated.View
+          style={[
+            s.headerBar,
+            { paddingTop: HEADER_BAR_TOP_PAD },
+            {
+              transform: [{ translateY: headerTranslateY }],
+              shadowOpacity: headerShadowOpacity,
+            },
+          ]}
+        >
+          <View style={s.headerRow}>
+            <View style={s.headerTitleWrap}>
+              <Text
+                accessibilityRole="header"
+                style={s.headerTitle}
+                numberOfLines={1}
               >
-                <Text style={s.chipTxt} numberOfLines={1}>{chip.label}</Text>
-                <Ionicons name="close" size={13} color={COLORS.primary} />
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        ) : null}
-      </Animated.View>
+                Discover
+              </Text>
+            </View>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : 'Open filters'}
+              onPress={() => setShowFilters(true)}
+              style={[s.filterBtn, activeFilterCount > 0 && s.filterBtnActive]}
+            >
+              <Ionicons name="options-outline" size={18} color={activeFilterCount > 0 ? COLORS.primary : COLORS.earth} />
+              <Text style={[s.filterTxt, activeFilterCount > 0 && { color: COLORS.primary }]}>
+                Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {activeFilterCount > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.chipsRow}
+            >
+              {activeFilterChips.map((chip) => (
+                <TouchableOpacity
+                  key={chip.key}
+                  onPress={() => handleChipClear(chip.clear)}
+                  style={s.chip}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                >
+                  <Text style={s.chipTxt} numberOfLines={1}>{chip.label}</Text>
+                  <Ionicons name="close" size={13} color={COLORS.primary} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : null}
+        </Animated.View>
+      </View>
 
       <FilterSheet
         visible={showFilters}
@@ -517,6 +473,10 @@ const s = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.surface,
+    overflow: 'visible',
+  },
+  listUnderHeader: {
+    zIndex: 0,
   },
   flex: {
     flex: 1,
@@ -610,30 +570,59 @@ const s = StyleSheet.create({
     fontWeight: FONT.semibold,
     color: COLORS.textSecondary,
   },
-  header: {
+  headerWrap: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 10,
+    zIndex: 50,
+    overflow: 'visible',
+    ...Platform.select({
+      android: { elevation: 20 },
+      default: {},
+    }),
+  },
+  headerSafeTop: {
+    width: '100%',
     backgroundColor: COLORS.white,
+  },
+  headerBar: {
+    backgroundColor: COLORS.white,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
     shadowColor: '#3A2A1E',
     shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
     shadowRadius: 6,
-    elevation: 4,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
+    minHeight: HEADER_ROW,
+  },
+  headerTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 12,
+    justifyContent: 'center',
+    paddingVertical: 6,
+  },
+  headerTitle: {
+    fontFamily: FONT.displayFamily,
+    fontSize: FONT.xxl + 4,
+    color: COLORS.textStrong,
+    letterSpacing: 0.2,
   },
   filterBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
     gap: 6,
     backgroundColor: COLORS.savanna,
     paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: RADIUS.full,
   },
   filterBtnActive: {

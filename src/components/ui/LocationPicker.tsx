@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COUNTRY_GROUPS, ALL_COUNTRIES, CountryData } from '@/lib/country-data';
 import { loadAfricaCountryCities, AfricaCountryCityMap } from '@/lib/africa-city-data';
+import { normalizeLocationString } from '@/lib/location-string-normalize';
 import { COLORS } from '@/constants';
 
 const ACTIVE_COLOR = COLORS.success;
@@ -67,23 +68,13 @@ export function LocationPicker({
     };
   }, [selectedCountry?.code]);
 
-  const normalized = (input: string | null | undefined) =>
-    (input ?? '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/[()'’.,/-]/g, ' ')
-      .replace(/\b(region|regional state|state|province|county|district|zone|governorate|wilaya|department|division)\b/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
   const generatedCitiesForSubdivision = useMemo(() => {
     if (!countryCityMap || !value.subdivision) return null;
     const exact = countryCityMap[value.subdivision];
     if (exact) return exact;
 
-    const target = normalized(value.subdivision);
-    const matchedKey = Object.keys(countryCityMap).find((key) => normalized(key) === target);
+    const target = normalizeLocationString(value.subdivision);
+    const matchedKey = Object.keys(countryCityMap).find((key) => normalizeLocationString(key) === target);
     return matchedKey ? countryCityMap[matchedKey] : null;
   }, [countryCityMap, value.subdivision]);
 

@@ -39,6 +39,7 @@ import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import { getEffectivePresence } from '@/lib/utils';
 import { usePresenceStore } from '@/store/presence.store';
+import { primaryProfilePhotoUrl } from '@/lib/primary-profile-photo-url';
 import { profileImageUrlForList } from '@/lib/storage-image-url';
 import { useKeyboardHeight } from '@/hooks/use-keyboard-height';
 import { useChatRealtime } from '@/hooks/use-chat-realtime';
@@ -239,12 +240,11 @@ export default function ChatScreen() {
     ? (visibleMessages[visibleMessages.length - 1].listKey ?? visibleMessages[visibleMessages.length - 1].id)
     : undefined;
   const isLiked = peer ? likedUserIds.has(peer.id) : false;
-  const avatar = peer
-    ? (() => {
-        const raw = peer.avatar_url || `${DEFAULT_AVATAR}${encodeURIComponent((peer.full_name ?? '?').charAt(0))}`;
-        return profileImageUrlForList(raw) ?? raw;
-      })()
+  const avatarRaw = peer
+    ? primaryProfilePhotoUrl(peer) ||
+      `${DEFAULT_AVATAR}${encodeURIComponent((peer.full_name ?? '?').charAt(0))}`
     : null;
+  const avatar = peer && avatarRaw ? profileImageUrlForList(avatarRaw) ?? avatarRaw : null;
 
   const bodyTopInset = chatHeaderHeight > 0 ? chatHeaderHeight : insets.top + 54;
 
@@ -919,6 +919,7 @@ export default function ChatScreen() {
             mode="peer"
             peer={peer}
             avatar={avatar}
+            avatarFallback={avatarRaw}
             peerTyping={peerTyping}
             onOpenMenu={openMenu}
           />

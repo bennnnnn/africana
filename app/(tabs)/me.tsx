@@ -513,8 +513,8 @@ export default function MyProfileScreen() {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity onPress={() => openText('bio', '')} style={s.emptyPrompt}>
-              <Ionicons name="add-circle-outline" size={16} color={COLORS.primary} />
-              <Text style={{ color: COLORS.primary, fontSize: 14, fontWeight: '600' }}>Add a bio — it helps you stand out</Text>
+              <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
+              <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>Add a bio — it helps you stand out</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -531,7 +531,7 @@ export default function MyProfileScreen() {
             <Text style={s.completionInlineTxt}>
               Add your <Text style={{ fontWeight: FONT.extrabold }}>{nextMissing.label}</Text> to get more matches
             </Text>
-            <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
+            <Ionicons name="chevron-forward" size={14} color={COLORS.emptyField} />
           </TouchableOpacity>
         )}
 
@@ -577,8 +577,8 @@ export default function MyProfileScreen() {
             </View>
           ) : (
             <TouchableOpacity onPress={() => openMulti('looking_for', [])} style={s.emptyPrompt}>
-              <Ionicons name="add-circle-outline" size={16} color={COLORS.primary} />
-              <Text style={{ color: COLORS.primary, fontSize: 14, fontWeight: '600' }}>Add what you're looking for</Text>
+              <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
+              <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>Add what you're looking for</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -647,8 +647,8 @@ export default function MyProfileScreen() {
             </View>
           ) : (
             <TouchableOpacity onPress={() => openMulti('hobbies', [])} style={s.emptyPrompt}>
-              <Ionicons name="add-circle-outline" size={16} color={COLORS.primary} />
-              <Text style={{ color: COLORS.primary, fontSize: 14, fontWeight: '600' }}>Add your hobbies & interests</Text>
+              <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
+              <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>Add your hobbies & interests</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -694,7 +694,7 @@ export default function MyProfileScreen() {
                 style={[{ width: (width - 60) / 3, height: (width - 60) / 3, borderRadius: 12 }, s.addPhotoTile]}>
                 {photoUploading
                   ? <ActivityIndicator size="small" color={COLORS.primary} />
-                  : <><Ionicons name="add" size={28} color={COLORS.primary} /><Text style={{ fontSize: 11, color: COLORS.primary, fontWeight: '600', marginTop: 2 }}>Add photo</Text></>}
+                  : <><Ionicons name="add" size={28} color={COLORS.emptyField} /><Text style={{ fontSize: 11, color: COLORS.emptyField, fontWeight: '600', marginTop: 2 }}>Add photo</Text></>}
               </TouchableOpacity>
             ) : null}
           </View>
@@ -783,9 +783,9 @@ export default function MyProfileScreen() {
         ) : needsOriginForData ? (
           <TouchableOpacity
             onPress={() => { close(); setTimeout(openOriginLocation, 300); }}
-            style={{ borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primaryBorder, backgroundColor: COLORS.primarySurface, padding: 18, alignItems: 'center', gap: 10 }}>
-            <Ionicons name="flag-outline" size={28} color={COLORS.primary} />
-            <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.primary, textAlign: 'center' }}>Set your origin first</Text>
+            style={{ borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.emptyFieldBorder, backgroundColor: COLORS.emptyFieldSurface, padding: 18, alignItems: 'center', gap: 10 }}>
+            <Ionicons name="flag-outline" size={28} color={COLORS.emptyField} />
+            <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.emptyField, textAlign: 'center' }}>Set your origin first</Text>
             <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}>
               Tap to set your origin country and unlock ethnicity options for your heritage.
             </Text>
@@ -847,9 +847,9 @@ export default function MyProfileScreen() {
         ) : needsOriginForData ? (
           <TouchableOpacity
             onPress={() => { close(); setTimeout(openOriginLocation, 300); }}
-            style={{ borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primaryBorder, backgroundColor: COLORS.primarySurface, padding: 18, alignItems: 'center', gap: 10 }}>
-            <Ionicons name="flag-outline" size={28} color={COLORS.primary} />
-            <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.primary, textAlign: 'center' }}>Set your origin first</Text>
+            style={{ borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.emptyFieldBorder, backgroundColor: COLORS.emptyFieldSurface, padding: 18, alignItems: 'center', gap: 10 }}>
+            <Ionicons name="flag-outline" size={28} color={COLORS.emptyField} />
+            <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.emptyField, textAlign: 'center' }}>Set your origin first</Text>
             <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}>
               Tap to set your origin country and unlock language options for your heritage.
             </Text>
@@ -976,8 +976,8 @@ export default function MyProfileScreen() {
 const s = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: COLORS.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border },
   iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
-  completionPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.primarySurface, borderWidth: 1, borderColor: COLORS.primaryBorder },
-  completionPillTxt: { fontSize: 11, fontWeight: FONT.extrabold, color: COLORS.primary, letterSpacing: 0.2 },
+  completionPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: COLORS.emptyFieldSurface, borderWidth: 1, borderColor: COLORS.emptyFieldBorder },
+  completionPillTxt: { fontSize: 11, fontWeight: FONT.extrabold, color: COLORS.emptyField, letterSpacing: 0.2 },
   onlineBadge: { position: 'absolute', top: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.xl },
   onlineDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.white },
   onlineText: { fontSize: 12, color: COLORS.white, fontWeight: FONT.semibold },
@@ -988,17 +988,17 @@ const s = StyleSheet.create({
   heroInfo: { position: 'absolute', bottom: 16, left: 16, right: 60 },
   heroName: { fontSize: 30, fontFamily: FONT.displayFamily, color: COLORS.white, textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6, letterSpacing: 0.3 },
   heroLocation: { fontSize: FONT.sm, color: 'rgba(255,255,255,0.85)' },
-  completionInline: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: COLORS.primarySurface, borderWidth: 1, borderColor: COLORS.primaryBorder },
+  completionInline: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: COLORS.emptyFieldSurface, borderWidth: 1, borderColor: COLORS.emptyFieldBorder },
   completionInlineTxt: { flex: 1, fontSize: 12.5, color: COLORS.text, lineHeight: 17 },
-  completionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary },
+  completionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.emptyField },
   section: { backgroundColor: COLORS.white, marginBottom: 8, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 8 },
   sectionTitle: { fontSize: FONT.xs, fontWeight: FONT.extrabold, color: COLORS.earth, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 },
   sectionEditBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center' },
   bioText: { flex: 1, fontSize: FONT.md, color: COLORS.textStrong, lineHeight: 23 },
-  emptyPrompt: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADIUS.md, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primaryBorder, backgroundColor: COLORS.primarySurface, marginBottom: 8 },
+  emptyPrompt: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: RADIUS.md, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.emptyFieldBorder, backgroundColor: COLORS.emptyFieldSurface, marginBottom: 8 },
   badge: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.xl, backgroundColor: COLORS.savanna, borderWidth: 1, borderColor: COLORS.border },
   badgeText: { fontSize: FONT.sm, color: COLORS.textStrong, fontWeight: FONT.semibold },
-  addPhotoTile: { backgroundColor: COLORS.primarySurface, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primaryBorder, alignItems: 'center', justifyContent: 'center' },
+  addPhotoTile: { backgroundColor: COLORS.emptyFieldSurface, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.emptyFieldBorder, alignItems: 'center', justifyContent: 'center' },
   stripThumb:     { width: 56, height: 56, borderRadius: RADIUS.md, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
   stripThumbActive:{ borderColor: COLORS.primary },
   stripImg:       { width: '100%', height: '100%' },

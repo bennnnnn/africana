@@ -29,6 +29,7 @@ import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import haptics from '@/lib/haptics';
 import { getEffectivePresence } from '@/lib/utils';
 import { usePresenceStore } from '@/store/presence.store';
+import { primaryProfilePhotoUrl } from '@/lib/primary-profile-photo-url';
 import { TIMINGS } from '@/lib/timings';
 import dayjs from 'dayjs';
 
@@ -92,7 +93,7 @@ const ConversationRow = memo(function ConversationRow({
       activeOpacity={0.65}
     >
       <Avatar
-        uri={other?.avatar_url}
+        uri={primaryProfilePhotoUrl(other ?? undefined) ?? undefined}
         name={other?.full_name ?? '?'}
         size={52}
         onlineStatus={getEffectivePresence(

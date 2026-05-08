@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, memo, useMemo } from 'react';
+import React, { useRef, useEffect, memo, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -36,7 +36,14 @@ const NEW_MEMBER_WINDOW_MS = 10 * 24 * 60 * 60 * 1000; // 10 days
 
 function UserCardInner({ user, cardWidth, cardHeight, beforeNavigate, onLongPress }: UserCardProps) {
   const photoUrl = user.profile_photos?.[0] || user.avatar_url || null;
-  const displayPhoto = photoUrl ? profileImageUrlForList(photoUrl) ?? photoUrl : null;
+  const optimizedPhoto = useMemo(
+    () => (photoUrl ? profileImageUrlForList(photoUrl) ?? photoUrl : null),
+    [photoUrl],
+  );
+  const [displayPhoto, setDisplayPhoto] = useState<string | null>(optimizedPhoto);
+  useEffect(() => {
+    setDisplayPhoto(optimizedPhoto);
+  }, [optimizedPhoto, user.id]);
   const hasPhoto = !!photoUrl;
   const shortLocation = user.city || user.state || user.country || '';
 
@@ -97,13 +104,17 @@ function UserCardInner({ user, cardWidth, cardHeight, beforeNavigate, onLongPres
       style={[s.card, { width: cardWidth, height: cardHeight }]}
     >
       {/* ── Photo or placeholder — fills the card ── */}
-      {hasPhoto ? (
+      {hasPhoto && displayPhoto ? (
         <Image
-          source={{ uri: displayPhoto! }}
+          source={{ uri: displayPhoto }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
-          transition={200}
+          transition={0}
           cachePolicy="memory-disk"
+          recyclingKey={`${user.id}:${photoUrl}`}
+          onError={() => {
+            if (photoUrl != null && displayPhoto !== photoUrl) setDisplayPhoto(photoUrl);
+          }}
         />
       ) : (
         <View style={StyleSheet.absoluteFill}>

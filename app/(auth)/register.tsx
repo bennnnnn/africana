@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { AuthLegalConsentRow } from '@/components/auth/AuthLegalConsentRow';
 import { COLORS } from '@/constants';
 import { getValidationState, validateEmail, validatePassword } from '@/lib/validation';
 import { appDialog } from '@/lib/app-dialog';
@@ -27,6 +28,7 @@ export default function RegisterScreen() {
     password: false,
   });
   const [loading, setLoading] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const trimmedEmail = email.trim().toLowerCase();
   const emailValidation = validateEmail(email);
   const passwordValidation = validatePassword(password);
@@ -40,12 +42,24 @@ export default function RegisterScreen() {
     if (!emailValidation.valid || !passwordValidation.valid) {
       return;
     }
+    if (!termsAccepted) {
+      appDialog({
+        title: 'Please accept the Terms',
+        message: 'You need to agree to the Terms of Service and Privacy Policy to create an account.',
+        icon: 'document-text-outline',
+      });
+      return;
+    }
 
     setLoading(true);
+    const acceptedAt = new Date().toISOString();
     const { data, error } = await supabase.auth.signUp({
       email: trimmedEmail,
       password,
-      options: { emailRedirectTo: 'africana://auth/callback' },
+      options: {
+        emailRedirectTo: 'africana://auth/callback',
+        data: { terms_accepted_at: acceptedAt },
+      },
     });
     setLoading(false);
 
@@ -136,10 +150,17 @@ export default function RegisterScreen() {
             error={showPasswordState ? passwordValidation.message : undefined}
           />
 
+          <AuthLegalConsentRow
+            checked={termsAccepted}
+            onToggle={() => setTermsAccepted((v) => !v)}
+            style={{ marginTop: 4, marginBottom: 8 }}
+          />
+
           <Button
             title="Create Account"
             onPress={handleRegister}
             loading={loading}
+            disabled={!termsAccepted}
             fullWidth
             size="lg"
           />

@@ -16,9 +16,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.africana.dating",
-      "runtimeVersion": {
-        "policy": "appVersion"
-      }
+      "runtimeVersion": "1.0.0",
+      "associatedDomains": [
+        "applinks:open.africana.app"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -30,10 +31,26 @@
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
-        "android.permission.RECORD_AUDIO",
         "android.permission.RECORD_AUDIO"
       ],
-      "runtimeVersion": "1.0.0"
+      "runtimeVersion": "1.0.0",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "open.africana.app",
+              "pathPrefix": "/profile-share.html"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",

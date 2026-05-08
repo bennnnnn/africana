@@ -93,7 +93,7 @@ export default function NotificationsSettingsScreen() {
             icon="mail-outline"
             iconColor={COLORS.textSecondary}
             label="Email updates"
-            description="Extra emails for likes, matches, and stars"
+            description="Likes, matches, stars, and occasional we-miss-you notes (push stays primary)"
             value={settings?.email_notifications ?? true}
             onToggle={(v) => applySettings({ email_notifications: v })}
             isLast

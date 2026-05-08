@@ -28,7 +28,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as Linking from 'expo-linking';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -59,6 +58,7 @@ import { SkeletonProfile } from '@/components/ui/Skeleton';
 import { track, EVENTS } from '@/lib/analytics';
 import { addFavourite, blockUser, isBlockedRelationship } from '@/lib/social-actions';
 import { recordProfileShareEvent, SHARE_REWARD_TOAST } from '@/lib/share-reward';
+import { getProfileShareUrl } from '@/lib/share-profile-url';
 import { getProfileSeed } from '@/lib/profile-seed-cache';
 import { normalizeRouteParam } from '@/lib/chat-route-utils';
 import {
@@ -668,7 +668,7 @@ export default function ProfileViewScreen() {
   const handleShareProfile = useCallback(async () => {
     if (!profile?.id) return;
     try {
-      const url = Linking.createURL(`/(profile)/${profile.id}`);
+      const url = getProfileShareUrl(profile.id);
       const result = await Share.share({
         message: `${profile.full_name} on Africana — open in the app:\n${url}`,
       });

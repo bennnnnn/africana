@@ -1,12 +1,12 @@
 export const COLORS = {
   // ── Brand ──────────────────────────────────────────────────────────────────
-  /** Vivid coral-terracotta — confident, modern, still rooted in the Africana warmth */
-  primary:        '#EF3E2A',
-  primaryLight:   '#FF7A5F',
-  primaryDark:    '#C02B1A',
+  /** Primary CTA — matches splash / welcome (`#0E9F6E`) */
+  primary: '#0E9F6E',
+  primaryLight: '#18C98A',
+  primaryDark: '#087A52',
   /** Tinted surface for primary backgrounds (banners, soft chips) */
-  primarySurface: '#FFEDE8',
-  primaryBorder:  '#FCC9BD',
+  primarySurface: '#E1F7EE',
+  primaryBorder: '#9FE3C6',
 
   /** Muted accent (labels, secondary chips) — neutral graphite */
   earth:        '#3A3A3C',
@@ -57,10 +57,10 @@ export const COLORS = {
   /** Settings hub / in-app info accent (e.g. notifications icon) */
   notificationsAccent: '#3B82F6',
 
-  /** Unfilled profile fields — soft coral to invite action */
-  emptyField:        '#EF6A56',
-  emptyFieldSurface: '#FFEDE8',
-  emptyFieldBorder:  'rgba(239, 106, 86, 0.32)',
+  /** Unfilled profile fields — warm red tint (incomplete / needs attention; not success) */
+  emptyField: '#E53935',
+  emptyFieldSurface: '#FDECEC',
+  emptyFieldBorder: 'rgba(229, 57, 53, 0.35)',
 
   // ── Status ─────────────────────────────────────────────────────────────────
   online:  '#0E9F6E',
@@ -353,7 +353,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw err;
 }
 
-export const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?background=EF3E2A&color=fff&size=200&name=';
+export const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?background=0E9F6E&color=fff&size=200&name=';
 export const MAX_PROFILE_PHOTOS = 6;
 export const MIN_AGE = 18;
 export const MAX_AGE = 100;

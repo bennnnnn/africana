@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signInWithGoogle } from '@/lib/google-auth';
+import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { COLORS, FONT } from '@/constants';
 import { redirectAfterAuth } from '@/lib/profile-completion';
@@ -43,6 +44,7 @@ export default function WelcomeScreen() {
   const [activeSlide, setActiveSlide] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [consentAccepted, setConsentAccepted] = useState(false);
 
   useEffect(() => {
     startAutoPlay();
@@ -73,11 +75,39 @@ export default function WelcomeScreen() {
     startAutoPlay();
   };
 
+  const ensureConsentThen = (onAgree: () => void) => {
+    if (consentAccepted) return onAgree();
+    appDialog({
+      title: 'Before you continue',
+      message: 'You need to agree to the Terms of Service and Privacy Policy.',
+      icon: 'document-text-outline',
+      actions: [
+        { label: 'View Terms', onPress: () => router.push({ pathname: '/(auth)/legal', params: { tab: 'terms' } }) },
+        { label: 'View Privacy', onPress: () => router.push({ pathname: '/(auth)/legal', params: { tab: 'privacy' } }) },
+        {
+          label: 'I agree',
+          style: 'primary',
+          onPress: () => {
+            setConsentAccepted(true);
+            onAgree();
+          },
+        },
+        { label: 'Cancel', style: 'cancel' },
+      ],
+    });
+  };
+
   const handleGoogle = async () => {
     setGoogleLoading(true);
     try {
       const session = await signInWithGoogle();
       if (session?.user) {
+        const meta = session.user.user_metadata as Record<string, unknown> | undefined;
+        if (typeof meta?.terms_accepted_at !== 'string' || !meta.terms_accepted_at) {
+          await supabase.auth.updateUser({
+            data: { terms_accepted_at: new Date().toISOString() },
+          });
+        }
         await hydrateUserFromServer(session.user.id);
         const { user } = useAuthStore.getState();
         redirectAfterAuth(router, user, session);
@@ -151,7 +181,7 @@ export default function WelcomeScreen() {
         <View style={styles.actionsSection}>
           <TouchableOpacity
             style={styles.googleBtn}
-            onPress={handleGoogle}
+            onPress={() => ensureConsentThen(() => void handleGoogle())}
             disabled={googleLoading}
             activeOpacity={0.9}
           >

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -40,7 +40,8 @@ import { appDialog } from '@/lib/app-dialog';
 import { track, EVENTS } from '@/lib/analytics';
 import { ALL_COUNTRIES, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
 import { CultureOptionSet, getEthnicityOptions, getLanguageOptions } from '@/lib/cultural-data';
-import { detectCountryFromIp } from '@/lib/geo-country';
+import { detectLocationFromIp } from '@/lib/geo-country';
+import { logWarn } from '@/lib/logger';
 import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
 import { MultiChipSelect } from '@/components/onboarding/MultiChipSelect';
 
@@ -55,20 +56,9 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState(1);
   const progressAnim = useRef(new Animated.Value((1 / TOTAL_STEPS) * 100)).current;
 
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: (Math.min(step, TOTAL_STEPS) / TOTAL_STEPS) * 100,
-      duration: 350,
-      useNativeDriver: false,
-    }).start();
-  }, [step]);
-
   // Step 1
   const [fullName, setFullName] = useState('');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  // Legal consent — captured on step 1 so both email and OAuth paths record it.
-  // Gated by `canProceed` and persisted as `profiles.terms_accepted_at` on save.
-  const [termsAccepted, setTermsAccepted] = useState(false);
 
   // Step 2
   const [photoUris, setPhotoUris] = useState<string[]>([]);
@@ -111,6 +101,25 @@ export default function OnboardingScreen() {
   const locationPathComplete = Boolean(
     culturalLocation?.country && culturalLocation?.subdivision && culturalLocation?.city
   );
+  /** “Your roots” (step 6) only when we have a full cultural location; otherwise finish after location. */
+  const showRootsStep = locationPathComplete;
+  const progressDenominator =
+    step <= 4 ? TOTAL_STEPS : step === 5 && !showRootsStep ? 5 : TOTAL_STEPS;
+
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: (Math.min(step, progressDenominator) / progressDenominator) * 100,
+      duration: 350,
+      useNativeDriver: false,
+    }).start();
+  }, [step, progressDenominator]);
+
+  useLayoutEffect(() => {
+    if (step === 6 && !locationPathComplete) {
+      setStep(5);
+    }
+  }, [step, locationPathComplete]);
+
   const suggestedLanguages = cultureLanguageOptions?.suggested ?? [];
   const allLanguages       = cultureLanguageOptions?.all ?? [];
 
@@ -179,14 +188,14 @@ export default function OnboardingScreen() {
   const toggleLanguage = (lang: string) =>
     setLanguages((cur) => cur.includes(lang) ? cur.filter((l) => l !== lang) : [...cur, lang]);
 
-  // Pre-fill living country from IP when user reaches location step (once per empty state).
+  // Pre-fill living location from IP when user reaches location step (country + best-effort region/city).
   useEffect(() => {
     if (step !== 5) return;
     if (location.country || location.countryCode) return;
     let cancelled = false;
     (async () => {
       try {
-        const detected = await detectCountryFromIp();
+        const detected = await detectLocationFromIp();
         if (cancelled || !detected) return;
         setLocation((cur) => {
           if (cur.country || cur.countryCode) return cur;
@@ -194,12 +203,12 @@ export default function OnboardingScreen() {
             ...cur,
             country: detected.country,
             countryCode: detected.countryCode,
-            subdivision: '',
-            city: '',
+            subdivision: detected.subdivision,
+            city: detected.city,
           };
         });
       } catch (e) {
-        console.error('IP country prefill failed', e);
+        logWarn('[onboarding] IP location prefill failed', e);
       }
     })();
     return () => {
@@ -251,15 +260,6 @@ export default function OnboardingScreen() {
       return;
     }
     if (!firstNameValidation.valid) { setStep(1); return; }
-    if (!termsAccepted) {
-      setStep(1);
-      appDialog({
-        title: 'Please accept the Terms',
-        message: 'You need to agree to the Terms of Service and Privacy Policy to use Africana.',
-        icon: 'document-text-outline',
-      });
-      return;
-    }
     if (!birthdate || !gender || !interestedIn) {
       appDialog({ title: 'Incomplete', message: 'Please complete step 3.' });
       return;
@@ -311,6 +311,12 @@ export default function OnboardingScreen() {
         return;
       }
 
+      const meta = session.user.user_metadata as Record<string, unknown> | undefined;
+      const termsAcceptedAt =
+        typeof meta?.terms_accepted_at === 'string' && meta.terms_accepted_at.length > 0
+          ? meta.terms_accepted_at
+          : new Date().toISOString();
+
       let uploadedUrls: string[] = [];
       if (photoUris.length > 0) {
         for (const uri of photoUris) {
@@ -353,7 +359,7 @@ export default function OnboardingScreen() {
         languages:      savedLanguages,
         avatar_url:     avatarUrl,
         profile_photos: uploadedUrls,
-        terms_accepted_at: new Date().toISOString(),
+        terms_accepted_at: termsAcceptedAt,
       }, { onConflict: 'id' });
 
       if (error) {
@@ -394,7 +400,7 @@ export default function OnboardingScreen() {
   };
 
   const canProceed = () => {
-    if (step === 1) return firstNameValidation.valid && termsAccepted;
+    if (step === 1) return firstNameValidation.valid;
     if (step === 2) return true;
     if (step === 3) {
       if (!birthdate || !gender || !interestedIn) return false;
@@ -412,6 +418,10 @@ export default function OnboardingScreen() {
       return;
     }
     if (step === 7) { router.replace('/(tabs)/discover'); return; }
+    if (step === 5 && !showRootsStep) {
+      await handleSaveProfile(true);
+      return;
+    }
     setStep(step + 1);
   };
 
@@ -448,7 +458,9 @@ export default function OnboardingScreen() {
             </TouchableOpacity>
           ) : <View style={{ width: 36 }} />}
           <View style={{ flex: 1 }} />
-          <Text style={s.counter}>{step} / {TOTAL_STEPS}</Text>
+          <Text style={s.counter}>
+            {step} / {progressDenominator}
+          </Text>
         </View>
 
         {/* ── Animated progress bar ── */}
@@ -465,12 +477,22 @@ export default function OnboardingScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* ── Step hero ── */}
-          <View style={[s.stepHero, { backgroundColor: cur.bg }]}>
-            <Text style={{ fontSize: 40 }}>{cur.emoji}</Text>
-          </View>
-          <Text style={s.stepTitle}>{cur.title}</Text>
-          <Text style={s.stepSub}>{cur.subtitle}</Text>
+          {/* ── Step hero (decorative emoji) — only on “Your roots” (step 6) ── */}
+          {step === 6 ? (
+            <View style={[s.stepHero, { backgroundColor: cur.bg }]}>
+              <Text style={{ fontSize: 40 }}>{cur.emoji}</Text>
+            </View>
+          ) : null}
+          <Text
+            style={[
+              s.stepTitle,
+              step <= 5 ? s.stepTitleTightTop : null,
+              step >= 3 && step <= 6 ? s.stepTitleSolo : null,
+            ]}
+          >
+            {cur.title}
+          </Text>
+          {(step === 1 || step === 2) && <Text style={s.stepSub}>{cur.subtitle}</Text>}
 
           {/* ════ STEP 1 — Name ════ */}
           {step === 1 && (
@@ -481,49 +503,10 @@ export default function OnboardingScreen() {
                 onBlur={() => setTouched((t) => ({ ...t, fullName: true }))}
                 placeholder="e.g. Amara"
                 autoCapitalize="words"
-                leftIcon="person-outline"
                 validationState={getValidationState(Boolean(touched.fullName), firstNameValidation, Boolean(fullName.trim()))}
                 error={touched.fullName ? firstNameValidation.message : undefined}
                 autoFocus
               />
-
-              {/* Legal consent — tappable row + inline links. We persist
-                  `terms_accepted_at` on save as an audit trail. */}
-              <Pressable
-                onPress={() => setTermsAccepted((v) => !v)}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: termsAccepted }}
-                style={s.consentRow}
-              >
-                <Ionicons
-                  name={termsAccepted ? 'checkbox' : 'square-outline'}
-                  size={24}
-                  color={termsAccepted ? COLORS.primary : COLORS.textMuted}
-                />
-                <Text style={s.consentText}>
-                  I am 18 or older and agree to Africana&apos;s{' '}
-                  <Text
-                    style={s.consentLink}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      router.push({ pathname: '/(auth)/legal', params: { tab: 'terms' } });
-                    }}
-                  >
-                    Terms of Service
-                  </Text>
-                  {' '}and{' '}
-                  <Text
-                    style={s.consentLink}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      router.push({ pathname: '/(auth)/legal', params: { tab: 'privacy' } });
-                    }}
-                  >
-                    Privacy Policy
-                  </Text>
-                  .
-                </Text>
-              </Pressable>
             </>
           )}
 
@@ -549,14 +532,13 @@ export default function OnboardingScreen() {
                 ))}
                 {photoUris.length < MAX_PROFILE_PHOTOS && (
                   <TouchableOpacity style={s.photoAddSlot} onPress={pickPhotos}>
-                    <Ionicons name="add" size={30} color={COLORS.earth} />
-                    <Text style={s.photoAddTxt}>Add</Text>
+                    <Text style={s.photoAddTxt}>Add photos</Text>
                   </TouchableOpacity>
                 )}
               </View>
               <Text style={[s.hint, { marginTop: 12, textAlign: 'center' }]}>
                 {photoUris.length > 0
-                  ? `${photoUris.length} of ${MAX_PROFILE_PHOTOS} photos selected • tap ✕ to remove`
+                  ? `${photoUris.length} of ${MAX_PROFILE_PHOTOS} photos selected`
                   : `Select up to ${MAX_PROFILE_PHOTOS} photos at once`}
               </Text>
             </View>
@@ -611,7 +593,6 @@ export default function OnboardingScreen() {
                     <Text style={{ fontSize: 28 }}>{opt.emoji}</Text>
                     <View style={{ flex: 1 }}>
                       <Text style={[s.cardLabel, on && { color: COLORS.success }]}>{opt.label}</Text>
-                      <Text style={s.cardDesc}>{opt.desc}</Text>
                     </View>
                     <View style={[s.checkCircle, on && s.checkCircleOn]}>
                       {on && <Ionicons name="checkmark" size={14} color="#FFF" />}
@@ -758,25 +739,12 @@ const s = StyleSheet.create({
 
   stepHero:  { width: 72, height: 72, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 16, alignSelf: 'center' },
   stepTitle: { fontSize: 24, fontWeight: '800', color: COLORS.text, textAlign: 'center', marginBottom: 6 },
+  /** When hero emoji is hidden (steps 1–2), pull title up slightly. */
+  stepTitleTightTop: { marginTop: 4 },
+  /** Selection steps (3–6) omit `stepSub`; extra space below title. */
+  stepTitleSolo: { marginBottom: 20 },
   stepSub:   { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 28 },
 
-  consentRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginTop: 20,
-    paddingHorizontal: 4,
-  },
-  consentText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 20,
-    color: COLORS.textSecondary,
-  },
-  consentLink: {
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
   label:    { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 10 },
   row:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   rowEqual: { flexDirection: 'row', flexWrap: 'nowrap', gap: 10 },
@@ -805,7 +773,6 @@ const s = StyleSheet.create({
   card:         { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#FFF', gap: 14 },
   cardOn:       { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
   cardLabel:    { fontSize: 16, fontWeight: '700', color: COLORS.text },
-  cardDesc:     { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   checkCircle:  { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
   checkCircleOn:{ borderColor: COLORS.success, backgroundColor: COLORS.success },
 
@@ -815,8 +782,8 @@ const s = StyleSheet.create({
   mainBadge:     { position: 'absolute', bottom: 6, left: 6, backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   mainBadgeTxt:  { color: '#FFF', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   removePhotoBtn:{ position: 'absolute', top: 4, right: 4 },
-  photoAddSlot:  { width: (width - 48 - 16) / 3, height: (width - 48 - 16) / 3 * 1.3, borderRadius: 12, borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.earthLight, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  photoAddTxt:   { fontSize: 11, color: COLORS.textSecondary, fontWeight: '600' },
+  photoAddSlot:  { width: (width - 48 - 16) / 3, height: (width - 48 - 16) / 3 * 1.3, borderRadius: 12, borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.earthLight, backgroundColor: COLORS.savanna, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  photoAddTxt:   { fontSize: 13, color: COLORS.textSecondary, fontWeight: '700', textAlign: 'center' },
   hint:          { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
 
   celebContainer:  { flex: 1, padding: 28, justifyContent: 'center', alignItems: 'center' },

@@ -1,0 +1,19 @@
+-- ============================================================================
+-- Initial public schema baseline (placeholder)
+-- ============================================================================
+-- This repo historically shipped incremental migrations without a full DDL
+-- baseline, so an empty database cannot be reproduced from migrations alone
+-- until this file is replaced.
+--
+-- Generate from a reference database (Docker + linked project, or remote):
+--   supabase link --project-ref <ref>
+--   supabase db dump --schema public --file supabase/migrations/00000000000000_initial_schema.sql
+--
+-- After replacing this file with a real `pg_dump`-style schema:
+--   - Remove or archive migrations whose DDL is fully superseded by the baseline, OR
+--   - Make older migrations idempotent only (risky). Most teams squash into one baseline
+--     per major release and keep only newer incremental files.
+--
+-- This placeholder performs no DDL so existing timestamped migrations keep applying
+-- unchanged on current projects.
+-- ============================================================================
