@@ -1,38 +1,68 @@
 /**
  * Africana — Payment / Subscription Layer (RevenueCat)
  *
- * PAYMENTS_ENABLED = false → everyone gets free access, upgrade UI shows "Coming Soon"
- * PAYMENTS_ENABLED = true  → RevenueCat is live, premium gating is active
+ * ─────────────────────────────────────────────────────────────────────────────
+ * MONETIZATION MODEL
+ * ─────────────────────────────────────────────────────────────────────────────
  *
- * Early growth: users who share a profile (see share-reward.ts) can receive Gold-tier
- * access until total profiles exceed GROWTH_SHARE_REWARD_UNTIL_PROFILE_COUNT, if they
- * have no active paid subscription (RevenueCat / DB).
+ * Single subscription tier: **Africana Pro**
+ *   - Monthly: $9.99/mo
+ *   - Annual:  $59.99/yr  (≈ $5/mo — 50% off the monthly)
  *
- * To activate payments:
- *   1. Set PAYMENTS_ENABLED = true below
- *   2. npx expo install react-native-purchases
- *   3. Add to .env:
- *        EXPO_PUBLIC_REVENUECAT_IOS_KEY=appl_xxxx
- *        EXPO_PUBLIC_REVENUECAT_ANDROID_KEY=goog_xxxx
- *   4. Run `npx expo prebuild` to link native modules
- *   5. Configure products in App Store Connect / Google Play Console
- *   6. Configure entitlements "gold" and "platinum" in RevenueCat dashboard
+ * RevenueCat entitlement identifier: `pro` (display name: "Africana Pro").
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ROLLOUT
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Phase 1: PAYMENTS_ENABLED = false → everyone gets Free. Upgrade screen
+ *          renders the in-app preview ("Notify me 🔔") and the SDK is not
+ *          initialized. No native side effects.
+ *
+ * Phase 2: PAYMENTS_ENABLED = true  → RevenueCat is configured at app
+ *          bootstrap (after auth), the paywall is presented from the Upgrade
+ *          screen, and `isProSync()` reads from the cached CustomerInfo.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * FREE vs PRO (enforced)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Free for everyone (no gate):
+ *   - See who liked you (clear avatars)
+ *   - All Discover filters
+ *   - Read receipts in chat
+ *
+ * Free has limits (gated):
+ *   - 10 likes / day
+ *   - 10 messages / day
+ *
+ * Pro (paid):
+ *   - Unlimited likes
+ *   - Unlimited messages
+ *   - See who viewed your profile (Views tab)
+ *   - Hide / incognito browsing
  */
 
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { growthShareRewardsCurrentlyApplies, userHasRecordedProfileShare } from './share-reward';
+import { logError, logWarn } from './logger';
 
 // ── Feature flag ──────────────────────────────────────────────────────────────
+/** Master switch. While false, all users are on Free and the SDK is not loaded. */
 export const PAYMENTS_ENABLED = false;
 
-export type PlanId = 'free' | 'gold' | 'platinum';
+/** RevenueCat entitlement identifier. Must match what's configured in the
+ *  RevenueCat dashboard. Display name in the dashboard can be "Africana Pro". */
+export const RC_ENTITLEMENT_ID = 'pro';
+
+export type PlanId = 'free' | 'pro';
 
 export interface Subscription {
   plan: PlanId;
   expiresAt: string | null;
   isActive: boolean;
-  provider: 'revenuecat' | 'stripe' | 'manual' | null;
+  provider: 'revenuecat' | 'manual' | null;
 }
 
 export const FREE_SUB: Subscription = {
@@ -43,185 +73,464 @@ export const FREE_SUB: Subscription = {
 };
 
 // ── Plan definitions ──────────────────────────────────────────────────────────
-export const PLANS = {
-  gold: {
-    id: 'gold' as PlanId,
-    name: 'Gold',
-    emoji: '⭐',
-    monthlyPrice: '$9.99',
-    annualPrice: '$79.99',
-    annualMonthly: '$6.67',
-    revenuecatId: {
-      ios: 'africana_gold_monthly',
-      android: 'africana_gold_monthly',
-    },
-    features: [
-      'See who liked you',
-      '100 likes per day',
-      'Read receipts in chat',
-      'Advanced filters (religion, education)',
-      'Priority support',
-    ],
+export const PRO_PLAN = {
+  id: 'pro' as const,
+  name: 'Pro',
+  emoji: '✨',
+  monthlyPrice: '$9.99',
+  annualPrice: '$59.99',
+  annualMonthly: '$5.00',
+  annualDiscountLabel: '50% off',
+  /** RevenueCat package identifiers. Must match the products configured in
+   *  the dashboard offering. RevenueCat normalizes these across stores. */
+  packageIds: {
+    monthly: '$rc_monthly',
+    annual: '$rc_annual',
   },
-  platinum: {
-    id: 'platinum' as PlanId,
-    name: 'Platinum',
-    emoji: '💎',
-    monthlyPrice: '$19.99',
-    annualPrice: '$149.99',
-    annualMonthly: '$12.50',
-    revenuecatId: {
-      ios: 'africana_platinum_monthly',
-      android: 'africana_platinum_monthly',
-    },
-    features: [
-      'Everything in Gold',
-      'Unlimited likes',
-      'Profile boost (1× per week)',
-      'Priority in Discover feed',
-      'Incognito browsing',
-      'See who viewed your profile',
-    ],
-  },
+  features: [
+    'Unlimited likes',
+    'Unlimited messages',
+    'See who viewed your profile',
+    'Hide profile / incognito browsing',
+  ],
 } as const;
 
-// ── RevenueCat initialization ─────────────────────────────────────────────────
-let _rcInitialized = false;
+export const PLANS = { pro: PRO_PLAN } as const;
 
-export async function initializePayments(userId: string): Promise<void> {
-  if (!PAYMENTS_ENABLED || _rcInitialized) return;
-  try {
-    // Dynamic import — only works after `npx expo install react-native-purchases`
-    const Purchases = (await import('react-native-purchases' as any)).default;
-    const apiKey =
-      Platform.OS === 'ios'
-        ? process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY!
-        : process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY!;
-    if (!apiKey) return;
-    await Purchases.configure({ apiKey });
-    await Purchases.logIn(userId);
-    _rcInitialized = true;
-  } catch {
-    // react-native-purchases not installed yet — skip silently
+// ── Free-tier limits ──────────────────────────────────────────────────────────
+export const FREE_DAILY_LIKES = 10;
+export const FREE_DAILY_MESSAGES = 10;
+
+// ── Pro feature gates ─────────────────────────────────────────────────────────
+/** Plans that can see who viewed their profile (Views tab). */
+export const CAN_SEE_VIEWERS: PlanId[] = ['pro'];
+
+/** Plans with incognito browsing + ability to hide profile. */
+export const HAS_INCOGNITO: PlanId[] = ['pro'];
+
+// ── Synchronous subscription cache ────────────────────────────────────────────
+// The CustomerInfo update listener mirrors RevenueCat state into this cache so
+// app code can do a synchronous `isProSync()` check without RPC/IO on every
+// like/message send. Updated automatically.
+
+let _cachedSubscription: Subscription = FREE_SUB;
+const _subscriptionListeners = new Set<(sub: Subscription) => void>();
+
+export function getCachedSubscription(): Subscription {
+  return _cachedSubscription;
+}
+
+export function isProSync(): boolean {
+  return PAYMENTS_ENABLED && _cachedSubscription.isActive && _cachedSubscription.plan === 'pro';
+}
+
+/** Subscribe to subscription state changes (e.g. for auth store integration). */
+export function onSubscriptionChange(cb: (sub: Subscription) => void): () => void {
+  _subscriptionListeners.add(cb);
+  return () => {
+    _subscriptionListeners.delete(cb);
+  };
+}
+
+function setCachedSubscription(next: Subscription): void {
+  _cachedSubscription = next;
+  for (const cb of _subscriptionListeners) {
+    try {
+      cb(next);
+    } catch (e) {
+      logWarn('[payments] subscription listener threw', e);
+    }
   }
 }
 
-// ── Fetch subscription ────────────────────────────────────────────────────────
+// ── RevenueCat SDK ────────────────────────────────────────────────────────────
+
+let _rcConfigured = false;
+let _currentUserId: string | null = null;
+
+function resolveApiKey(): string | null {
+  const platformKey =
+    Platform.OS === 'ios'
+      ? process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY
+      : process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
+  const fallback = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY;
+  return platformKey || fallback || null;
+}
+
+function subscriptionFromCustomerInfo(info: unknown): Subscription {
+  // info is RevenueCat's CustomerInfo. Untyped here so we don't hard-depend
+  // on the package being installed at type-check time.
+  const c = info as
+    | {
+        entitlements?: {
+          active?: Record<
+            string,
+            { isActive?: boolean; expirationDate?: string | null; productIdentifier?: string }
+          >;
+        };
+      }
+    | null
+    | undefined;
+  const ent = c?.entitlements?.active?.[RC_ENTITLEMENT_ID];
+  if (ent?.isActive) {
+    return {
+      plan: 'pro',
+      expiresAt: ent.expirationDate ?? null,
+      isActive: true,
+      provider: 'revenuecat',
+    };
+  }
+  return FREE_SUB;
+}
+
+/**
+ * Configure RevenueCat for the current user. Idempotent. Safe to call
+ * multiple times — only the first call configures the SDK; later calls just
+ * log the user in (which is also idempotent).
+ */
+export async function initializePayments(userId: string): Promise<void> {
+  if (!PAYMENTS_ENABLED) return;
+  const apiKey = resolveApiKey();
+  if (!apiKey) {
+    logWarn('[payments] no RevenueCat API key set — skipping SDK init');
+    return;
+  }
+
+  try {
+    const Purchases = (await import('react-native-purchases')).default;
+
+    if (!_rcConfigured) {
+      // Modern SDK API: pass appUserID at configure time so initial CustomerInfo
+      // reflects the right user immediately.
+      Purchases.configure({ apiKey, appUserID: userId });
+      _rcConfigured = true;
+
+      // Wire the listener once. Updates flow through `setCachedSubscription`
+      // so app code stays in sync with entitlement changes (purchase, expiry,
+      // restore from another device, etc.).
+      Purchases.addCustomerInfoUpdateListener((info) => {
+        const next = subscriptionFromCustomerInfo(info);
+        setCachedSubscription(next);
+        void syncSubscriptionToDb(userId, next);
+      });
+    } else if (_currentUserId !== userId) {
+      // User changed (signed out + in as someone else). Re-identify.
+      await Purchases.logIn(userId);
+    }
+
+    _currentUserId = userId;
+
+    // Seed the cache from the current CustomerInfo right away.
+    const info = await Purchases.getCustomerInfo();
+    const sub = subscriptionFromCustomerInfo(info);
+    setCachedSubscription(sub);
+    void syncSubscriptionToDb(userId, sub);
+  } catch (e) {
+    // SDK may be unavailable in Expo Go or before a native rebuild — that's OK.
+    logWarn('[payments] RevenueCat unavailable (Expo Go or pre-rebuild?)', e);
+  }
+}
+
+/**
+ * Tear down on sign-out. Logs the user out of RevenueCat and resets the cache
+ * so the next user doesn't inherit Pro state.
+ */
+export async function teardownPayments(): Promise<void> {
+  setCachedSubscription(FREE_SUB);
+  _currentUserId = null;
+  if (!PAYMENTS_ENABLED || !_rcConfigured) return;
+  try {
+    const Purchases = (await import('react-native-purchases')).default;
+    await Purchases.logOut();
+  } catch (e) {
+    logWarn('[payments] logOut failed', e);
+  }
+}
+
+// ── Subscription retrieval (RPC + DB fallback) ─────────────────────────────────
+
+/**
+ * Async subscription lookup. Use `isProSync()` for hot paths (like/message
+ * gates) — that reads from the in-memory cache. Use this only when you need
+ * up-to-the-second confirmation, e.g. on the Manage Subscription screen.
+ */
 export async function getSubscription(userId: string): Promise<Subscription> {
   if (!PAYMENTS_ENABLED) return FREE_SUB;
 
-  // Try RevenueCat first (most up-to-date)
-  if (_rcInitialized) {
+  // 1) Live from RevenueCat if configured.
+  if (_rcConfigured) {
     try {
-      const Purchases = (await import('react-native-purchases' as any)).default;
+      const Purchases = (await import('react-native-purchases')).default;
       const info = await Purchases.getCustomerInfo();
-      const isGold = !!info.entitlements.active['gold'];
-      const isPlatinum = !!info.entitlements.active['platinum'];
-      if (isPlatinum)
-        return { plan: 'platinum', expiresAt: null, isActive: true, provider: 'revenuecat' };
-      if (isGold) return { plan: 'gold', expiresAt: null, isActive: true, provider: 'revenuecat' };
-    } catch {
-      /* RevenueCat not configured or customer info unavailable */
+      const sub = subscriptionFromCustomerInfo(info);
+      if (sub.isActive) return sub;
+    } catch (e) {
+      logWarn('[payments] getCustomerInfo failed', e);
     }
   }
 
-  // Fall back to DB
+  // 2) Growth-phase share reward.
+  if ((await growthShareRewardsCurrentlyApplies()) && (await userHasRecordedProfileShare(userId))) {
+    return { plan: 'pro', expiresAt: null, isActive: true, provider: 'manual' };
+  }
+
+  // 3) Fall back to DB row (catches edge cases where SDK is unreachable but
+  //    our backend recorded a successful purchase via webhook).
   const { data } = await supabase
     .from('subscriptions')
     .select('plan, expires_at, is_active, provider')
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
-  if (!data || !data.is_active) {
-    // Early growth: no paid sub yet — Gold for users who helped spread the word.
-    if (
-      (await growthShareRewardsCurrentlyApplies()) &&
-      (await userHasRecordedProfileShare(userId))
-    ) {
-      return { plan: 'gold', expiresAt: null, isActive: true, provider: 'manual' };
-    }
-    return FREE_SUB;
-  }
+  if (!data || !data.is_active) return FREE_SUB;
   if (data.expires_at && new Date(data.expires_at) < new Date()) {
     return { ...FREE_SUB, expiresAt: data.expires_at };
   }
   return {
-    plan: data.plan as PlanId,
+    plan: data.plan === 'pro' ? 'pro' : 'free',
     expiresAt: data.expires_at,
     isActive: true,
     provider: (data.provider ?? null) as Subscription['provider'],
   };
 }
 
-// ── Simple helper ─────────────────────────────────────────────────────────────
+/** True if the user currently has an active Pro entitlement. */
 export async function isPremium(userId: string): Promise<boolean> {
   if (!PAYMENTS_ENABLED) return false;
   const sub = await getSubscription(userId);
-  return sub.isActive;
+  return sub.isActive && sub.plan === 'pro';
 }
 
-// ── Purchase a plan ───────────────────────────────────────────────────────────
-export async function purchasePlan(
-  userId: string,
-  plan: 'gold' | 'platinum',
-): Promise<{ success: boolean; error?: string }> {
-  if (!PAYMENTS_ENABLED) return { success: false, error: 'Payments not enabled yet.' };
-  if (!_rcInitialized) return { success: false, error: 'Payment system not initialized.' };
+/** Mirror RevenueCat's entitlement state to our `subscriptions` table so server
+ *  code (notifications, emails, RLS) can also check Pro status without hitting
+ *  the RevenueCat API. */
+async function syncSubscriptionToDb(userId: string, sub: Subscription): Promise<void> {
   try {
-    const Purchases = (await import('react-native-purchases' as any)).default;
+    await supabase.from('subscriptions').upsert(
+      {
+        user_id: userId,
+        plan: sub.plan,
+        is_active: sub.isActive,
+        expires_at: sub.expiresAt,
+        provider: sub.provider,
+      },
+      { onConflict: 'user_id' },
+    );
+  } catch (e) {
+    logError('[payments] syncSubscriptionToDb failed', e);
+  }
+}
+
+// ── Offerings (dynamic product fetch) ──────────────────────────────────────────
+// Best practice: never hardcode product IDs in app UI. Fetch the active
+// Offering from RevenueCat and render whatever packages it returns. The
+// dashboard then controls availability, pricing, and A/B tests remotely
+// without an app update.
+//
+// The RevenueCat-hosted paywall (presentPaywall) does this automatically.
+// These helpers are for any *custom* UI we add later (inline upsell cards,
+// product comparison tables, A/B tested paywalls, etc.).
+
+/** Minimal shape of a RevenueCat Package we care about in app code. Anything
+ *  not listed here can still be accessed by casting via `raw`. */
+export interface RcPackage {
+  identifier: string;
+  /** RevenueCat normalized type: MONTHLY, ANNUAL, LIFETIME, etc. */
+  packageType: string;
+  product: {
+    identifier: string;
+    title: string;
+    description: string;
+    priceString: string;
+    price: number;
+    currencyCode: string;
+    /** Optional intro/trial — present when configured in App Store Connect / Play. */
+    introPrice?: {
+      priceString: string;
+      price: number;
+      periodUnit?: string;
+      periodNumberOfUnits?: number;
+    } | null;
+  };
+  /** Raw RevenueCat package — escape hatch for fields not normalized above. */
+  raw: unknown;
+}
+
+export interface RcOffering {
+  identifier: string;
+  serverDescription: string;
+  metadata: Record<string, unknown> | null;
+  availablePackages: RcPackage[];
+  monthly: RcPackage | null;
+  annual: RcPackage | null;
+  lifetime: RcPackage | null;
+}
+
+interface RawRcPackage {
+  identifier: string;
+  packageType: string;
+  product: {
+    identifier: string;
+    title: string;
+    description: string;
+    priceString: string;
+    price: number;
+    currencyCode: string;
+    introPrice?: {
+      priceString: string;
+      price: number;
+      periodUnit?: string;
+      periodNumberOfUnits?: number;
+    } | null;
+  };
+}
+
+interface RawRcOffering {
+  identifier: string;
+  serverDescription: string;
+  metadata?: Record<string, unknown> | null;
+  availablePackages: RawRcPackage[];
+  monthly?: RawRcPackage | null;
+  annual?: RawRcPackage | null;
+  lifetime?: RawRcPackage | null;
+}
+
+function normalizePackage(pkg: RawRcPackage | null | undefined): RcPackage | null {
+  if (!pkg) return null;
+  return {
+    identifier: pkg.identifier,
+    packageType: pkg.packageType,
+    product: {
+      identifier: pkg.product.identifier,
+      title: pkg.product.title,
+      description: pkg.product.description,
+      priceString: pkg.product.priceString,
+      price: pkg.product.price,
+      currencyCode: pkg.product.currencyCode,
+      introPrice: pkg.product.introPrice ?? null,
+    },
+    raw: pkg,
+  };
+}
+
+function normalizeOffering(off: RawRcOffering | null | undefined): RcOffering | null {
+  if (!off) return null;
+  return {
+    identifier: off.identifier,
+    serverDescription: off.serverDescription,
+    metadata: off.metadata ?? null,
+    availablePackages: off.availablePackages
+      .map(normalizePackage)
+      .filter((p): p is RcPackage => p !== null),
+    monthly: normalizePackage(off.monthly),
+    annual: normalizePackage(off.annual),
+    lifetime: normalizePackage(off.lifetime),
+  };
+}
+
+/** Fetch the user's "current" Offering — the one targeted to them by the
+ *  dashboard (default Offering, A/B experiment, or Targeting rule).
+ *
+ *  Returns null when payments are disabled, the SDK isn't linked, or no
+ *  offering is configured. Caller is expected to fall back gracefully. */
+export async function getCurrentOffering(): Promise<RcOffering | null> {
+  if (!PAYMENTS_ENABLED) return null;
+  try {
+    const Purchases = (await import('react-native-purchases')).default;
     const offerings = await Purchases.getOfferings();
-    const pkgId = PLANS[plan].revenuecatId[Platform.OS === 'ios' ? 'ios' : 'android'];
-    const pkg = offerings.current?.availablePackages.find((p: any) => p.identifier === pkgId);
-    if (!pkg) return { success: false, error: 'Package not found.' };
-    const { customerInfo } = await Purchases.purchasePackage(pkg);
-    const isActive = !!customerInfo.entitlements.active[plan];
-    if (isActive) {
-      // Sync to DB for offline access
-      await supabase
-        .from('subscriptions')
-        .upsert(
-          { user_id: userId, plan, is_active: true, provider: 'revenuecat' },
-          { onConflict: 'user_id' },
-        );
+    return normalizeOffering(offerings.current as RawRcOffering | null);
+  } catch (e) {
+    logWarn('[payments] getCurrentOffering failed', e);
+    return null;
+  }
+}
+
+/** Fetch a specific Offering for a named placement. Use this when you want
+ *  to control which paywall renders based on the surface (e.g. "post_match",
+ *  "boost_button"). Placements are configured under Project → Placements
+ *  in the RevenueCat dashboard.
+ *
+ *  Falls back to `getCurrentOffering()` semantics when no placement matches. */
+export async function getCurrentOfferingForPlacement(
+  placement: string,
+): Promise<RcOffering | null> {
+  if (!PAYMENTS_ENABLED) return null;
+  try {
+    const Purchases = (await import('react-native-purchases')).default;
+    const off = await Purchases.getCurrentOfferingForPlacement(placement);
+    return normalizeOffering(off as RawRcOffering | null);
+  } catch (e) {
+    logWarn('[payments] getCurrentOfferingForPlacement failed', e);
+    return null;
+  }
+}
+
+/** Fetch every configured Offering (current + experiments + custom). Use when
+ *  building a product-comparison UI or implementing your own client-side
+ *  targeting logic. */
+export async function getAllOfferings(): Promise<Record<string, RcOffering>> {
+  if (!PAYMENTS_ENABLED) return {};
+  try {
+    const Purchases = (await import('react-native-purchases')).default;
+    const offerings = await Purchases.getOfferings();
+    const out: Record<string, RcOffering> = {};
+    for (const [id, raw] of Object.entries(offerings.all ?? {})) {
+      const normalized = normalizeOffering(raw as RawRcOffering);
+      if (normalized) out[id] = normalized;
     }
-    return { success: isActive };
-  } catch (e: any) {
-    if (e?.userCancelled) return { success: false, error: 'cancelled' };
-    return { success: false, error: e?.message ?? 'Purchase failed.' };
+    return out;
+  } catch (e) {
+    logWarn('[payments] getAllOfferings failed', e);
+    return {};
+  }
+}
+
+/** Programmatic purchase of a Package. Prefer presenting the RevenueCat
+ *  paywall (which handles UI, loading states, error messages, and platform
+ *  rules for you) — use this only for custom flows like an inline upgrade
+ *  button that needs to skip the full paywall screen. */
+export async function purchasePackage(pkg: RcPackage): Promise<{
+  success: boolean;
+  cancelled?: boolean;
+  error?: string;
+}> {
+  if (!PAYMENTS_ENABLED) return { success: false, error: 'Payments not enabled' };
+  try {
+    const Purchases = (await import('react-native-purchases')).default;
+    const result = await Purchases.purchasePackage(
+      pkg.raw as Parameters<typeof Purchases.purchasePackage>[0],
+    );
+    const info = result.customerInfo;
+    const sub = subscriptionFromCustomerInfo(info);
+    setCachedSubscription(sub);
+    if (_currentUserId) void syncSubscriptionToDb(_currentUserId, sub);
+    return { success: sub.isActive };
+  } catch (e: unknown) {
+    const err = e as { userCancelled?: boolean; message?: string };
+    if (err?.userCancelled) return { success: false, cancelled: true };
+    logError('[payments] purchasePackage failed', e);
+    return { success: false, error: err?.message ?? 'Purchase failed' };
   }
 }
 
 // ── Restore purchases ─────────────────────────────────────────────────────────
-export async function restorePurchases(
-  userId: string,
-): Promise<{ success: boolean; plan?: PlanId }> {
-  if (!PAYMENTS_ENABLED || !_rcInitialized) return { success: false };
+
+/**
+ * Restore purchases from the device's store account. Useful on app reinstall
+ * or device switch — the Customer Center already exposes this, but expose
+ * an explicit helper for any custom UI.
+ */
+export async function restorePurchases(): Promise<{ success: boolean; plan?: PlanId }> {
+  if (!PAYMENTS_ENABLED || !_rcConfigured) return { success: false };
   try {
-    const Purchases = (await import('react-native-purchases' as any)).default;
+    const Purchases = (await import('react-native-purchases')).default;
     const info = await Purchases.restorePurchases();
-    const isPlatinum = !!info.entitlements.active['platinum'];
-    const isGold = !!info.entitlements.active['gold'];
-    const plan: PlanId = isPlatinum ? 'platinum' : isGold ? 'gold' : 'free';
-    if (plan !== 'free') {
-      await supabase
-        .from('subscriptions')
-        .upsert(
-          { user_id: userId, plan, is_active: true, provider: 'revenuecat' },
-          { onConflict: 'user_id' },
-        );
-    }
-    return { success: true, plan };
-  } catch {
+    const sub = subscriptionFromCustomerInfo(info);
+    setCachedSubscription(sub);
+    if (_currentUserId) void syncSubscriptionToDb(_currentUserId, sub);
+    return { success: true, plan: sub.plan };
+  } catch (e) {
+    logError('[payments] restorePurchases failed', e);
     return { success: false };
   }
 }
-
-// ── Premium feature gates ─────────────────────────────────────────────────────
-/** Daily like limit for free users */
-export const FREE_DAILY_LIKES = 20;
-
-/** Plans that can see who liked them */
-export const CAN_SEE_LIKERS: PlanId[] = ['gold', 'platinum'];
-
-/** Plans that can boost their profile */
-export const CAN_BOOST: PlanId[] = ['platinum'];

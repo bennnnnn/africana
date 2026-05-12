@@ -342,6 +342,10 @@ export async function sendLifecycleCampaignEmail(params: {
     return { ok: false, reason: 'missing_email' };
   }
 
+  if (recipient.settings?.email_notifications !== true) {
+    return { ok: false, reason: 'nothing_to_send' };
+  }
+
   const claimed = await claimLifecycleCampaignEvent({
     recipientId: params.recipientId,
     campaign: params.campaign,

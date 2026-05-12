@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
-import { profileImageUrlForList } from '@/lib/storage-image-url';
+import { profileImageUrlForList, storagePublicObjectUrlFromRender } from '@/lib/storage-image-url';
 import { OnlineStatus } from '@/types';
 
 interface AvatarProps {
@@ -24,14 +24,22 @@ export function Avatar({
 }: AvatarProps) {
   const statusColor = onlineStatus === 'online' ? COLORS.online : COLORS.offline;
 
-  const fallback = `${DEFAULT_AVATAR}${encodeURIComponent(name.charAt(0).toUpperCase())}`;
-  const raw = uri?.trim() ? uri.trim() : fallback;
-  const avatarUri = profileImageUrlForList(raw) ?? raw;
+  const resolvedListUri = useMemo(() => {
+    const raw = uri?.trim()
+      ? uri.trim()
+      : `${DEFAULT_AVATAR}${encodeURIComponent(name.charAt(0).toUpperCase())}`;
+    return profileImageUrlForList(raw) ?? raw;
+  }, [uri, name]);
+
+  const [displayUri, setDisplayUri] = useState(resolvedListUri);
+  useEffect(() => {
+    setDisplayUri(resolvedListUri);
+  }, [resolvedListUri]);
 
   return (
     <View style={[{ width: size, height: size }, style]}>
       <Image
-        source={{ uri: avatarUri }}
+        source={{ uri: displayUri }}
         style={{
           width: size,
           height: size,
@@ -41,7 +49,11 @@ export function Avatar({
         contentFit="cover"
         transition={120}
         cachePolicy="memory-disk"
-        recyclingKey={avatarUri}
+        recyclingKey={displayUri}
+        onError={() => {
+          const stripped = storagePublicObjectUrlFromRender(displayUri);
+          if (stripped && stripped !== displayUri) setDisplayUri(stripped);
+        }}
       />
       {showStatus && onlineStatus && (
         <View

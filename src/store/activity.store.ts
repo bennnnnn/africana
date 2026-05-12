@@ -24,14 +24,20 @@ const EMPTY_COUNTS: Record<ActivityTab, number> = {
 
 interface ActivityState {
   counts: Record<ActivityTab, number>;
+  /** Incremented by the tab-layout channel when a new like/view/star arrives.
+   *  The Likes hub watches this to reload the active list without its own realtime channel. */
+  incomingSeq: number;
   setCounts: (next: Record<ActivityTab, number>) => void;
+  bumpIncoming: () => void;
   clearTab: (tab: ActivityTab) => void;
   clearAll: () => void;
 }
 
 export const useActivityStore = create<ActivityState>((set) => ({
   counts: { ...EMPTY_COUNTS },
+  incomingSeq: 0,
   setCounts: (next) => set({ counts: next }),
+  bumpIncoming: () => set((state) => ({ incomingSeq: state.incomingSeq + 1 })),
   clearTab: (tab) => set((state) => ({ counts: { ...state.counts, [tab]: 0 } })),
   clearAll: () => set({ counts: { ...EMPTY_COUNTS } }),
 }));

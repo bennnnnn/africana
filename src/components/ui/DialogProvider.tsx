@@ -151,6 +151,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
                         useInlineActions && styles.btnInline,
                         isCancelLike(action) && styles.btnSecondary,
                         action.style === 'primary' && styles.btnPrimary,
+                        action.style === 'alert' && styles.btnAlert,
                         action.style === 'destructive' && styles.btnDestructive,
                       ]}
                       activeOpacity={0.75}
@@ -164,6 +165,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
                           styles.btnText,
                           isCancelLike(action) && styles.btnTextSecondary,
                           action.style === 'primary' && styles.btnTextPrimary,
+                          action.style === 'alert' && styles.btnTextOnDark,
                           action.style === 'destructive' && styles.btnTextOnDark,
                         ]}
                       >
@@ -284,6 +286,10 @@ const styles = StyleSheet.create({
   btnPrimary: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
+  },
+  btnAlert: {
+    backgroundColor: COLORS.error,
+    borderColor: COLORS.error,
   },
   btnDestructive: {
     backgroundColor: COLORS.textStrong,

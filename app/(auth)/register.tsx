@@ -6,20 +6,26 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { signInWithGoogle } from '@/lib/google-auth';
+import { signInWithApple } from '@/lib/apple-auth';
+import { useAuthStore } from '@/store/auth.store';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { AuthLegalConsentRow } from '@/components/auth/AuthLegalConsentRow';
 import { COLORS } from '@/constants';
 import { getValidationState, validateEmail, validatePassword } from '@/lib/validation';
+import { redirectAfterAuth } from '@/lib/profile-completion';
 import { appDialog } from '@/lib/app-dialog';
 
 export default function RegisterScreen() {
+  const hydrateUserFromServer = useAuthStore((s) => s.hydrateUserFromServer);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
@@ -28,12 +34,58 @@ export default function RegisterScreen() {
     password: false,
   });
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const trimmedEmail = email.trim().toLowerCase();
   const emailValidation = validateEmail(email);
   const passwordValidation = validatePassword(password);
   const showEmailState = touched.email || attemptedSubmit;
   const showPasswordState = touched.password || attemptedSubmit;
+
+  const handleGoogle = async () => {
+    setGoogleLoading(true);
+    try {
+      const session = await signInWithGoogle();
+      if (session?.user) {
+        await hydrateUserFromServer(session.user.id);
+        const { user } = useAuthStore.getState();
+        redirectAfterAuth(router, user, session);
+      }
+    } catch (e: any) {
+      if (e?.message !== 'User cancelled') {
+        appDialog({
+          title: 'Google sign-up failed',
+          message: e?.message ?? 'Please try again.',
+          icon: 'logo-google',
+        });
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleApple = async () => {
+    setAppleLoading(true);
+    try {
+      const session = await signInWithApple();
+      if (session?.user) {
+        await hydrateUserFromServer(session.user.id);
+        const { user } = useAuthStore.getState();
+        redirectAfterAuth(router, user, session);
+      }
+    } catch (e: any) {
+      if (e?.message !== 'User cancelled') {
+        appDialog({
+          title: 'Apple sign-up failed',
+          message: e?.message ?? 'Please try again.',
+          icon: 'logo-apple',
+        });
+      }
+    } finally {
+      setAppleLoading(false);
+    }
+  };
 
   const handleRegister = async () => {
     setAttemptedSubmit(true);
@@ -105,6 +157,24 @@ export default function RegisterScreen() {
       return;
     }
 
+    // Email confirmation required: user created but no session yet.
+    if (data.user && !data.session) {
+      appDialog({
+        title: 'Check your inbox',
+        message: `We sent a confirmation link to ${trimmedEmail}. Open it to activate your account, then sign in.`,
+        icon: 'mail-open-outline',
+        actions: [
+          {
+            label: 'Go to sign in',
+            style: 'primary',
+            onPress: () => router.replace('/(auth)/login'),
+          },
+          { label: 'OK', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+
     if (!data.user || !data.session?.user) {
       appDialog({
         title: 'Email sign-up unavailable',
@@ -117,7 +187,7 @@ export default function RegisterScreen() {
 
     router.replace({
       pathname: '/(auth)/onboarding',
-      params: { userId: data.session.user.id, email: trimmedEmail },
+      params: { userId: data.session.user.id, email: trimmedEmail, termsAccepted: '1' },
     });
   };
 
@@ -137,7 +207,46 @@ export default function RegisterScreen() {
 
           <View style={s.hero}>
             <Text style={s.title}>Create account</Text>
-            <Text style={s.subtitle}>Set up your account and continue into onboarding.</Text>
+          </View>
+
+          <TouchableOpacity
+            style={s.googleBtn}
+            onPress={handleGoogle}
+            disabled={googleLoading}
+            activeOpacity={0.85}
+          >
+            {googleLoading ? (
+              <ActivityIndicator size="small" color="#4285F4" />
+            ) : (
+              <>
+                <Text style={{ fontSize: 22, fontWeight: '900', color: '#4285F4' }}>G</Text>
+                <Text style={s.googleBtnText}>Sign up with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              style={s.appleBtn}
+              onPress={handleApple}
+              disabled={appleLoading}
+              activeOpacity={0.85}
+            >
+              {appleLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="logo-apple" size={22} color="#FFFFFF" />
+                  <Text style={s.appleBtnText}>Sign up with Apple</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          <View style={s.divider}>
+            <View style={s.dividerLine} />
+            <Text style={s.dividerText}>OR</Text>
+            <View style={s.dividerLine} />
           </View>
 
           <Input
@@ -169,7 +278,7 @@ export default function RegisterScreen() {
             onBlur={() => setTouched((current) => ({ ...current, password: true }))}
             isPassword
             leftIcon="lock-closed-outline"
-            placeholder="Min. 6 characters"
+            placeholder="6 characters"
             validationState={getValidationState(
               showPasswordState,
               passwordValidation,
@@ -224,5 +333,42 @@ const s = StyleSheet.create({
   hero: { marginBottom: 20 },
   title: { fontSize: 32, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
   subtitle: { fontSize: 15, color: COLORS.textSecondary, lineHeight: 22, marginBottom: 24 },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    height: 56,
+    borderWidth: 1,
+    borderColor: '#DADCE0',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  googleBtnText: { fontSize: 16, fontWeight: '600', color: '#3C4043' },
+  appleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#000000',
+    borderRadius: 14,
+    height: 56,
+    marginBottom: 12,
+  },
+  appleBtnText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
+  dividerText: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500' },
   signinRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
 });

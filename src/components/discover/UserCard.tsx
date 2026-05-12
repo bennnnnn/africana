@@ -10,7 +10,7 @@ import { HeroPlaceholder } from '@/components/ui/HeroPlaceholder';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { getEffectivePresence } from '@/lib/utils';
-import { profileImageUrlForList } from '@/lib/storage-image-url';
+import { profileImageUrlForList, storagePublicObjectUrl } from '@/lib/storage-image-url';
 import { usePresenceStore } from '@/store/presence.store';
 import haptics from '@/lib/haptics';
 
@@ -36,9 +36,13 @@ function UserCardInner({
   onLongPress,
 }: UserCardProps) {
   const photoUrl = user.profile_photos?.[0] || user.avatar_url || null;
-  const optimizedPhoto = useMemo(
-    () => (photoUrl ? (profileImageUrlForList(photoUrl) ?? photoUrl) : null),
+  const directPhoto = useMemo(
+    () => (photoUrl ? (storagePublicObjectUrl(photoUrl) ?? photoUrl) : null),
     [photoUrl],
+  );
+  const optimizedPhoto = useMemo(
+    () => (photoUrl ? (profileImageUrlForList(photoUrl) ?? directPhoto) : null),
+    [directPhoto, photoUrl],
   );
   const [displayPhoto, setDisplayPhoto] = useState<string | null>(optimizedPhoto);
   useEffect(() => {
@@ -120,7 +124,9 @@ function UserCardInner({
           cachePolicy="memory-disk"
           recyclingKey={`${user.id}:${photoUrl}`}
           onError={() => {
-            if (photoUrl != null && displayPhoto !== photoUrl) setDisplayPhoto(photoUrl);
+            setDisplayPhoto((current) =>
+              directPhoto && current !== directPhoto ? directPhoto : null,
+            );
           }}
         />
       ) : (

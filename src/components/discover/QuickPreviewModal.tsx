@@ -11,7 +11,7 @@ import { COLORS, RADIUS, FONT, SHADOWS } from '@/constants';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { getEffectivePresence, formatLastSeen } from '@/lib/utils';
-import { profileImageUrlForList } from '@/lib/storage-image-url';
+import { profileImageUrlForList, storagePublicObjectUrl } from '@/lib/storage-image-url';
 import { usePresenceStore } from '@/store/presence.store';
 import { useAuthStore } from '@/store/auth.store';
 import { useDiscoverStore } from '@/store/discover.store';
@@ -46,9 +46,13 @@ function CardContent({
     return p.length > 0 ? p : user.avatar_url ? [user.avatar_url] : [];
   }, [user]);
   const rawHero = photos[0] ?? null;
-  const optimizedHero = useMemo(
-    () => (rawHero ? (profileImageUrlForList(rawHero) ?? rawHero) : null),
+  const directHero = useMemo(
+    () => (rawHero ? (storagePublicObjectUrl(rawHero) ?? rawHero) : null),
     [rawHero],
+  );
+  const optimizedHero = useMemo(
+    () => (rawHero ? (profileImageUrlForList(rawHero) ?? directHero) : null),
+    [directHero, rawHero],
   );
   const [heroUri, setHeroUri] = useState<string | null>(optimizedHero);
   useEffect(() => {
@@ -92,7 +96,7 @@ function CardContent({
           cachePolicy="memory-disk"
           recyclingKey={`${user.id}:${rawHero ?? ''}`}
           onError={() => {
-            if (rawHero != null && heroUri !== rawHero) setHeroUri(rawHero);
+            setHeroUri((current) => (directHero && current !== directHero ? directHero : null));
           }}
         />
       ) : (

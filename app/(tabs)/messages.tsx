@@ -171,7 +171,7 @@ export default function MessagesScreen() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       if (next === 'active' && appStateRef.current !== 'active' && user) {
-        fetchConversations(user.id);
+        fetchConversations(user.id, { force: true });
       }
       appStateRef.current = next;
     });
@@ -238,7 +238,7 @@ export default function MessagesScreen() {
     if (!user) return;
     setRefreshing(true);
     try {
-      await fetchConversations(user.id);
+      await fetchConversations(user.id, { force: true });
     } catch {
       showToast({ icon: 'alert-circle-outline', message: UI_TOAST.refreshFailed });
     } finally {

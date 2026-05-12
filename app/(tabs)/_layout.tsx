@@ -14,7 +14,7 @@ import { useActivityStore, selectLikesTabBadge } from '@/store/activity.store';
 import { isProfileCompleteForDiscover, postAuthHref } from '@/lib/profile-completion';
 import haptics from '@/lib/haptics';
 import { isViewingConversation } from '@/lib/active-chat';
-import { sendLocalNotification } from '@/lib/notifications';
+import { allowIncomingMessageNotificationCue, sendLocalNotification } from '@/lib/notifications';
 import { TIMINGS } from '@/lib/timings';
 
 /**
@@ -71,11 +71,12 @@ function TabIcon({
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { session, user, isInitialized } = useAuthStore(
+  const { session, user, isInitialized, isLoading } = useAuthStore(
     useShallow((s) => ({
       session: s.session,
       user: s.user,
       isInitialized: s.isInitialized,
+      isLoading: s.isLoading,
     })),
   );
   const { conversations } = useChatStore(
@@ -86,6 +87,7 @@ export default function TabLayout() {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const unseenActivity = useActivityStore(selectLikesTabBadge);
   const setActivityCounts = useActivityStore((s) => s.setCounts);
+  const bumpIncoming = useActivityStore((s) => s.bumpIncoming);
   const clearActivityCounts = useActivityStore((s) => s.clearAll);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const activityChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -99,11 +101,11 @@ export default function TabLayout() {
   }, [conversations]);
 
   useEffect(() => {
-    if (!isInitialized || !session?.user) return;
+    if (!isInitialized || isLoading || !session?.user) return;
     if (!isProfileCompleteForDiscover(user)) {
       router.replace(postAuthHref(user, session));
     }
-  }, [isInitialized, session, user, router]);
+  }, [isInitialized, isLoading, session, user, router]);
 
   // Drop browse order when returning to tabs (e.g. back from profile). Clearing on profile
   // blur breaks router.replace between profiles because the screen can unfocus briefly.
@@ -125,7 +127,7 @@ export default function TabLayout() {
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
       // Use store getState() to avoid any stale closure issues.
       refreshTimeoutRef.current = setTimeout(
-        () => useChatStore.getState().fetchConversations(uid),
+        () => useChatStore.getState().fetchConversations(uid, { force: true }),
         TIMINGS.realtimeRefreshDebounceMs,
       );
     };
@@ -135,17 +137,25 @@ export default function TabLayout() {
 
     ch.on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'messages' },
+      // Filter server-side to messages not sent by this user. Postgres realtime
+      // doesn't support array-contains on participant_ids, so we filter on
+      // sender_id and do a client-side conversation membership check. This still
+      // receives messages to any conversation this user is not in if the sender
+      // happens not to be them — those are dropped immediately below.
+      { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=neq.${uid}` },
       (payload) => {
         const message = payload.new as {
           sender_id?: string;
           conversation_id?: string;
           content?: string;
         };
-        if (message.sender_id === uid) return;
+        // Drop messages from conversations this user is not in.
+        const knownConvIds = new Set(useChatStore.getState().conversations.map((c) => c.id));
+        if (message.conversation_id && !knownConvIds.has(message.conversation_id)) return;
         scheduleConvRefresh();
         // Foreground ping rationale: see docs/foreground-notifications.md
         if (isViewingConversation(message.conversation_id)) return;
+        if (!allowIncomingMessageNotificationCue(useAuthStore.getState().settings)) return;
         haptics.tapMedium();
         // Pull the sender name from the chat store directly via getState() so
         // we don't have to add `conversations` to the effect deps (which would
@@ -223,6 +233,9 @@ export default function TabLayout() {
 
     const scheduleRefetch = () => {
       if (activityRefreshTimeoutRef.current) clearTimeout(activityRefreshTimeoutRef.current);
+      // Notify the Likes hub (via shared store) that new activity arrived so it
+      // can reload the active tab without maintaining its own duplicate channel.
+      bumpIncoming();
       activityRefreshTimeoutRef.current = setTimeout(
         () => void fetchCounts(),
         TIMINGS.activityCountDebounceMs,

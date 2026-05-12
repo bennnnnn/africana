@@ -7,6 +7,7 @@
 -- avoid surfacing this as a product feature.
 
 DROP POLICY IF EXISTS blocks_select_own ON public.blocks;
+DROP POLICY IF EXISTS blocks_select_if_party ON public.blocks;
 
 CREATE POLICY blocks_select_if_party
   ON public.blocks

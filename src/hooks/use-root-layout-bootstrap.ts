@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus, InteractionManager } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Linking from 'expo-linking';
@@ -20,6 +20,7 @@ import { isUuidString } from '@/lib/utils';
 import { resetClientModuleStateAtLogout } from '@/lib/reset-client-module-state-at-logout';
 import { joinAppPresenceChannel, leaveAppPresenceChannel } from '@/lib/app-presence-channel';
 import { useAuthStore } from '@/store/auth.store';
+import { initializePayments } from '@/lib/payments';
 
 type RouterLike = { push: (href: any) => void; replace: (href: any) => void };
 
@@ -43,15 +44,6 @@ export function useRootLayoutBootstrap(params: {
   const notifResponseSub = useRef<any>(null);
   const notifReceivedSub = useRef<any>(null);
   const bootHydratedUserId = useRef<string | null>(null);
-
-  const expectedScheme = useMemo(() => {
-    // Expo Go uses exp+<scheme>. In builds, it's usually just <scheme>.
-    // We accept both but reject anything else.
-    const scheme = Linking.createURL('')?.split('://')[0] ?? 'africana';
-    // When Linking.createURL returns e.g. "exp+africana://", split gives "exp+africana".
-    // The base scheme for this app is "africana".
-    return scheme.includes('africana') ? 'africana' : scheme;
-  }, []);
 
   function isTrustedInboundUrl(url: string): boolean {
     try {
@@ -118,6 +110,9 @@ export function useRootLayoutBootstrap(params: {
                 }
               });
               identify(uid);
+              // RevenueCat: configure + log in + seed subscription cache.
+              // No-op when PAYMENTS_ENABLED = false or SDK isn't linked.
+              void initializePayments(uid);
             });
           }
         } catch (e) {
@@ -166,27 +161,19 @@ export function useRootLayoutBootstrap(params: {
     const appStateSub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       const prev = appState.current;
       appState.current = nextState;
-      supabase.auth
-        .getSession()
-        .then(({ data: { session } }) => {
-          if (!session?.user?.id) return;
-          if (nextState === 'active' && prev !== 'active') {
-            void setOnlineStatus(session.user.id, 'online').catch((e) =>
-              logError('setOnlineStatus', e),
-            );
-            useAuthStore.getState().patchUser({ online_status: 'online' });
-            void joinAppPresenceChannel(session.user.id).catch((e) =>
-              logWarn('[presence] foreground join', e),
-            );
-          } else if (nextState === 'background' || nextState === 'inactive') {
-            void leaveAppPresenceChannel().catch(() => {});
-            void setOnlineStatus(session.user.id, 'offline').catch((e) =>
-              logError('setOnlineStatus', e),
-            );
-            useAuthStore.getState().patchUser({ online_status: 'offline' });
-          }
-        })
-        .catch((e) => logError('getSession (appState)', e));
+      // Use the already-cached session from the auth store instead of hitting
+      // the network / disk on every app state change (active, inactive, background).
+      const userId = useAuthStore.getState().session?.user?.id;
+      if (!userId) return;
+      if (nextState === 'active' && prev !== 'active') {
+        void setOnlineStatus(userId, 'online').catch((e) => logError('setOnlineStatus', e));
+        useAuthStore.getState().patchUser({ online_status: 'online' });
+        void joinAppPresenceChannel(userId).catch((e) => logWarn('[presence] foreground join', e));
+      } else if (nextState === 'background' || nextState === 'inactive') {
+        void leaveAppPresenceChannel().catch(() => {});
+        void setOnlineStatus(userId, 'offline').catch((e) => logError('setOnlineStatus', e));
+        useAuthStore.getState().patchUser({ online_status: 'offline' });
+      }
     });
 
     const {
@@ -213,6 +200,7 @@ export function useRootLayoutBootstrap(params: {
             }
           });
           identify(uid);
+          void initializePayments(uid);
         });
         if (event === 'SIGNED_IN') {
           track(EVENTS.AUTH_LOGIN);

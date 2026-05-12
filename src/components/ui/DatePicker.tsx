@@ -5,7 +5,6 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
   StyleSheet,
   Pressable,
 } from 'react-native';
@@ -13,7 +12,6 @@ import { COLORS } from '@/constants';
 
 const ACTIVE_COLOR = COLORS.success;
 
-const { width } = Dimensions.get('window');
 const ITEM_HEIGHT = 48;
 const VISIBLE_ITEMS = 5;
 

@@ -15,6 +15,7 @@ import {
   InteractionManager,
   Share,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import {
   GestureHandlerRootView,
@@ -42,7 +43,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   COLORS,
   DEFAULT_AVATAR,
-  FONT,
   INTERESTED_IN_OPTIONS,
   RELIGION_OPTIONS,
   EDUCATION_OPTIONS,
@@ -429,6 +429,14 @@ export default function ProfileViewScreen() {
   useEffect(() => {
     if (!profile || !currentUser?.id || currentUser.id === profile.id) return;
 
+    // Pro-only: when the viewer has incognito on, skip the profile_views upsert
+    // entirely so they browse silently. No row → no notification → no Views-tab entry.
+    const incognito = useAuthStore.getState().settings?.incognito === true;
+    if (incognito) {
+      track(EVENTS.PROFILE_VIEWED);
+      return;
+    }
+
     // ignoreDuplicates:true → ON CONFLICT DO NOTHING. The .select() returns the
     // inserted row only on a true new insert — empty on conflict. This means we
     // notify exactly once per unique (viewer, viewed) pair, surviving app restarts
@@ -473,6 +481,7 @@ export default function ProfileViewScreen() {
   }, [currentUser?.id, profile?.id]);
 
   useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
     if (!photoViewerVisible) {
       StatusBar.setHidden(false);
       return undefined;
@@ -487,6 +496,7 @@ export default function ProfileViewScreen() {
   // sit under the translucent status bar and light-content stays legible on
   // both dark and the savanna placeholder.
   useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
     const prev = StatusBar.pushStackEntry({ barStyle: 'light-content', animated: true });
     return () => {
       StatusBar.popStackEntry(prev);

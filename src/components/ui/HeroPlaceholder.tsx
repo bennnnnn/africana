@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONT } from '@/constants';
+import { FONT } from '@/constants';
 
 /**
  * Warm on-brand gradient set — rotated by the first character of the name so

@@ -74,9 +74,13 @@ export const likesScreenStyles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: COLORS.white,
     gap: 12,
+    borderLeftWidth: 0,
+    borderLeftColor: 'transparent',
   },
   rowNew: {
     backgroundColor: COLORS.primarySurface,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
   },
   newPill: {
     alignSelf: 'center',
@@ -109,7 +113,9 @@ export const likesScreenStyles = StyleSheet.create({
     borderColor: COLORS.white,
   },
   rowName: { fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.text },
+  rowNameNew: { color: COLORS.primaryDark, fontWeight: FONT.extrabold },
   rowLoc: { fontSize: 12, color: COLORS.textSecondary, flex: 1 },
+  rowLocNew: { color: COLORS.text },
   msgBtn: {
     width: 36,
     height: 36,

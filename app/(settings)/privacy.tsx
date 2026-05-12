@@ -9,6 +9,8 @@ import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { SettingRow, settingsStyles } from '@/components/settings/settings-shared';
 import { COLORS } from '@/constants';
 import type { UserSettings } from '@/types';
+import { isProSync } from '@/lib/payments';
+import { showProGateDialog } from '@/lib/pro-gate';
 
 export default function PrivacySettingsScreen() {
   const { settings, updateSettings } = useAuthStore(
@@ -49,9 +51,40 @@ export default function PrivacySettingsScreen() {
             icon="eye-outline"
             iconColor={COLORS.earth}
             label="Show my profile"
-            description="Appear in Discover and Online. Chats you already have stay open"
+            description="Appear in Discover and Online. Hiding requires Pro."
             value={settings?.profile_visible ?? true}
-            onToggle={(v) => applySettings({ profile_visible: v })}
+            onToggle={(v) => {
+              // Free users can turn visibility back ON, but hiding (turning it OFF)
+              // is a Pro-only feature. Pro check is currently a no-op while
+              // PAYMENTS_ENABLED = false; treat everyone as Free.
+              const isHiding = v === false;
+              if (isHiding && !isProSync()) {
+                showProGateDialog({
+                  title: 'Hiding your profile is a Pro feature',
+                  message: 'Disappear from Discover with Africana Pro.',
+                });
+                return;
+              }
+              void applySettings({ profile_visible: v });
+            }}
+          />
+          <SettingRow
+            icon="eye-off-outline"
+            iconColor={COLORS.earth}
+            label="Incognito browsing"
+            description="Browse profiles without showing up in their Views. Pro only."
+            value={settings?.incognito ?? false}
+            onToggle={(v) => {
+              const isTurningOn = v === true;
+              if (isTurningOn && !isProSync()) {
+                showProGateDialog({
+                  title: 'Incognito browsing is a Pro feature',
+                  message: 'Browse profiles silently with Africana Pro.',
+                });
+                return;
+              }
+              void applySettings({ incognito: v });
+            }}
           />
           <SettingRow
             icon="ban-outline"

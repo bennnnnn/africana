@@ -80,7 +80,7 @@ export const LikesRow = memo(function LikesRow({
       </View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={s.rowName} numberOfLines={1}>
+          <Text style={[s.rowName, isNew ? s.rowNameNew : null]} numberOfLines={1}>
             {u.full_name}
             {age ? `, ${age}` : ''}
           </Text>
@@ -89,7 +89,7 @@ export const LikesRow = memo(function LikesRow({
         {location ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
             <Ionicons name="location-outline" size={11} color={COLORS.textSecondary} />
-            <Text style={s.rowLoc} numberOfLines={1}>
+            <Text style={[s.rowLoc, isNew ? s.rowLocNew : null]} numberOfLines={1}>
               {location}
             </Text>
           </View>

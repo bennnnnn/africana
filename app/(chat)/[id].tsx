@@ -25,6 +25,7 @@ import {
   ERROR_RECIPIENT_MESSAGES_DISABLED,
   ERROR_SENDER_MESSAGES_DISABLED,
   ERROR_MESSAGING_BLOCKED,
+  ERROR_MESSAGE_FREE_LIMIT,
 } from '@/store/chat.store';
 import { hasSymmetricBlockBetween } from '@/lib/block-queries';
 import { useDiscoverStore } from '@/store/discover.store';
@@ -563,6 +564,9 @@ export default function ChatScreen() {
     if (error) {
       // Only restore text if the user hasn't already started typing something new
       setText((prev) => (prev.trim() ? prev : content));
+      // Free-tier daily cap — the store already showed the Pro upsell dialog,
+      // so don't show a duplicate error toast on top of it.
+      if (error === ERROR_MESSAGE_FREE_LIMIT) return;
       haptics.error();
       let toastMessage: string;
       if (

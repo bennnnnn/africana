@@ -8,7 +8,7 @@ export interface ChatStoreState {
   /** True while a `loadOlderMessages` request is in flight for this conversation. */
   loadingOlderMessages: Record<string, boolean>;
   isLoading: boolean;
-  fetchConversations: (userId: string) => Promise<void>;
+  fetchConversations: (userId: string, options?: { force?: boolean }) => Promise<void>; // force bypasses in-flight dedup
   fetchMessages: (conversationId: string) => Promise<void>;
   loadOlderMessages: (conversationId: string) => Promise<void>;
   sendMessage: (

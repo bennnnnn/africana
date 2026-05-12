@@ -4,6 +4,7 @@ dist/
 web-build/
 .env
 .env.*
+!.env.example
 *.local
 tmp-*.png
 tmp-*.jpg

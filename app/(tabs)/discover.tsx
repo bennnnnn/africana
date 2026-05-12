@@ -25,8 +25,6 @@ const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList,
 ) as React.ComponentType<AnimatedDiscoverFlashListProps>;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useDiscoverStore } from '@/store/discover.store';
@@ -63,7 +61,6 @@ export default function DiscoverScreen() {
     filters,
     fetchError,
     fetchUsers,
-    fetchLikedUserIds,
     clearFetchError,
     setFilters,
     resetFilters,
@@ -77,7 +74,6 @@ export default function DiscoverScreen() {
       filters: s.filters,
       fetchError: s.fetchError,
       fetchUsers: s.fetchUsers,
-      fetchLikedUserIds: s.fetchLikedUserIds,
       clearFetchError: s.clearFetchError,
       setFilters: s.setFilters,
       resetFilters: s.resetFilters,
@@ -110,10 +106,14 @@ export default function DiscoverScreen() {
     [scrollY],
   );
 
-  const agePref =
-    user?.min_age_pref != null && user?.max_age_pref != null
-      ? { min: user.min_age_pref, max: user.max_age_pref }
-      : undefined;
+  /** Must be referentially stable — a fresh `{ min, max }` every render re-ran `fetchUsers` in a loop. */
+  const minAgePref = user?.min_age_pref;
+  const maxAgePref = user?.max_age_pref;
+  const agePref = useMemo(
+    () =>
+      minAgePref != null && maxAgePref != null ? { min: minAgePref, max: maxAgePref } : undefined,
+    [minAgePref, maxAgePref],
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -130,12 +130,6 @@ export default function DiscoverScreen() {
     subscribeToOnlineStatus,
     unsubscribeFromOnlineStatus,
   ]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (user) fetchLikedUserIds(user.id);
-    }, [fetchLikedUserIds, user?.id]),
-  );
 
   // Prime the image cache for the first screenful as soon as the page lands
   // so the grid never shows the cross-fade-from-blank flash.
@@ -291,152 +285,181 @@ export default function DiscoverScreen() {
     return pairs;
   }, [users]);
 
+  const renderRow = useCallback(
+    (pair: DiscoverGridRow) => (
+      <View style={s.gridRow}>
+        <UserCard
+          user={pair[0]}
+          cardWidth={CARD_WIDTH}
+          cardHeight={CARD_HEIGHT}
+          beforeNavigate={beforeProfileNavigate}
+          onLongPress={handleLongPressUser}
+        />
+        {pair[1] ? (
+          <UserCard
+            user={pair[1]}
+            cardWidth={CARD_WIDTH}
+            cardHeight={CARD_HEIGHT}
+            beforeNavigate={beforeProfileNavigate}
+            onLongPress={handleLongPressUser}
+          />
+        ) : (
+          <View style={[s.gridRowSpacer, { width: CARD_WIDTH }]} />
+        )}
+      </View>
+    ),
+    [CARD_HEIGHT, CARD_WIDTH, beforeProfileNavigate, handleLongPressUser],
+  );
+
+  const emptyContent =
+    isLoading && users.length === 0 ? (
+      <View style={s.skeletonGrid}>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <SkeletonCard key={i} width={CARD_WIDTH} height={CARD_HEIGHT} radius={20} />
+        ))}
+      </View>
+    ) : fetchError ? (
+      <View style={s.emptyState}>
+        <Ionicons name="cloud-offline-outline" size={44} color={COLORS.textMuted} />
+        <Text style={s.emptyTitle}>Could not load Discover</Text>
+        <Text style={s.emptyBody}>{fetchError}</Text>
+        <TouchableOpacity
+          onPress={() => {
+            clearFetchError();
+            if (user)
+              void fetchUsers({
+                userId: user.id,
+                interestedIn: user.interested_in,
+                reset: true,
+                agePref,
+              });
+          }}
+          style={s.primaryCta}
+        >
+          <Text style={s.primaryCtaText}>Try again</Text>
+        </TouchableOpacity>
+      </View>
+    ) : (
+      <View style={[s.emptyState, s.emptyStateTight]}>
+        <Text style={s.emptyEmoji}>🌍</Text>
+        <Text style={s.emptyTitle}>No members found</Text>
+        <Text style={s.emptyBody}>
+          Try widening your filters and more Africana members will appear.
+        </Text>
+        {activeFilterCount > 0 && (
+          <TouchableOpacity
+            onPress={() => {
+              resetFilters();
+              if (user)
+                void fetchUsers({
+                  userId: user.id,
+                  interestedIn: user.interested_in,
+                  reset: true,
+                  agePref,
+                });
+            }}
+            style={s.attentionCta}
+          >
+            <Text style={s.attentionCtaText}>Clear Filters</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+
+  const footerContent =
+    users.length === 0 ? null : (
+      <View>
+        {fetchError ? (
+          <View style={s.footerErrorCard}>
+            <Text style={s.footerErrorText}>{fetchError}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                clearFetchError();
+                if (user)
+                  void fetchUsers({
+                    userId: user.id,
+                    interestedIn: user.interested_in,
+                    reset: true,
+                    agePref,
+                  });
+              }}
+              style={s.footerRetryBtn}
+            >
+              <Text style={s.footerRetryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        {isLoading && hasMore ? (
+          <View style={s.footerSpinner}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          </View>
+        ) : !hasMore ? (
+          <View style={s.footerEnd}>
+            <Text style={s.footerEndText}>All caught up</Text>
+          </View>
+        ) : null}
+      </View>
+    );
+
   return (
     <View style={s.screen}>
       {/* ── Full-screen scrollable grid (stays under header in z-order) ── */}
       <View style={[s.flex, s.listUnderHeader]}>
-        <AnimatedFlashList
-          data={rowPairs}
-          keyExtractor={(pair) => `${pair[0].id}-${pair[1]?.id ?? 'none'}`}
-          style={s.flex}
-          contentContainerStyle={{
-            paddingTop: listPaddingTop,
-            paddingHorizontal: GRID_PADDING,
-            paddingBottom: tabBarHeight + 16,
-          }}
-          showsVerticalScrollIndicator={false}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-            useNativeDriver: false,
-          })}
-          scrollEventThrottle={16}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.3}
-          onViewableItemsChanged={handleViewableItemsChanged}
-          viewabilityConfig={viewabilityConfig}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={COLORS.primary}
-              progressViewOffset={totalHeaderHeight + 8}
-            />
-          }
-          renderItem={({ item }) => {
-            const pair: DiscoverGridRow = item;
-            return (
-              <View style={s.gridRow}>
-                <UserCard
-                  user={pair[0]}
-                  cardWidth={CARD_WIDTH}
-                  cardHeight={CARD_HEIGHT}
-                  beforeNavigate={beforeProfileNavigate}
-                  onLongPress={handleLongPressUser}
-                />
-                {pair[1] ? (
-                  <UserCard
-                    user={pair[1]}
-                    cardWidth={CARD_WIDTH}
-                    cardHeight={CARD_HEIGHT}
-                    beforeNavigate={beforeProfileNavigate}
-                    onLongPress={handleLongPressUser}
-                  />
-                ) : (
-                  <View style={[s.gridRowSpacer, { width: CARD_WIDTH }]} />
-                )}
-              </View>
-            );
-          }}
-          ListEmptyComponent={
-            isLoading && users.length === 0 ? (
-              <View style={s.skeletonGrid}>
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <SkeletonCard key={i} width={CARD_WIDTH} height={CARD_HEIGHT} radius={20} />
-                ))}
-              </View>
-            ) : fetchError ? (
-              <View style={s.emptyState}>
-                <Ionicons name="cloud-offline-outline" size={44} color={COLORS.textMuted} />
-                <Text style={s.emptyTitle}>Could not load Discover</Text>
-                <Text style={s.emptyBody}>{fetchError}</Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    clearFetchError();
-                    if (user)
-                      void fetchUsers({
-                        userId: user.id,
-                        interestedIn: user.interested_in,
-                        reset: true,
-                        agePref,
-                      });
-                  }}
-                  style={s.primaryCta}
-                >
-                  <Text style={s.primaryCtaText}>Try again</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={[s.emptyState, s.emptyStateTight]}>
-                <Text style={s.emptyEmoji}>🌍</Text>
-                <Text style={s.emptyTitle}>No members found</Text>
-                <Text style={s.emptyBody}>
-                  Try widening your filters and more Africana members will appear.
-                </Text>
-                {activeFilterCount > 0 && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      resetFilters();
-                      if (user)
-                        void fetchUsers({
-                          userId: user.id,
-                          interestedIn: user.interested_in,
-                          reset: true,
-                          agePref,
-                        });
-                    }}
-                    style={s.primaryCta}
-                  >
-                    <Text style={s.primaryCtaText}>Clear Filters</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )
-          }
-          ListFooterComponent={
-            users.length === 0 ? null : (
-              <View>
-                {fetchError ? (
-                  <View style={s.footerErrorCard}>
-                    <Text style={s.footerErrorText}>{fetchError}</Text>
-                    <TouchableOpacity
-                      onPress={() => {
-                        clearFetchError();
-                        if (user)
-                          void fetchUsers({
-                            userId: user.id,
-                            interestedIn: user.interested_in,
-                            reset: true,
-                            agePref,
-                          });
-                      }}
-                      style={s.footerRetryBtn}
-                    >
-                      <Text style={s.footerRetryText}>Retry</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-                {isLoading && hasMore ? (
-                  <View style={s.footerSpinner}>
-                    <ActivityIndicator size="small" color={COLORS.primary} />
-                  </View>
-                ) : !hasMore ? (
-                  <View style={s.footerEnd}>
-                    <Text style={s.footerEndText}>All caught up</Text>
-                  </View>
-                ) : null}
-              </View>
-            )
-          }
-        />
+        {Platform.OS === 'web' ? (
+          <ScrollView
+            style={s.flex}
+            contentContainerStyle={{
+              paddingTop: listPaddingTop,
+              paddingHorizontal: GRID_PADDING,
+              paddingBottom: tabBarHeight + 16,
+            }}
+            showsVerticalScrollIndicator={false}
+            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+              useNativeDriver: false,
+            })}
+            scrollEventThrottle={16}
+          >
+            {rowPairs.length > 0
+              ? rowPairs.map((pair) => (
+                  <React.Fragment key={`${pair[0].id}-${pair[1]?.id ?? 'none'}`}>
+                    {renderRow(pair)}
+                  </React.Fragment>
+                ))
+              : emptyContent}
+            {footerContent}
+          </ScrollView>
+        ) : (
+          <AnimatedFlashList
+            data={rowPairs}
+            keyExtractor={(pair) => `${pair[0].id}-${pair[1]?.id ?? 'none'}`}
+            style={s.flex}
+            contentContainerStyle={{
+              paddingTop: listPaddingTop,
+              paddingHorizontal: GRID_PADDING,
+              paddingBottom: tabBarHeight + 16,
+            }}
+            showsVerticalScrollIndicator={false}
+            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+              useNativeDriver: false,
+            })}
+            scrollEventThrottle={16}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.3}
+            onViewableItemsChanged={handleViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor={COLORS.primary}
+                progressViewOffset={totalHeaderHeight + 8}
+              />
+            }
+            renderItem={({ item }) => renderRow(item)}
+            ListEmptyComponent={emptyContent}
+            ListFooterComponent={footerContent}
+          />
+        )}
       </View>
 
       {/* Safe top inset stays fixed; only the title row + chips parallax so nothing hides under the notch. */}
@@ -553,6 +576,23 @@ const s = StyleSheet.create({
   emptyStateTight: {
     paddingTop: 60,
     gap: 12,
+  },
+  /** Soft "needs attention" button — same palette used for empty profile
+   *  fields. Lighter than a primary action because clearing filters is a
+   *  reset, not an affirmative go-action. */
+  attentionCta: {
+    marginTop: 4,
+    backgroundColor: COLORS.emptyFieldSurface,
+    borderColor: COLORS.emptyFieldBorder,
+    borderWidth: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: RADIUS.xxl,
+  },
+  attentionCtaText: {
+    color: COLORS.emptyField,
+    fontWeight: FONT.bold,
+    fontSize: 14,
   },
   emptyEmoji: {
     fontSize: 48,

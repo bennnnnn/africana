@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ChatStoreState } from '@/store/chat-store.types';
-import { Conversation, Message, User } from '@/types';
+import { Message, User } from '@/types';
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { supabase } from '@/lib/supabase';
 import { notifyLifecycleEmail, notifyUser } from '@/lib/notifications';
@@ -17,13 +17,14 @@ import { useAuthStore } from '@/store/auth.store';
 import { hasSymmetricBlockBetween } from '@/lib/block-queries';
 import { moderateMessage } from '@/lib/moderation';
 import { maybeWarnMessageQuota } from '@/lib/rate-limit-warn';
+import { gateSendMessage, noteSentMessage, showFreeLimitDialog } from '@/lib/free-quota';
 import { track, EVENTS } from '@/lib/analytics';
 import { logError, logWarn } from '@/lib/logger';
 import {
   mapMessagesInsertError,
   ERROR_MESSAGE_RATE_LIMIT_HOUR,
-  ERROR_MESSAGE_RATE_LIMIT_DAY,
   ERROR_MESSAGE_MODERATION,
+  ERROR_MESSAGE_FREE_LIMIT,
   ERROR_SENDER_MESSAGES_DISABLED,
 } from '@/lib/message-insert-errors';
 
@@ -33,6 +34,7 @@ export {
   ERROR_MESSAGE_MODERATION,
   ERROR_MESSAGE_RATE_LIMIT_HOUR,
   ERROR_MESSAGE_RATE_LIMIT_DAY,
+  ERROR_MESSAGE_FREE_LIMIT,
   ERROR_MESSAGING_BLOCKED,
 } from '@/lib/message-insert-errors';
 
@@ -72,9 +74,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   loadingOlderMessages: {},
   isLoading: false,
 
-  fetchConversations: async (userId) => {
+  fetchConversations: async (userId, options) => {
     const existing = fetchConversationsPending.get(userId);
-    if (existing) {
+    // If a non-forced fetch is in flight, await it and return — avoids duplicate round-trips.
+    if (existing && !options?.force) {
       await existing;
       return;
     }
@@ -372,6 +375,15 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       return { error: ERROR_SENDER_MESSAGES_DISABLED };
     }
 
+    // Free-tier daily cap. Pro users skip this (isProSync checks the flag).
+    // Always run pre-insert so users see a friendly dialog instead of a
+    // failed-message error from the DB anti-spam ceiling.
+    const gate = await gateSendMessage();
+    if (!gate.allowed) {
+      showFreeLimitDialog('messages', gate.cap);
+      return { error: ERROR_MESSAGE_FREE_LIMIT };
+    }
+
     // ━━ Optimistic UI: show message instantly BEFORE any network calls ━━
     // Pre-flight checks (recipient prefs, block status) are enforced server-side
     // by DB triggers anyway. Doing the optimistic insert first means the bubble
@@ -490,6 +502,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
 
     track(EVENTS.MESSAGE_SENT);
+    noteSentMessage();
 
     // Fire-and-forget soft warning when approaching the per-hour/day cap.
     void maybeWarnMessageQuota();

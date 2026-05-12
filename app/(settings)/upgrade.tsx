@@ -1,107 +1,139 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONT } from '@/constants';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
-import { PAYMENTS_ENABLED, PLANS } from '@/lib/payments';
+import { PAYMENTS_ENABLED, PRO_PLAN } from '@/lib/payments';
+import { presentPaywall } from '@/lib/paywall';
 import { appDialog } from '@/lib/app-dialog';
+import { useDialog } from '@/components/ui/DialogProvider';
 
-const { width } = Dimensions.get('window');
+type Cycle = 'monthly' | 'annual';
 
+/**
+ * Two-mode screen:
+ *
+ *   1. PAYMENTS_ENABLED = false → renders the in-app preview card with a
+ *      "Notify me 🔔" CTA. No native paywall, no SDK touched.
+ *
+ *   2. PAYMENTS_ENABLED = true → auto-launches the RevenueCat dashboard
+ *      paywall on mount. The dashboard owns the design; this screen is just
+ *      the entry point. After the paywall is dismissed/purchased/cancelled
+ *      we either pop back to the previous screen (cancel) or show a success
+ *      toast (purchased / restored).
+ */
 export default function UpgradeScreen() {
-  const handlePurchase = (plan: 'gold' | 'platinum') => {
-    if (!PAYMENTS_ENABLED) {
-      appDialog({
-        title: 'Coming soon',
-        message: "Premium features are launching soon. You'll be notified when they're available!",
-        icon: 'rocket-outline',
-      });
-      return;
-    }
-    // TODO: call purchasePlan(userId, plan) when PAYMENTS_ENABLED = true
+  const [cycle, setCycle] = useState<Cycle>('annual');
+  const { showToast } = useDialog();
+  const presentedRef = useRef(false);
+
+  useEffect(() => {
+    if (!PAYMENTS_ENABLED) return;
+    if (presentedRef.current) return;
+    presentedRef.current = true;
+    void (async () => {
+      const outcome = await presentPaywall();
+      if (outcome === 'purchased') {
+        showToast({ icon: 'sparkles', message: 'Welcome to Africana Pro!' });
+        router.back();
+      } else if (outcome === 'restored') {
+        showToast({ icon: 'checkmark-circle', message: 'Subscription restored.' });
+        router.back();
+      } else if (outcome === 'cancelled') {
+        router.back();
+      } else if (outcome === 'error') {
+        appDialog({
+          title: 'Couldn’t open paywall',
+          message: 'Please try again in a moment.',
+          icon: 'alert-circle-outline',
+          actions: [{ label: 'OK', style: 'alert' }],
+        });
+      }
+    })();
+  }, [showToast]);
+
+  const handleNotifyMe = () => {
     appDialog({
-      title: 'Purchase',
-      message: `Starting purchase for ${PLANS[plan].name}...`,
-      icon: 'card-outline',
+      title: 'You’re on the list',
+      message: 'We’ll let you know the moment Africana Pro launches.',
+      icon: 'sparkles-outline',
     });
   };
 
+  // When payments are live we render an empty shell — the paywall is the UI.
+  if (PAYMENTS_ENABLED) {
+    return (
+      <SafeAreaView style={s.screen}>
+        <SettingsHeaderBar title="Africana Pro" titleAlign="center" />
+      </SafeAreaView>
+    );
+  }
+
+  const activePrice = cycle === 'monthly' ? PRO_PLAN.monthlyPrice : PRO_PLAN.annualMonthly;
+  const billedLabel =
+    cycle === 'monthly'
+      ? 'billed monthly'
+      : `billed ${PRO_PLAN.annualPrice} yearly · ${PRO_PLAN.annualDiscountLabel}`;
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      <SettingsHeaderBar title="Go Premium" titleAlign="center" />
+    <SafeAreaView style={s.screen}>
+      <SettingsHeaderBar title="Africana Pro" titleAlign="center" />
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        {/* Hero */}
         <View style={s.hero}>
-          <Text style={s.heroEmoji}>💎</Text>
-          <Text style={s.heroTitle}>Unlock Everything</Text>
+          <Text style={s.heroEmoji}>{PRO_PLAN.emoji}</Text>
+          <Text style={s.heroTitle}>Go Pro</Text>
           <Text style={s.heroSub}>
-            Get more matches, see who likes you, and stand out from the crowd.
+            One simple upgrade. Unlimited likes and messages, see who viewed you, and browse
+            privately.
           </Text>
-          <View style={s.growthCallout}>
-            <Ionicons name="share-social-outline" size={20} color={COLORS.primary} />
-            <Text style={s.growthCalloutText}>
-              Help Africana grow: share someone’s profile from their screen. Early supporters can
-              earn Gold-level access while we’re still small.
-            </Text>
-          </View>
         </View>
 
-        {/* Plans */}
-        {(['gold', 'platinum'] as const).map((id) => {
-          const plan = PLANS[id];
-          const isPopular = id === 'platinum';
-          return (
-            <View key={id} style={[s.planCard, isPopular && s.planCardPop]}>
-              {isPopular && (
-                <View style={s.popularBadge}>
-                  <Text style={s.popularText}>MOST POPULAR</Text>
-                </View>
-              )}
-              <View
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }}
-              >
-                <Text style={{ fontSize: 28 }}>{plan.emoji}</Text>
-                <Text style={[s.planName, isPopular && { color: COLORS.primary }]}>
-                  {plan.name}
-                </Text>
-                <View style={{ flex: 1 }} />
-                <Text style={[s.planPrice, isPopular && { color: COLORS.primary }]}>
-                  {plan.monthlyPrice}/mo
-                </Text>
-              </View>
-              <View style={s.divider} />
-              {plan.features.map((feat) => (
-                <View key={feat} style={s.featRow}>
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={18}
-                    color={isPopular ? COLORS.primary : COLORS.success}
-                  />
-                  <Text style={s.featText}>{feat}</Text>
-                </View>
-              ))}
-              <TouchableOpacity
-                style={[s.buyBtn, isPopular && s.buyBtnPop]}
-                onPress={() => handlePurchase(id)}
-                activeOpacity={0.85}
-              >
-                <Text style={[s.buyBtnText, isPopular && { color: '#FFF' }]}>
-                  {PAYMENTS_ENABLED
-                    ? isPopular
-                      ? `Get ${plan.name} →`
-                      : `Try ${plan.name}`
-                    : 'Notify Me 🔔'}
-                </Text>
-              </TouchableOpacity>
+        <View style={s.toggleRow}>
+          <TouchableOpacity
+            style={[s.toggleBtn, cycle === 'monthly' && s.toggleBtnOn]}
+            onPress={() => setCycle('monthly')}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.toggleText, cycle === 'monthly' && s.toggleTextOn]}>Monthly</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.toggleBtn, cycle === 'annual' && s.toggleBtnOn]}
+            onPress={() => setCycle('annual')}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.toggleText, cycle === 'annual' && s.toggleTextOn]}>Annual</Text>
+            <View style={s.saveBadge}>
+              <Text style={s.saveBadgeText}>SAVE 50%</Text>
             </View>
-          );
-        })}
+          </TouchableOpacity>
+        </View>
+
+        <View style={s.planCard}>
+          <View style={s.priceRow}>
+            <Text style={s.price}>{activePrice}</Text>
+            <Text style={s.priceUnit}>/mo</Text>
+          </View>
+          <Text style={s.billed}>{billedLabel}</Text>
+
+          <View style={s.divider} />
+
+          {PRO_PLAN.features.map((feat) => (
+            <View key={feat} style={s.featRow}>
+              <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
+              <Text style={s.featText}>{feat}</Text>
+            </View>
+          ))}
+
+          <TouchableOpacity style={s.buyBtn} onPress={handleNotifyMe} activeOpacity={0.85}>
+            <Text style={s.buyBtnText}>Notify me 🔔</Text>
+          </TouchableOpacity>
+        </View>
 
         <Text style={s.note}>
-          All plans auto-renew monthly. Cancel anytime in App Store / Google Play Settings. Prices
-          may vary by region.
+          Subscription auto-renews. Cancel anytime in App Store / Google Play settings.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -109,8 +141,9 @@ export default function UpgradeScreen() {
 }
 
 const s = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: COLORS.surface },
   scroll: { padding: 20, paddingBottom: 48 },
-  hero: { alignItems: 'center', marginBottom: 28 },
+  hero: { alignItems: 'center', marginBottom: 24 },
   heroEmoji: { fontSize: 56, marginBottom: 10 },
   heroTitle: { fontSize: 26, fontWeight: '900', color: COLORS.text, marginBottom: 8 },
   heroSub: {
@@ -120,71 +153,67 @@ const s = StyleSheet.create({
     lineHeight: 21,
     paddingHorizontal: 16,
   },
-  growthCallout: {
+  toggleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginTop: 20,
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: COLORS.primarySurface,
-    borderWidth: 1,
-    borderColor: COLORS.primaryBorder,
-    maxWidth: width - 40,
+    backgroundColor: COLORS.savanna,
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 20,
   },
-  growthCalloutText: {
+  toggleBtn: {
     flex: 1,
-    fontSize: 13,
-    lineHeight: 19,
-    color: COLORS.text,
-    fontWeight: '600',
+    paddingVertical: 12,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
   },
-  planCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
+  toggleBtnOn: {
+    backgroundColor: COLORS.surface,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  planCardPop: {
-    borderColor: COLORS.primary,
-    borderWidth: 2,
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.15,
-  },
-  popularBadge: {
-    alignSelf: 'flex-start',
+  toggleText: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary },
+  toggleTextOn: { color: COLORS.text, fontWeight: '700' },
+  saveBadge: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 10,
-    marginBottom: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
-  popularText: { fontSize: 10, fontWeight: '800', color: '#FFF', letterSpacing: 0.8 },
-  planName: { fontSize: 20, fontWeight: '800', color: COLORS.text },
-  planPrice: { fontSize: 16, fontWeight: '700', color: COLORS.textSecondary },
-  divider: { height: 1, backgroundColor: COLORS.border, marginVertical: 14 },
-  featRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  saveBadgeText: { fontSize: 9, fontWeight: '800', color: '#FFF', letterSpacing: 0.6 },
+  planCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 22,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
+    marginBottom: 16,
+  },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  price: { fontSize: 40, fontWeight: '900', color: COLORS.primary },
+  priceUnit: { fontSize: 18, fontWeight: '600', color: COLORS.textSecondary },
+  billed: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4 },
+  divider: { height: 1, backgroundColor: COLORS.border, marginVertical: 18 },
+  featRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   featText: { fontSize: 14, color: COLORS.text, flex: 1 },
   buyBtn: {
-    marginTop: 8,
-    paddingVertical: 14,
+    marginTop: 12,
+    paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-  },
-  buyBtnPop: {
     backgroundColor: COLORS.primary,
-    borderWidth: 0,
   },
-  buyBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.primary },
+  buyBtnText: { fontSize: 16, fontWeight: '800', color: '#FFF' },
   note: {
     fontSize: 11,
     color: COLORS.textMuted,
@@ -194,3 +223,5 @@ const s = StyleSheet.create({
     marginTop: 8,
   },
 });
+
+void FONT;

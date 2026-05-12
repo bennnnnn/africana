@@ -20,6 +20,7 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { supabase } from './supabase';
+import type { UserSettings } from '@/types';
 
 // expo-notifications is removed from Expo Go in SDK 53 — skip loading entirely
 // to avoid console.error spam.
@@ -200,14 +201,20 @@ export async function registerForPushNotifications(
   }
 }
 
-// ── Local notification (foreground ping for incoming messages, etc.) ─────────
+/** Whether to show haptic + local notification for an incoming message (mirrors `notify` Edge Function rules). */
+export function allowIncomingMessageNotificationCue(
+  settings: Pick<UserSettings, 'receive_messages' | 'notify_messages'> | null | undefined,
+): boolean {
+  if (settings?.receive_messages === false) return false;
+  if (settings?.notify_messages === false) return false;
+  return true;
+}
+
+// ── Local notification (foreground ping for incoming messages) ─────────────
 //
-// Used in two places:
-//   1. Match celebration after `MatchModal` is dismissed (channelId: 'match').
-//   2. Foreground "ping" when a realtime INSERT delivers a message AND the
-//      user is on the inbox or another chat — the OS push from the Edge
-//      Function might arrive late or not at all (if FCM/APNs aren't
-//      configured yet), so this is the only reliable in-app cue.
+// When Realtime delivers a message while the user is on the main tabs (not in
+// that chat), we ping locally — push may be late or unavailable. Honours the
+// same prefs as the `notify` Edge Function via `allowIncomingMessageNotificationCue`.
 export async function sendLocalNotification(
   title: string,
   body: string,

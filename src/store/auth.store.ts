@@ -3,6 +3,8 @@ import { Session } from '@supabase/supabase-js';
 import { User, UserSettings } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { resetRateLimitWarnings } from '@/lib/rate-limit-warn';
+import { resetFreeQuotaCache } from '@/lib/free-quota';
+import { teardownPayments } from '@/lib/payments';
 import {
   fetchOrCreateSettingsRow,
   fetchProfileRow,
@@ -68,18 +70,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   hydrateUserFromServer: async (userId, options) => {
-    if (options?.continueOnPartialFailure) {
-      await Promise.all([
-        get()
-          .fetchProfile(userId)
-          .catch((e) => console.error('fetchProfile (auth change)', e)),
-        get()
-          .fetchSettings(userId)
-          .catch((e) => console.error('fetchSettings (auth change)', e)),
-      ]);
-      return;
+    set({ isLoading: true });
+    try {
+      if (options?.continueOnPartialFailure) {
+        await Promise.all([
+          get()
+            .fetchProfile(userId)
+            .catch((e) => console.error('fetchProfile (auth change)', e)),
+          get()
+            .fetchSettings(userId)
+            .catch((e) => console.error('fetchSettings (auth change)', e)),
+        ]);
+        return;
+      }
+      await Promise.all([get().fetchProfile(userId), get().fetchSettings(userId)]);
+    } finally {
+      set({ isLoading: false });
     }
-    await Promise.all([get().fetchProfile(userId), get().fetchSettings(userId)]);
   },
 
   updateProfile: async (updates) => {
@@ -164,6 +171,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.warn('[signOut] auth.signOut failed', e);
     } finally {
       resetRateLimitWarnings();
+      resetFreeQuotaCache();
+      void teardownPayments();
       set({ session: null, user: null, settings: null });
     }
   },

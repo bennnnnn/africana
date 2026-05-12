@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { notifyLifecycleEmail, notifyUser } from '@/lib/notifications';
 import { appDialog } from '@/lib/app-dialog';
 import { maybeWarnLikeQuota } from '@/lib/rate-limit-warn';
+import { gateSendLike, noteSentLike, showFreeLimitDialog } from '@/lib/free-quota';
 import { track, EVENTS } from '@/lib/analytics';
 import { isBlockedRelationship } from '@/lib/social-actions';
 import { likesPathSegmentForNotifyType } from '@/constants/likes-routes';
@@ -15,6 +16,7 @@ import { UI_TOAST } from '@/constants/copy';
 import { getOnlineFreshnessCutoffISO, getEffectivePresence } from '@/lib/utils';
 import { fetchSymmetricBlockedPeerIds } from '@/lib/block-queries';
 import { usePresenceStore } from '@/store/presence.store';
+import { logWarn } from '@/lib/logger';
 /** Map discover preference to profile gender filter (undefined → no filter). */
 const interestedInToGender = (v: InterestedIn | undefined): string | null => {
   if (v === 'men') return 'male';
@@ -22,12 +24,14 @@ const interestedInToGender = (v: InterestedIn | undefined): string | null => {
   return null;
 };
 
-// Full Fisher-Yates shuffle (in-place)
-function shuffleArray<T>(arr: T[]): void {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
+/** Stable ordering so the grid does not jump when refetched (random shuffle caused vigorous reordering). */
+function sortByLastSeenThenId<T extends { last_seen?: string | null; id: string }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const ta = a.last_seen ? new Date(a.last_seen).getTime() : 0;
+    const tb = b.last_seen ? new Date(b.last_seen).getTime() : 0;
+    if (tb !== ta) return tb - ta;
+    return a.id.localeCompare(b.id);
+  });
 }
 
 // Postgrest-js v2.49+ adds Result / RelationName / Relationships / Method — use `any` so the chain stays assignable without generated DB types.
@@ -159,6 +163,9 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           fetchSymmetricBlockedPeerIds(userId),
           supabase.from('likes').select('to_user_id').eq('from_user_id', userId),
         ]);
+        if (likedRes.error) {
+          logWarn('discover/fetchUsers: failed to load liked IDs', { error: likedRes.error.message });
+        }
         blockedIds = blockedIdsRes;
         likedIds = new Set<string>((likedRes.data ?? []).map((l) => l.to_user_id));
         _cachedBlockedIds = blockedIds;
@@ -258,10 +265,9 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
 
       const processed = processRaw(rows);
 
-      // Online users first, then shuffle the offline pool for variety
+      // Online users first; offline keeps DB order (last_seen) so lists stay stable across refetches
       const online = processed.filter((u) => u.online_status === 'online');
-      const offline = processed.filter((u) => u.online_status !== 'online');
-      shuffleArray(offline);
+      const offline = sortByLastSeenThenId(processed.filter((u) => u.online_status !== 'online'));
       let result: User[] = [...online, ...offline];
 
       // ── Fallback: pad with liked users if results are sparse ─────────────
@@ -281,8 +287,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           const { data: likedData } = await likedQuery;
           if (likedData) {
             const likedProcessed = processRaw(likedData as Record<string, unknown>[]);
-            const likedUsers = likedProcessed;
-            shuffleArray(likedUsers);
+            const likedUsers = sortByLastSeenThenId(likedProcessed);
             result = [...result, ...likedUsers];
           }
         }
@@ -293,6 +298,13 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         page: currentPage + 1,
         hasMore: rows.length === PAGE_SIZE,
         fetchError: null,
+      }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not load members';
+      logWarn('discover/fetchUsers: unexpected error', { error: msg });
+      set((state) => ({
+        fetchError: msg,
+        hasMore: currentPage === 0 ? false : state.hasMore,
       }));
     } finally {
       set({ isLoading: false });
@@ -349,6 +361,14 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         message: UI_TOAST.interactionBlocked,
         icon: 'ban-outline',
       });
+      return false;
+    }
+
+    // Free-tier daily cap. Pro users skip this. Shows a friendly upsell
+    // dialog instead of failing the like at the DB anti-spam ceiling.
+    const gate = await gateSendLike();
+    if (!gate.allowed) {
+      showFreeLimitDialog('likes', gate.cap);
       return false;
     }
 
@@ -436,6 +456,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       });
     }
     track(EVENTS.LIKE_SENT, { matched: isMatch });
+    noteSentLike();
 
     // Fire-and-forget soft warning when approaching the per-hour/day cap.
     void maybeWarnLikeQuota();

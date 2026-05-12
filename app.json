@@ -18,7 +18,7 @@
       "bundleIdentifier": "com.africana.dating",
       "runtimeVersion": "1.0.0",
       "associatedDomains": [
-        "applinks:open.africana.app"
+        "applinks:joinafricana.com"
       ]
     },
     "android": {
@@ -30,9 +30,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
-      "permissions": [
-        "android.permission.RECORD_AUDIO"
-      ],
+      "permissions": [],
       "runtimeVersion": "1.0.0",
       "intentFilters": [
         {
@@ -41,7 +39,7 @@
           "data": [
             {
               "scheme": "https",
-              "host": "open.africana.app",
+              "host": "joinafricana.com",
               "pathPrefix": "/profile-share.html"
             }
           ],
@@ -80,7 +78,8 @@
         {
           "color": "#0E9F6E"
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true

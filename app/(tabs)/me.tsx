@@ -17,7 +17,6 @@ import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '@/lib/supabase';
 import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
 import { useAuthStore } from '@/store/auth.store';
 import {
@@ -311,7 +310,6 @@ export default function MyProfileScreen() {
   };
 
   // ── Display values ─────────────────────────────────────────────────────────
-  const avatar = avatarForHero;
   const photos = user.profile_photos ?? [];
   const location = [user.city, user.state, user.country].filter(Boolean).join(', ');
   const today = new Date();

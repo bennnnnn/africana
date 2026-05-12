@@ -7,12 +7,14 @@ DROP TRIGGER IF EXISTS auto_shadowban_on_report ON public.reports;
 
 -- ── Messages: only sender may hard-delete (participants use soft_delete_message_for_self) ──
 DROP POLICY IF EXISTS "Participants can delete messages" ON public.messages;
+DROP POLICY IF EXISTS "Senders can delete own messages" ON public.messages;
 CREATE POLICY "Senders can delete own messages"
   ON public.messages FOR DELETE TO authenticated
   USING ((SELECT auth.uid()) = sender_id);
 
 -- ── Profiles: block-aware + hide-from-discover; still allow social graph edges ──
 DROP POLICY IF EXISTS "Public profiles are viewable by authenticated users" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles viewable with visibility rules" ON public.profiles;
 CREATE POLICY "Profiles viewable with visibility rules"
   ON public.profiles FOR SELECT TO authenticated
   USING (

@@ -17,7 +17,7 @@ export function ProfileCompletionNudgeBanner({
   return (
     <View style={styles.outer}>
       <View style={styles.iconWrap}>
-        <Ionicons name="sparkles" size={20} color={COLORS.primary} />
+        <Ionicons name="alert-circle" size={20} color={COLORS.emptyField} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.title}>Your profile is {percent}% complete</Text>
@@ -52,9 +52,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
     padding: 14,
     borderRadius: RADIUS.lg,
-    backgroundColor: COLORS.primarySurface,
+    backgroundColor: COLORS.emptyFieldSurface,
     borderWidth: 1,
-    borderColor: COLORS.primaryBorder,
+    borderColor: COLORS.emptyFieldBorder,
   },
   iconWrap: {
     width: 36,
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 6,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.emptyField,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: RADIUS.full,

@@ -56,7 +56,7 @@ export function ProfileDiscoverGateModal({ visible, onContinueSetup }: Props) {
                 borderRadius: 16,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: COLORS.primary,
+                backgroundColor: COLORS.emptyField,
               }}
             >
               <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>

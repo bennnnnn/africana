@@ -20,6 +20,10 @@ export const ERROR_MESSAGE_RATE_LIMIT_HOUR =
 export const ERROR_MESSAGE_RATE_LIMIT_DAY =
   'You\u2019ve reached today\u2019s message limit. Please try again tomorrow.';
 
+/** Free-tier daily cap reached. The `showFreeLimitDialog` already presented;
+ *  return this sentinel so callers can bail without showing a second error. */
+export const ERROR_MESSAGE_FREE_LIMIT = 'free_limit_reached';
+
 export const ERROR_MESSAGING_BLOCKED = UI_TOAST.openChatBlocked;
 
 function isRecipientMessagesDisabledDbError(err: PostgrestErrorFields | null): boolean {

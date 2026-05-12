@@ -1,8 +1,7 @@
 import React, { memo, useCallback, useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, FlatList, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { User } from '@/types';
@@ -10,6 +9,7 @@ import { COLORS, DEFAULT_AVATAR, FONT } from '@/constants';
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
+import { SkeletonRow } from '@/components/ui/Skeleton';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { appDialog } from '@/lib/app-dialog';
 import { UI_LABELS } from '@/constants/copy';
@@ -190,8 +190,10 @@ export default function BlockedUsersScreen() {
       <SettingsHeaderBar title={`Blocked users (${blockedUsers.length})`} titleAlign="leading" />
 
       {isLoading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+        <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonRow key={i} />
+          ))}
         </View>
       ) : loadError ? (
         <View style={{ flex: 1, padding: 24, justifyContent: 'center' }}>

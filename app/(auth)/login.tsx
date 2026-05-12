@@ -14,6 +14,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { signInWithGoogle } from '@/lib/google-auth';
+import { signInWithApple } from '@/lib/apple-auth';
 import { useAuthStore } from '@/store/auth.store';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -24,7 +25,6 @@ import { appDialog } from '@/lib/app-dialog';
 
 export default function LoginScreen() {
   const hydrateUserFromServer = useAuthStore((s) => s.hydrateUserFromServer);
-  const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
@@ -34,6 +34,7 @@ export default function LoginScreen() {
   });
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const emailValidation = validateEmail(email);
   const passwordValidation = password
     ? { valid: true as const }
@@ -66,7 +67,17 @@ export default function LoginScreen() {
       });
       return;
     }
-    await hydrateUserFromServer(session.user.id);
+    try {
+      await hydrateUserFromServer(session.user.id);
+    } catch {
+      appDialog({
+        title: 'Sign in issue',
+        message: 'Signed in but could not load your profile. Please check your connection and try again.',
+        icon: 'alert-circle-outline',
+      });
+      setLoading(false);
+      return;
+    }
     const { user } = useAuthStore.getState();
     redirectAfterAuth(router, user, session);
   };
@@ -80,7 +91,12 @@ export default function LoginScreen() {
     try {
       const session = await signInWithGoogle();
       if (session?.user) {
-        await hydrateUserFromServer(session.user.id);
+        try {
+          await hydrateUserFromServer(session.user.id);
+        } catch {
+          appDialog({ title: 'Sign in issue', message: 'Could not load your profile. Please try again.', icon: 'alert-circle-outline' });
+          return;
+        }
         const { user } = useAuthStore.getState();
         redirectAfterAuth(router, user, session);
       }
@@ -94,6 +110,33 @@ export default function LoginScreen() {
       }
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const handleApple = async () => {
+    setAppleLoading(true);
+    try {
+      const session = await signInWithApple();
+      if (session?.user) {
+        try {
+          await hydrateUserFromServer(session.user.id);
+        } catch {
+          appDialog({ title: 'Sign in issue', message: 'Could not load your profile. Please try again.', icon: 'alert-circle-outline' });
+          return;
+        }
+        const { user } = useAuthStore.getState();
+        redirectAfterAuth(router, user, session);
+      }
+    } catch (e: any) {
+      if (e?.message !== 'User cancelled') {
+        appDialog({
+          title: 'Apple sign-in failed',
+          message: e?.message ?? 'Please try again.',
+          icon: 'logo-apple',
+        });
+      }
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -127,77 +170,83 @@ export default function LoginScreen() {
             ) : (
               <>
                 <Text style={{ fontSize: 22, fontWeight: '900', color: '#4285F4' }}>G</Text>
-                <Text style={s.googleBtnText}>Continue with Google</Text>
+                <Text style={s.googleBtnText}>Sign in with Google</Text>
               </>
             )}
           </TouchableOpacity>
 
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              style={s.appleBtn}
+              onPress={handleApple}
+              disabled={appleLoading}
+              activeOpacity={0.85}
+            >
+              {appleLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="logo-apple" size={22} color="#FFFFFF" />
+                  <Text style={s.appleBtnText}>Sign in with Apple</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
           <View style={s.divider}>
             <View style={s.dividerLine} />
-            <Text style={s.dividerText}>or</Text>
+            <Text style={s.dividerText}>OR</Text>
             <View style={s.dividerLine} />
           </View>
 
-          {!showEmailForm ? (
+          <View style={s.emailForm}>
+            <Input
+              label="Email"
+              value={email}
+              onChangeText={(value) => {
+                setEmail(value);
+                if (!touched.email) setTouched((current) => ({ ...current, email: true }));
+              }}
+              onBlur={() => setTouched((current) => ({ ...current, email: true }))}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              leftIcon="mail-outline"
+              placeholder="your@email.com"
+              validationState={getValidationState(
+                showEmailState,
+                emailValidation,
+                Boolean(normalizedEmail),
+              )}
+              error={showEmailState ? emailValidation.message : undefined}
+            />
+            <Input
+              label="Password"
+              value={password}
+              onChangeText={(value) => {
+                setPassword(value);
+                if (!touched.password) setTouched((current) => ({ ...current, password: true }));
+              }}
+              onBlur={() => setTouched((current) => ({ ...current, password: true }))}
+              isPassword
+              leftIcon="lock-closed-outline"
+              placeholder="Your password"
+              validationState={getValidationState(
+                showPasswordState,
+                passwordValidation,
+                Boolean(password),
+              )}
+              error={showPasswordState ? passwordValidation.message : undefined}
+            />
             <TouchableOpacity
-              style={s.emailBtn}
-              onPress={() => setShowEmailForm(true)}
-              activeOpacity={0.85}
+              style={{ alignSelf: 'flex-end', marginTop: -8, marginBottom: 20 }}
+              onPress={handleForgotPassword}
             >
-              <Ionicons name="mail-outline" size={20} color="#FFF" />
-              <Text style={s.emailBtnText}>Continue with Email</Text>
+              <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 14 }}>
+                Forgot password?
+              </Text>
             </TouchableOpacity>
-          ) : (
-            <View style={s.emailForm}>
-              <Input
-                label="Email"
-                value={email}
-                onChangeText={(value) => {
-                  setEmail(value);
-                  if (!touched.email) setTouched((current) => ({ ...current, email: true }));
-                }}
-                onBlur={() => setTouched((current) => ({ ...current, email: true }))}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                leftIcon="mail-outline"
-                placeholder="your@email.com"
-                validationState={getValidationState(
-                  showEmailState,
-                  emailValidation,
-                  Boolean(normalizedEmail),
-                )}
-                error={showEmailState ? emailValidation.message : undefined}
-                autoFocus
-              />
-              <Input
-                label="Password"
-                value={password}
-                onChangeText={(value) => {
-                  setPassword(value);
-                  if (!touched.password) setTouched((current) => ({ ...current, password: true }));
-                }}
-                onBlur={() => setTouched((current) => ({ ...current, password: true }))}
-                isPassword
-                leftIcon="lock-closed-outline"
-                placeholder="Your password"
-                validationState={getValidationState(
-                  showPasswordState,
-                  passwordValidation,
-                  Boolean(password),
-                )}
-                error={showPasswordState ? passwordValidation.message : undefined}
-              />
-              <TouchableOpacity
-                style={{ alignSelf: 'flex-end', marginTop: -8, marginBottom: 20 }}
-                onPress={handleForgotPassword}
-              >
-                <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 14 }}>
-                  Forgot password?
-                </Text>
-              </TouchableOpacity>
-              <Button title="Sign In" onPress={handleLogin} loading={loading} fullWidth size="lg" />
-            </View>
-          )}
+            <Button title="Sign In" onPress={handleLogin} loading={loading} fullWidth size="lg" />
+          </View>
 
           <View style={s.signupRow}>
             <Text style={{ color: COLORS.textSecondary, fontSize: 14 }}>
@@ -248,22 +297,17 @@ const s = StyleSheet.create({
     elevation: 2,
   },
   googleBtnText: { fontSize: 16, fontWeight: '600', color: '#3C4043' },
-  emailBtn: {
+  appleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#000000',
     borderRadius: 14,
     height: 56,
     marginBottom: 12,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  emailBtnText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
+  appleBtnText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
   emailForm: { marginTop: 4 },
   divider: {
     flexDirection: 'row',

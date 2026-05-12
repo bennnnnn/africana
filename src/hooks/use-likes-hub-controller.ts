@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
@@ -12,12 +11,7 @@ import { User } from '@/types';
 import { isUuidString } from '@/lib/utils';
 import { fetchSymmetricBlockedPeerIds } from '@/lib/block-queries';
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
-import {
-  LIKES_TAB_ORDER,
-  LIKES_LIST_STALE_MS,
-  LIKES_SEEN_AT_COLUMN,
-  type LikesTab,
-} from '@/constants/likes-screen';
+import { LIKES_LIST_STALE_MS, LIKES_SEEN_AT_COLUMN, type LikesTab } from '@/constants/likes-screen';
 import { likesParamForTab, likesTabFromPathSegment } from '@/constants/likes-routes';
 import {
   _likesTabOffsets,
@@ -28,7 +22,6 @@ import type { LikesHubListItem } from '@/lib/likes-fetch-users';
 import { fetchUsersForLikesTab, prefetchLikesUserImages } from '@/lib/likes-fetch-users';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { UI_TOAST } from '@/constants/copy';
-import { useLikesLiveChannel } from '@/hooks/use-likes-live-channel';
 
 export type LikesHubContextValue = {
   activeTab: LikesTab;
@@ -86,8 +79,17 @@ export function useLikesHubController(): LikesHubContextValue {
   });
 
   const counts = useActivityStore((state) => state.counts);
+  // Read setCounts so the Likes hub can push updates from its own RPC results
+  // into the shared store the tab-bar badge reads from.
   const setStoreCounts = useActivityStore((state) => state.setCounts);
   const clearStoreTab = useActivityStore((state) => state.clearTab);
+  // Whether the tab-layout already seeded counts for this user (avoids duplicate RPC on mount).
+  const countsSeededForUser = useActivityStore((state) =>
+    Object.values(state.counts).some((v) => v > 0),
+  );
+  // Incremented by the tab-layout channel on every new like/view/star INSERT.
+  // Watch it so the Likes hub reloads the active list without its own realtime channel.
+  const incomingSeq = useActivityStore((state) => state.incomingSeq);
   const [loadedTabs, setLoadedTabs] = useState<Set<LikesTab>>(() => new Set());
   const [refreshing, setRefreshing] = useState(false);
   const blockedIdsRef = useRef<Set<string> | null>(null);
@@ -218,15 +220,9 @@ export function useLikesHubController(): LikesHubContextValue {
       const now = new Date().toISOString();
       const col = LIKES_SEEN_AT_COLUMN[t];
       clearStoreTab(t);
-      setActivitySeenAt((prev) => {
-        const base = prev ?? {
-          matches: null,
-          received: null,
-          viewers: null,
-          favourites: null,
-        };
-        return { ...base, [t]: now };
-      });
+      // Persist "seen" and clear the badge, but keep the local baseline unchanged
+      // so rows that triggered the notification stay visibly NEW while the user
+      // is looking at this screen.
       await supabase
         .from('user_settings')
         .update({ [col]: now })
@@ -246,15 +242,15 @@ export function useLikesHubController(): LikesHubContextValue {
     const tabAtOpen = activeTab;
 
     void (async () => {
-      // Run counts + primary list in parallel — awaiting RPC before loadTab
-      // made the first match feel noticeably late.
+      // Run settings + primary list in parallel. Skip the counts RPC when the
+      // tab-layout has already seeded the shared store (avoids a duplicate round-trip).
       const [settingsRes] = await Promise.all([
         supabase
           .from('user_settings')
           .select('likes_seen_at, views_seen_at, favourites_seen_at, matches_seen_at')
           .eq('user_id', user.id)
           .maybeSingle(),
-        fetchActivityCountsRef.current(),
+        countsSeededForUser ? Promise.resolve(null) : fetchActivityCountsRef.current(),
         loadTabRef.current(tabAtOpen, true),
       ]);
       if (!cancelled) {
@@ -277,13 +273,6 @@ export function useLikesHubController(): LikesHubContextValue {
       }
       if (cancelled) return;
       void markTabSeen(tabAtOpen);
-      InteractionManager.runAfterInteractions(() => {
-        if (cancelled) return;
-        for (const t of LIKES_TAB_ORDER) {
-          if (t === tabAtOpen) continue;
-          void loadTabRef.current(t, false);
-        }
-      });
     })();
 
     return () => {
@@ -292,14 +281,26 @@ export function useLikesHubController(): LikesHubContextValue {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, markTabSeen]);
 
-  useLikesLiveChannel(user?.id, loadTabRef, fetchActivityCountsRef, tabFetchedAtRef, activeTabRef);
+  // When the tab-layout channel bumps incomingSeq, reload the active Likes tab.
+  // This replaces the separate `likes-live` realtime channel (one less websocket subscription).
+  const incomingSeqRef = useRef(incomingSeq);
+  useEffect(() => {
+    if (incomingSeq === incomingSeqRef.current) return;
+    incomingSeqRef.current = incomingSeq;
+    for (const t of Object.keys(tabFetchedAtRef.current) as LikesTab[]) {
+      tabFetchedAtRef.current[t] = 0;
+    }
+    void fetchActivityCountsRef.current();
+    void loadTabRef.current(activeTabRef.current, true);
+  }, [incomingSeq, activeTabRef, fetchActivityCountsRef, loadTabRef, tabFetchedAtRef]);
 
   useFocusEffect(
     useCallback(() => {
       if (!user) return;
-      void fetchActivityCountsRef.current();
+      // Only refetch counts if not already seeded; avoid duplicate RPC on focus.
+      if (!countsSeededForUser) void fetchActivityCountsRef.current();
       void loadTabRef.current(activeTabRef.current, false);
-    }, [user?.id]),
+    }, [user?.id, countsSeededForUser]),
   );
 
   const handleRefresh = useCallback(async () => {

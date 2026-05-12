@@ -39,24 +39,29 @@ import { CultureOptionSet, getEthnicityOptions, getLanguageOptions } from '@/lib
 import { detectLocationFromIp } from '@/lib/geo-country';
 import { logWarn } from '@/lib/logger';
 import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
+import { isProfileCompleteForDiscover } from '@/lib/profile-completion';
 import { MultiChipSelect } from '@/components/onboarding/MultiChipSelect';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { OnboardingProgressBar } from '@/components/onboarding/OnboardingProgressBar';
 import { OnboardingPhotoGrid } from '@/components/onboarding/OnboardingPhotoGrid';
+import { AuthLegalConsentRow } from '@/components/auth/AuthLegalConsentRow';
 
 // Keep Dimensions import for downstream layout (step chip layouts) even when not directly used here.
 
 // Step 7 is the celebration screen; steps 1–6 are defined in ONBOARDING_STEP_METAS.
 
 export default function OnboardingScreen() {
-  const params = useLocalSearchParams<{ userId: string; email: string }>();
+  const params = useLocalSearchParams<{ userId: string; email: string; termsAccepted?: string }>();
   const hydrateUserFromServer = useAuthStore((s) => s.hydrateUserFromServer);
+  const user = useAuthStore((s) => s.user);
+  const isAuthLoading = useAuthStore((s) => s.isLoading);
 
   const [step, setStep] = useState(1);
 
   // Step 1
   const [fullName, setFullName] = useState('');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [termsAccepted, setTermsAccepted] = useState(params.termsAccepted === '1');
 
   // Step 2
   const [photoUris, setPhotoUris] = useState<string[]>([]);
@@ -101,6 +106,21 @@ export default function OnboardingScreen() {
   const saveInFlightRef = useRef(false);
 
   const firstNameValidation = validateFirstName(fullName);
+  const showTermsConsent = !termsAccepted;
+
+  useEffect(() => {
+    let cancelled = false;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      const meta = data.session?.user.user_metadata as Record<string, unknown> | undefined;
+      if (typeof meta?.terms_accepted_at === 'string' && meta.terms_accepted_at.length > 0) {
+        setTermsAccepted(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ── Cultural location derivations ──────────────────────────────────────────
   const livesInAfrica = location.countryCode
@@ -301,6 +321,16 @@ export default function OnboardingScreen() {
       setStep(1);
       return;
     }
+    if (!termsAccepted) {
+      setStep(1);
+      appDialog({
+        title: 'Please accept the Terms',
+        message:
+          'Agree to the Terms of Service and Privacy Policy to finish creating your profile.',
+        icon: 'document-text-outline',
+      });
+      return;
+    }
     if (!birthdate || !gender || !interestedIn) {
       appDialog({ title: 'Incomplete', message: 'Please complete step 3.' });
       return;
@@ -457,7 +487,7 @@ export default function OnboardingScreen() {
   };
 
   const canProceed = () => {
-    if (step === 1) return firstNameValidation.valid;
+    if (step === 1) return firstNameValidation.valid && termsAccepted;
     if (step === 2) return true;
     if (step === 3) {
       if (!birthdate || !gender || !interestedIn) return false;
@@ -483,6 +513,32 @@ export default function OnboardingScreen() {
     }
     setStep(step + 1);
   };
+
+  // Only auto-redirect before the user has entered anything (step 1).
+  // At step 7 the user just finished onboarding and the celebration screen
+  // must be shown — do NOT redirect here or it gets skipped.
+  useEffect(() => {
+    if (step !== 1) return;
+    if (!isAuthLoading && isProfileCompleteForDiscover(user)) {
+      router.replace('/(tabs)/discover');
+    }
+  }, [isAuthLoading, user, step]);
+
+  if (isAuthLoading) {
+    return (
+      <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  if (step !== 7 && isProfileCompleteForDiscover(user)) {
+    return (
+      <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </SafeAreaView>
+    );
+  }
 
   // ─── Celebration screen (step 7) ─────────────────────────────────────────
   if (step === 7) {
@@ -570,6 +626,13 @@ export default function OnboardingScreen() {
                 error={touched.fullName ? firstNameValidation.message : undefined}
                 autoFocus
               />
+              {showTermsConsent && (
+                <AuthLegalConsentRow
+                  checked={termsAccepted}
+                  onToggle={() => setTermsAccepted((v) => !v)}
+                  style={{ marginTop: 12 }}
+                />
+              )}
             </>
           )}
 
@@ -577,7 +640,18 @@ export default function OnboardingScreen() {
           {step === 2 && (
             <OnboardingPhotoGrid
               photoUris={photoUris}
-              onAdd={() => void pickPhotos().catch(() => {})}
+              onAdd={() => {
+                void pickPhotos().catch((e: unknown) => {
+                  const msg = e instanceof Error ? e.message : '';
+                  if (msg !== 'User cancelled' && !msg.includes('cancel')) {
+                    appDialog({
+                      title: 'Could not add photo',
+                      message: 'Please try again or pick a different photo.',
+                      icon: 'image-outline',
+                    });
+                  }
+                });
+              }}
               onRemoveAt={(i) => setPhotoUris((p) => p.filter((_, idx) => idx !== i))}
             />
           )}

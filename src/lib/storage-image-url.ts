@@ -23,6 +23,25 @@ function supabaseHostPrefix(): string | null {
   return base;
 }
 
+function isSupabaseStorageUrl(url: URL): boolean {
+  return (
+    (url.hostname.endsWith('.supabase.co') || url.hostname === 'auth.joinafricana.com') &&
+    (url.pathname.includes(OBJECT_PUBLIC) || url.pathname.includes(RENDER_IMAGE_PUBLIC))
+  );
+}
+
+function storagePathOnCurrentHost(trimmed: string): string | null {
+  const host = supabaseHostPrefix();
+  if (!host) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (!isSupabaseStorageUrl(parsed)) return null;
+    return `${host}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * If `url` is a public object URL on this project's Supabase Storage, rewrite to the
  * image renderer path with width/quality. Other URLs (e.g. ui-avatars, CDN) pass through.
@@ -34,13 +53,14 @@ export function withStorageImageTransform(
   if (!url) return null;
   const trimmed = url.trim();
   if (!trimmed) return null;
-  if (!STORAGE_IMAGE_TRANSFORM_ENABLED) return trimmed;
-  if (trimmed.includes(RENDER_IMAGE_PUBLIC)) return trimmed;
+  const canonicalUrl = storagePathOnCurrentHost(trimmed) ?? trimmed;
+  if (!STORAGE_IMAGE_TRANSFORM_ENABLED) return canonicalUrl;
+  if (canonicalUrl.includes(RENDER_IMAGE_PUBLIC)) return canonicalUrl;
   const host = supabaseHostPrefix();
-  if (!host || !trimmed.startsWith(host)) return trimmed;
-  const pathFromOrigin = trimmed.slice(host.length);
-  if (!pathFromOrigin.includes(OBJECT_PUBLIC)) return trimmed;
-  const q = trimmed.indexOf('?');
+  if (!host || !canonicalUrl.startsWith(host)) return canonicalUrl;
+  const pathFromOrigin = canonicalUrl.slice(host.length);
+  if (!pathFromOrigin.includes(OBJECT_PUBLIC)) return canonicalUrl;
+  const q = pathFromOrigin.indexOf('?');
   const pathOnly = q === -1 ? pathFromOrigin : pathFromOrigin.slice(0, q);
   const renderPath = pathOnly.replace(OBJECT_PUBLIC, RENDER_IMAGE_PUBLIC);
   const params = new URLSearchParams({
@@ -65,12 +85,24 @@ export function profileImageUrlForDetail(url: string | null | undefined): string
  */
 export function storagePublicObjectUrlFromRender(url: string): string | null {
   const trimmed = url.trim();
+  const canonicalUrl = storagePathOnCurrentHost(trimmed) ?? trimmed;
   const host = supabaseHostPrefix();
-  if (!host || !trimmed.startsWith(host)) return null;
-  if (!trimmed.includes(RENDER_IMAGE_PUBLIC)) return null;
-  const pathFromOrigin = trimmed.slice(host.length);
+  if (!host || !canonicalUrl.startsWith(host)) return null;
+  if (!canonicalUrl.includes(RENDER_IMAGE_PUBLIC)) return null;
+  const pathFromOrigin = canonicalUrl.slice(host.length);
   const q = pathFromOrigin.indexOf('?');
   const pathOnly = q === -1 ? pathFromOrigin : pathFromOrigin.slice(0, q);
   const objectPath = pathOnly.replace(RENDER_IMAGE_PUBLIC, OBJECT_PUBLIC);
   return `${host}${objectPath}`;
+}
+
+export function storagePublicObjectUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  const canonicalUrl = storagePathOnCurrentHost(trimmed) ?? trimmed;
+  if (canonicalUrl.includes(RENDER_IMAGE_PUBLIC)) {
+    return storagePublicObjectUrlFromRender(canonicalUrl);
+  }
+  return canonicalUrl;
 }

@@ -1,148 +1,41 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
-import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/store/auth.store';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { COLORS, FONT } from '@/constants';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { appDialog } from '@/lib/app-dialog';
-import { signInWithGoogle } from '@/lib/google-auth';
-import { signInWithApple } from '@/lib/apple-auth';
 
-/** Email/password sign-in adds an `email` identity; pure OAuth (e.g. Google) does not. */
-function hasEmailPasswordIdentity(identities: { provider?: string }[] | undefined): boolean {
-  return !!identities?.some((i) => i.provider === 'email');
-}
-
-function hasGoogleIdentity(identities: { provider?: string }[] | undefined): boolean {
-  return !!identities?.some((i) => i.provider === 'google');
-}
-
-function hasAppleIdentity(identities: { provider?: string }[] | undefined): boolean {
-  return !!identities?.some((i) => i.provider === 'apple');
-}
+const DELETE_CONFIRMATION_TEXT = 'I agree';
 
 export default function DeleteAccountScreen() {
-  const { user, session } = useAuthStore(useShallow((s) => ({ user: s.user, session: s.session })));
-  const [password, setPassword] = useState('');
+  const user = useAuthStore((s) => s.user);
+  const [confirmationText, setConfirmationText] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const needsPasswordConfirmation = useMemo(
-    () => hasEmailPasswordIdentity(session?.user?.identities),
-    [session?.user?.identities],
-  );
-
-  const reauthKind = useMemo(() => {
-    if (needsPasswordConfirmation) return 'password' as const;
-    if (hasAppleIdentity(session?.user?.identities)) return 'apple' as const;
-    if (hasGoogleIdentity(session?.user?.identities)) return 'google' as const;
-    return 'unsupported' as const;
-  }, [needsPasswordConfirmation, session?.user?.identities]);
+  const confirmationMatches = confirmationText.trim() === DELETE_CONFIRMATION_TEXT;
 
   const doDelete = async () => {
     if (!user) return;
-    const profileUserId = user.id;
     setLoading(true);
 
-    if (needsPasswordConfirmation) {
-      const email = user.email ?? session?.user?.email ?? '';
-      if (!email) {
-        setLoading(false);
-        appDialog({
-          title: 'Can’t verify sign-in',
-          message:
-            'We couldn’t find an email on this account. Please contact support to delete your account.',
-          icon: 'help-circle-outline',
-        });
-        return;
-      }
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (signInError) {
-        setLoading(false);
-        appDialog({
-          title: 'Incorrect password',
-          message: 'The password you entered is incorrect.',
-          icon: 'lock-closed-outline',
-        });
-        return;
-      }
-    } else if (reauthKind === 'apple') {
-      const newSession = await signInWithApple();
-      if (!newSession?.user?.id) {
-        setLoading(false);
-        appDialog({
-          title: 'Sign-in cancelled',
-          message:
-            'We could not delete your account without confirming your Apple sign-in. Try again when you’re ready.',
-          icon: 'close-circle-outline',
-        });
-        return;
-      }
-      if (newSession.user.id !== profileUserId) {
-        setLoading(false);
-        await supabase.auth.signOut();
-        appDialog({
-          title: 'Different Apple account',
-          message:
-            'The Apple ID you used does not match this Africana profile. You have been signed out for your security.',
-          icon: 'alert-circle-outline',
-          actions: [
-            { label: 'OK', style: 'primary', onPress: () => router.replace('/(auth)/welcome') },
-          ],
-        });
-        return;
-      }
-    } else if (reauthKind === 'google') {
-      const newSession = await signInWithGoogle();
-      if (!newSession?.user?.id) {
-        setLoading(false);
-        appDialog({
-          title: 'Sign-in cancelled',
-          message:
-            'We could not delete your account without confirming your Google sign-in. Try again when you’re ready.',
-          icon: 'close-circle-outline',
-        });
-        return;
-      }
-      if (newSession.user.id !== profileUserId) {
-        setLoading(false);
-        await supabase.auth.signOut();
-        appDialog({
-          title: 'Different Google account',
-          message:
-            'The Google account you picked does not match this Africana profile. You have been signed out for your security.',
-          icon: 'alert-circle-outline',
-          actions: [
-            { label: 'OK', style: 'primary', onPress: () => router.replace('/(auth)/welcome') },
-          ],
-        });
-        return;
-      }
-    } else if (reauthKind === 'unsupported') {
-      setLoading(false);
-      appDialog({
-        title: 'Contact support',
-        message:
-          'We could not verify this sign-in method for automatic deletion. Please reach out through the app’s help or website so we can close your account safely.',
-        icon: 'help-circle-outline',
-      });
-      return;
-    }
-
-    const { error } = await supabase.rpc('delete_user');
-    if (error) {
+    const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
+      'delete-account',
+      { method: 'POST' },
+    );
+    if (error || !data?.ok) {
       setLoading(false);
       appDialog({
         title: 'Something went wrong',
-        message: 'Failed to delete account. Please contact support.',
+        message:
+          (typeof data?.error === 'string' && data.error) ||
+          error?.message ||
+          'Failed to delete account. Please contact support.',
         icon: 'alert-circle-outline',
       });
       return;
@@ -161,8 +54,12 @@ export default function DeleteAccountScreen() {
   };
 
   const handleDelete = async () => {
-    if (needsPasswordConfirmation && !password) {
-      appDialog({ title: 'Password required', message: 'Please enter your password to confirm.' });
+    if (!confirmationMatches) {
+      appDialog({
+        title: 'Confirmation required',
+        message: `Type "${DELETE_CONFIRMATION_TEXT}" to confirm account deletion.`,
+        icon: 'create-outline',
+      });
       return;
     }
     if (!user) return;
@@ -248,31 +145,25 @@ export default function DeleteAccountScreen() {
           }}
         >
           <Text style={{ fontSize: FONT.sm, color: '#B91C1C', lineHeight: 18 }}>
-            {reauthKind === 'password'
-              ? '⚠️ Enter your password below to confirm account deletion.'
-              : reauthKind === 'apple'
-                ? '⚠️ You signed in with Apple (no password on file). After you tap delete, you’ll sign in with Apple once more—then we remove your account.'
-                : reauthKind === 'google'
-                  ? '⚠️ You signed up with Google (no password on file). After you tap delete, you’ll sign in with Google once more—then we remove your account.'
-                  : '⚠️ Tap “Delete My Account Forever” below. If we can’t verify your sign-in automatically, we’ll ask you to contact support.'}
+            To confirm you understand this permanent action, type “{DELETE_CONFIRMATION_TEXT}”
+            below. We will delete the currently signed-in account without asking for a password.
           </Text>
         </View>
 
-        {needsPasswordConfirmation && (
-          <Input
-            label="Confirm Password"
-            value={password}
-            onChangeText={setPassword}
-            isPassword
-            leftIcon="lock-closed-outline"
-            placeholder="Enter your password"
-          />
-        )}
+        <Input
+          label={`Type "${DELETE_CONFIRMATION_TEXT}" to confirm`}
+          value={confirmationText}
+          onChangeText={setConfirmationText}
+          autoCapitalize="none"
+          leftIcon="create-outline"
+          placeholder={DELETE_CONFIRMATION_TEXT}
+        />
 
         <Button
           title="Delete My Account Forever"
           onPress={handleDelete}
           loading={loading}
+          disabled={!confirmationMatches}
           variant="danger"
           fullWidth
           size="lg"

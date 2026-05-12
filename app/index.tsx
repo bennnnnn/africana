@@ -6,11 +6,12 @@ import { COLORS } from '@/constants';
 import { postAuthHref } from '@/lib/profile-completion';
 
 export default function Index() {
-  const { session, user, isInitialized } = useAuthStore(
+  const { session, user, isInitialized, isLoading } = useAuthStore(
     useShallow((s) => ({
       session: s.session,
       user: s.user,
       isInitialized: s.isInitialized,
+      isLoading: s.isLoading,
     })),
   );
 
@@ -27,6 +28,14 @@ export default function Index() {
 
   if (!session) {
     return <Redirect href="/(auth)/welcome" />;
+  }
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
   }
 
   return <Redirect href={postAuthHref(user, session)} />;

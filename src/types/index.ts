@@ -104,6 +104,8 @@ export interface UserSettings {
   notify_likes: boolean;
   notify_matches: boolean;
   notify_views: boolean;
+  /** Pro-only. When true, profile views you make are not recorded. */
+  incognito?: boolean;
   push_token: string | null;
   likes_seen_at?: string | null;
   views_seen_at?: string | null;

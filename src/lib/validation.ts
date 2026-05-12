@@ -6,8 +6,6 @@ export type ValidationResult = {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Allow Unicode letters (covers accented and non-Latin African names like Ndèye, Ọlúwasẹun, Aimé)
 const FIRST_NAME_RE = /^[\p{L}]+(?:[-'][\p{L}]+)*$/u;
-const LETTER_RE = /[A-Za-z]/;
-const NUMBER_RE = /\d/;
 
 export function validateEmail(value: string): ValidationResult {
   const normalized = value.trim().toLowerCase();
@@ -18,9 +16,7 @@ export function validateEmail(value: string): ValidationResult {
 
 export function validatePassword(value: string): ValidationResult {
   if (!value) return { valid: false, message: 'Password is required.' };
-  if (value.length < 8) return { valid: false, message: 'Use at least 8 characters.' };
-  if (!LETTER_RE.test(value)) return { valid: false, message: 'Add at least one letter.' };
-  if (!NUMBER_RE.test(value)) return { valid: false, message: 'Add at least one number.' };
+  if (value.length < 6) return { valid: false, message: 'Use at least 6 characters.' };
   return { valid: true };
 }
 

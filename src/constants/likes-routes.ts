@@ -67,10 +67,6 @@ export function likesTabFromPathSegment(seg: string | undefined): LikesTab {
  * Likes hub uses a single screen (`/(tabs)/likes`) and switches tabs via a
  * query param (`?tab=received`) so the screen is not remounted on each press.
  */
-export function likesHrefForTab(tab: LikesTab): `/(tabs)/likes` {
-  return '/(tabs)/likes';
-}
-
 export function likesParamForTab(tab: LikesTab): LikesHubPathSegment {
   return LIKES_TAB_PATH_SEGMENT[tab] as LikesHubPathSegment;
 }

@@ -14,5 +14,5 @@ REVOKE EXECUTE ON FUNCTION public.messages_enforce_update() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.messages_enforce_update() TO authenticated;
 
 REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC, anon;
--- Admin-style helper: keep off the anon key; use service_role / dashboard SQL only.
+-- Admin-style helper: not for publishable clients; use service_role / dashboard SQL only.
 GRANT EXECUTE ON FUNCTION public.rls_auto_enable() TO service_role;

@@ -11,7 +11,12 @@ export const createSessionFromUrl = async (url: string) => {
   const { params, errorCode } = QueryParams.getQueryParams(url);
   if (errorCode) throw new Error(errorCode);
 
-  const { access_token, refresh_token } = params;
+  const { access_token, refresh_token, code } = params;
+  if (code && !access_token) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+    return data.session;
+  }
   if (!access_token) return null;
 
   const { data, error } = await supabase.auth.setSession({

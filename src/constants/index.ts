@@ -341,11 +341,12 @@ export const MARITAL_STATUS_OPTIONS = [
 
 export const APP_NAME = 'Africana';
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+/** Supabase publishable key (Dashboard → API). Use `EXPO_PUBLIC_SUPABASE_KEY`. */
+export const SUPABASE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_SUPABASE_KEY ?? '';
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   const err = new Error(
-    'Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY — check EAS env / .env.',
+    'Missing Supabase env: set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY. Check EAS / .env.local.',
   );
   void import('@/lib/sentry')
     .then((m) => m.captureException(err, { phase: 'config', supabaseUrlSet: !!SUPABASE_URL }))

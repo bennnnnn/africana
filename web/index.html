@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Africana — Where African Hearts Connect</title>
+  <meta name="description" content="Meet Africans and the diaspora worldwide. Filter by country, language, and values. Real people. Genuine connections." />
+  <meta property="og:title" content="Africana — Where African Hearts Connect" />
+  <meta property="og:description" content="Meet Africans and the diaspora worldwide. Real people. Genuine connections." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://joinafricana.com" />
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    // Hand off OAuth redirects back to the app
+    (function () {
+      var combined = window.location.search + window.location.hash;
+      if (combined.includes('access_token') || combined.includes('type=recovery')) {
+        window.location.replace('africana://auth/callback' + combined);
+      }
+    })();
+  </script>
+</head>
+<body>
+
+  <nav>
+    <a class="nav-logo" href="/">Africana</a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+    </div>
+    <a class="nav-cta" href="#download">Get the app</a>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-inner">
+      <h1>Where African<br/><span>Hearts Connect</span></h1>
+      <p>Meet Africans and the diaspora worldwide.<br/>Real people. Genuine connections.</p>
+      <div class="hero-badges" id="download">
+        <a class="btn-store btn-ios" id="ios-link"
+           href="https://apps.apple.com/app/africana/id0000000000">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+          </svg>
+          Download on the App Store
+        </a>
+        <a class="btn-store btn-android" id="android-link"
+           href="https://play.google.com/store/apps/details?id=com.africana.dating">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3.18 23.76c.3.17.64.22.99.15l12.5-7.21-2.64-2.64-10.85 9.7zm-1.76-18.6C1.16 5.5 1 5.88 1 6.3v11.4c0 .42.16.8.42 1.14l.07.07 6.39-6.39v-.15L1.42 5.16zm15.37 8.13l-2.13-2.13-2.13 2.13 2.13 2.13 2.13-2.13zm-9.24-9.95L20.05 10.6c.63.36.63.95 0 1.31l-2.64 1.52-2.65-2.65 2.65-2.65-9.5-5.49c-.35-.2-.7-.2-.99-.09l10.85 9.7-10.42 6.01z"/>
+          </svg>
+          Get it on Google Play
+        </a>
+      </div>
+      <p class="hero-note">Free to download · iOS &amp; Android</p>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features" id="features">
+    <p class="section-label">Why Africana</p>
+    <h2 class="section-title">Built for your culture</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🌍</div>
+        <h3>Africans &amp; the diaspora</h3>
+        <p>Connect with people who share your background — whether you're on the continent or anywhere in the world.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <h3>Filter by what matters</h3>
+        <p>Search by country, language, and values. Find someone who truly gets you, not just a generic match.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🛡️</div>
+        <h3>Safe &amp; authentic</h3>
+        <p>Privacy controls, blocking, and a community built on respect. Your safety comes first.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how" id="how">
+    <p class="section-label">Get started</p>
+    <h2 class="section-title">How it works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Create your profile</h3>
+        <p>Add your photos, background, and what you're looking for.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Discover members</h3>
+        <p>Browse profiles filtered by country, language, and preferences.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Connect &amp; chat</h3>
+        <p>Like, match, and start a real conversation.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-band">
+    <h2>Ready to meet your match?</h2>
+    <p>Download Africana free today.</p>
+    <div class="hero-badges">
+      <a class="btn-store btn-ios" href="https://apps.apple.com/app/africana/id0000000000">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+        App Store
+      </a>
+      <a class="btn-store btn-android" href="https://play.google.com/store/apps/details?id=com.africana.dating">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3.18 23.76c.3.17.64.22.99.15l12.5-7.21-2.64-2.64-10.85 9.7zm-1.76-18.6C1.16 5.5 1 5.88 1 6.3v11.4c0 .42.16.8.42 1.14l.07.07 6.39-6.39v-.15L1.42 5.16zm15.37 8.13l-2.13-2.13-2.13 2.13 2.13 2.13 2.13-2.13zm-9.24-9.95L20.05 10.6c.63.36.63.95 0 1.31l-2.64 1.52-2.65-2.65 2.65-2.65-9.5-5.49c-.35-.2-.7-.2-.99-.09l10.85 9.7-10.42 6.01z"/></svg>
+        Google Play
+      </a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-inner">
+      <span class="footer-logo">Africana</span>
+      <div class="footer-links">
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="terms.html">Terms of Service</a>
+        <a href="mailto:support@africana.app">Contact</a>
+      </div>
+      <p class="footer-copy">© 2026 Africana. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script>
+    var ua = navigator.userAgent;
+    if (/android/i.test(ua)) {
+      var el = document.getElementById('android-link');
+      if (el) { el.style.background = '#fff'; el.style.color = '#0E9F6E'; el.style.border = 'none'; }
+    }
+  </script>
+
+</body>
+</html>

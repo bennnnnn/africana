@@ -1,6 +1,7 @@
 package com.africana.dating
 import expo.modules.splashscreen.SplashScreenManager
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 
@@ -12,6 +13,16 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
+  /**
+   * OAuth (e.g. Google) returns via a new Intent; without this, Android can drop the deep link
+   * URL and `WebBrowser.openAuthSessionAsync` never completes — app looks "stuck" on splash.
+   * @see https://github.com/expo/expo/issues/44284
+   */
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.

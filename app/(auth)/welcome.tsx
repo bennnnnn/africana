@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
   StyleSheet,
   Dimensions,
   FlatList,
@@ -11,12 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { signInWithGoogle } from '@/lib/google-auth';
-import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/store/auth.store';
 import { COLORS, FONT } from '@/constants';
-import { redirectAfterAuth } from '@/lib/profile-completion';
-import { appDialog } from '@/lib/app-dialog';
 
 const { width, height } = Dimensions.get('window');
 
@@ -39,12 +33,9 @@ const SLIDES = [
 ];
 
 export default function WelcomeScreen() {
-  const hydrateUserFromServer = useAuthStore((s) => s.hydrateUserFromServer);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [consentAccepted, setConsentAccepted] = useState(false);
 
   const stopAutoPlay = () => {
     if (timerRef.current) {
@@ -75,62 +66,6 @@ export default function WelcomeScreen() {
     startAutoPlay();
   };
 
-  const ensureConsentThen = (onAgree: () => void) => {
-    if (consentAccepted) return onAgree();
-    appDialog({
-      title: 'Before you continue',
-      message: 'You need to agree to the Terms of Service and Privacy Policy.',
-      icon: 'document-text-outline',
-      actions: [
-        {
-          label: 'View Terms',
-          onPress: () => router.push({ pathname: '/(auth)/legal', params: { tab: 'terms' } }),
-        },
-        {
-          label: 'View Privacy',
-          onPress: () => router.push({ pathname: '/(auth)/legal', params: { tab: 'privacy' } }),
-        },
-        {
-          label: 'I agree',
-          style: 'primary',
-          onPress: () => {
-            setConsentAccepted(true);
-            onAgree();
-          },
-        },
-        { label: 'Cancel', style: 'cancel' },
-      ],
-    });
-  };
-
-  const handleGoogle = async () => {
-    setGoogleLoading(true);
-    try {
-      const session = await signInWithGoogle();
-      if (session?.user) {
-        const meta = session.user.user_metadata as Record<string, unknown> | undefined;
-        if (typeof meta?.terms_accepted_at !== 'string' || !meta.terms_accepted_at) {
-          await supabase.auth.updateUser({
-            data: { terms_accepted_at: new Date().toISOString() },
-          });
-        }
-        await hydrateUserFromServer(session.user.id);
-        const { user } = useAuthStore.getState();
-        redirectAfterAuth(router, user, session);
-      }
-    } catch (e: any) {
-      if (e?.message !== 'User cancelled') {
-        appDialog({
-          title: 'Google sign-in failed',
-          message: e?.message ?? 'Please try again.',
-          icon: 'logo-google',
-        });
-      }
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
   return (
     <View style={styles.container}>
       <View
@@ -147,12 +82,10 @@ export default function WelcomeScreen() {
       />
 
       <SafeAreaView style={styles.inner}>
-        {/* App name */}
         <View style={styles.brandRow}>
           <Text style={styles.appName}>Africana</Text>
         </View>
 
-        {/* Slides */}
         <View style={styles.slidesWrapper}>
           <FlatList
             ref={flatListRef}
@@ -176,7 +109,6 @@ export default function WelcomeScreen() {
             )}
           />
 
-          {/* Dot indicators */}
           <View style={styles.dots}>
             {SLIDES.map((_, i) => (
               <TouchableOpacity
@@ -192,37 +124,13 @@ export default function WelcomeScreen() {
           </View>
         </View>
 
-        {/* Sign-in buttons */}
         <View style={styles.actionsSection}>
           <TouchableOpacity
-            style={styles.googleBtn}
-            onPress={() => ensureConsentThen(() => void handleGoogle())}
-            disabled={googleLoading}
-            activeOpacity={0.9}
-          >
-            {googleLoading ? (
-              <ActivityIndicator size="small" color="#4285F4" />
-            ) : (
-              <>
-                <Text style={{ fontSize: 24, fontWeight: '900', color: '#4285F4' }}>G</Text>
-                <Text style={styles.googleBtnText}>Continue with Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <TouchableOpacity
-            style={styles.emailBtn}
+            style={styles.joinBtn}
             onPress={() => router.push('/(auth)/register')}
             activeOpacity={0.9}
           >
-            <Ionicons name="mail-outline" size={20} color="#FFF" style={{ marginRight: 10 }} />
-            <Text style={styles.emailBtnText}>Continue with Email</Text>
+            <Text style={styles.joinBtnText}>Join Africana</Text>
           </TouchableOpacity>
 
           <View style={styles.signinRow}>
@@ -320,57 +228,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingBottom: 8,
   },
-  googleBtn: {
+  joinBtn: {
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     height: 56,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: '#DADCE0',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  googleBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#3C4043',
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginVertical: 4,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  dividerText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  emailBtn: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 14,
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.4)',
-  },
-  emailBtnText: {
-    fontSize: 16,
+  joinBtnText: {
+    fontSize: 17,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.green,
   },
   signinRow: {
     flexDirection: 'row',

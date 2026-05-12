@@ -39,7 +39,7 @@ npm install
 
 1. Create a project at [supabase.com](https://supabase.com)
 2. Apply migrations: install the [Supabase CLI](https://supabase.com/docs/guides/cli) and run `supabase db push` (or `supabase link` + `db push`) so `supabase/migrations/` is the source of truth
-3. Copy your project URL and anon key
+3. Copy your project API URL and publishable key
 
 ### 3. Configure Environment
 
@@ -50,7 +50,7 @@ cp .env.example .env
 Edit `.env`:
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+EXPO_PUBLIC_SUPABASE_KEY=your_publishable_key
 EXPO_PUBLIC_SENTRY_DSN=https://examplePublicKey@o0.ingest.sentry.io/0
 ```
 
@@ -102,13 +102,7 @@ africana/
 
 ## Color Palette
 
-| Name | Hex | Use |
-|------|-----|-----|
-| Primary | `#C84B31` | Buttons, accents |
-| Earth | `#8B5E3C` | Secondary elements |
-| Savanna | `#F5E6D0` | Backgrounds, chips |
-| Gold | `#D4AF37` | Highlights |
-| Green | `#2D6A4F` | Success states |
+See `src/constants/index.ts` (`COLORS`). Brand primary / splash: `#0E9F6E`.
 
 ## Roadmap
 
