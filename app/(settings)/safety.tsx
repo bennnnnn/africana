@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONT, RADIUS } from '@/constants';
@@ -11,6 +11,7 @@ type TipProps = {
   iconBg: string;
   title: string;
   body: string;
+  onPress?: () => void;
 };
 
 /**
@@ -126,6 +127,7 @@ export default function SafetyScreen() {
           iconBg={COLORS.savanna}
           title="Contact us"
           body="For anything the in-app tools can't handle — harassment, impersonation, serious concerns — email support@africana.app. We read every message."
+          onPress={() => Linking.openURL('mailto:support@africana.app')}
         />
 
         <View style={{ height: 28 }} />
@@ -138,8 +140,8 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   return <Text style={styles.sectionHeader}>{children}</Text>;
 }
 
-function Tip({ icon, iconColor, iconBg, title, body }: TipProps) {
-  return (
+function Tip({ icon, iconColor, iconBg, title, body, onPress }: TipProps) {
+  const inner = (
     <View style={styles.tipCard}>
       <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
         <Ionicons name={icon} size={22} color={iconColor} />
@@ -150,6 +152,10 @@ function Tip({ icon, iconColor, iconBg, title, body }: TipProps) {
       </View>
     </View>
   );
+  if (onPress) {
+    return <Pressable onPress={onPress}>{inner}</Pressable>;
+  }
+  return inner;
 }
 
 const styles = StyleSheet.create({

@@ -2,6 +2,7 @@ import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } 
 import { supabase } from '@/lib/supabase';
 import { acquireTypingChannel } from '@/lib/typing-channel';
 import { TIMINGS } from '@/lib/timings';
+import { getActiveConversation } from '@/lib/active-chat';
 import type { Message } from '@/types';
 import type { ReactionEmoji, ReactionsMap } from '@/constants/chat-reactions';
 import { getChatStoreState } from '@/store/chat.store';
@@ -53,7 +54,9 @@ export function useChatRealtime(params: {
             if (peerTypingTimerRef.current) clearTimeout(peerTypingTimerRef.current);
             setPeerTyping(false);
             getChatStoreState().addMessage(conversationId, newMsg);
-            void getChatStoreState().markMessagesRead(conversationId, userId);
+            if (getActiveConversation() === conversationId) {
+              void getChatStoreState().markMessagesRead(conversationId, userId);
+            }
           }
         },
       )

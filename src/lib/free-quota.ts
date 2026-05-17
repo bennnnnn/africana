@@ -22,6 +22,8 @@ type Counts = { messages: number; likes: number };
 
 let cached: { date: string; counts: Counts } | null = null;
 let inFlight: Promise<Counts> | null = null;
+/** Serialize gate+note operations so concurrent sends don't both pass the same cached count. */
+let gateMutex: Promise<void> = Promise.resolve();
 
 function todayUtcKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -67,24 +69,51 @@ export function noteSentLike(): void {
 
 export type QuotaGate = { allowed: true } | { allowed: false; cap: number };
 
+/** Returns the remaining free messages for the current user (null if Pro, so unlimited). */
+export async function getRemainingMessages(): Promise<{ remaining: number; cap: number } | null> {
+  if (isProSync()) return null;
+  const counts = await getCounts();
+  return { remaining: Math.max(0, FREE_DAILY_MESSAGES - counts.messages), cap: FREE_DAILY_MESSAGES };
+}
+
 /** Call before inserting a message. If `allowed === false`, show the dialog and abort. */
 export async function gateSendMessage(): Promise<QuotaGate> {
   if (isProSync()) return { allowed: true };
-  const counts = await getCounts();
-  if (counts.messages >= FREE_DAILY_MESSAGES) {
-    return { allowed: false, cap: FREE_DAILY_MESSAGES };
+  let release: () => void;
+  const prev = gateMutex;
+  gateMutex = new Promise<void>((r) => { release = r; });
+  try {
+    await prev;
+    const counts = await getCounts();
+    if (counts.messages >= FREE_DAILY_MESSAGES) {
+      return { allowed: false, cap: FREE_DAILY_MESSAGES };
+    }
+    // Increment optimistically so concurrent sends can't both pass on the same
+    // cached count. Self-heals on next getCounts() if the send ultimately fails.
+    noteSentMessage();
+    return { allowed: true };
+  } finally {
+    release!();
   }
-  return { allowed: true };
 }
 
 /** Call before inserting a like. If `allowed === false`, show the dialog and abort. */
 export async function gateSendLike(): Promise<QuotaGate> {
   if (isProSync()) return { allowed: true };
-  const counts = await getCounts();
-  if (counts.likes >= FREE_DAILY_LIKES) {
-    return { allowed: false, cap: FREE_DAILY_LIKES };
+  let release: () => void;
+  const prev = gateMutex;
+  gateMutex = new Promise<void>((r) => { release = r; });
+  try {
+    await prev;
+    const counts = await getCounts();
+    if (counts.likes >= FREE_DAILY_LIKES) {
+      return { allowed: false, cap: FREE_DAILY_LIKES };
+    }
+    noteSentLike();
+    return { allowed: true };
+  } finally {
+    release!();
   }
-  return { allowed: true };
 }
 
 /** User-facing daily-cap dialog. Always shows an upgrade CTA — the Upgrade
@@ -101,4 +130,5 @@ export function showFreeLimitDialog(kind: 'messages' | 'likes', cap: number): vo
 export function resetFreeQuotaCache(): void {
   cached = null;
   inFlight = null;
+  gateMutex = Promise.resolve();
 }

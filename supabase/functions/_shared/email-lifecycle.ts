@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { Resend } from 'npm:resend@4';
 
 export type ActivityNotifyType = 'message' | 'like' | 'match' | 'view' | 'favourite';
 
@@ -45,8 +46,13 @@ export const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 );
 
-const RESEND_API_URL = 'https://api.resend.com/emails';
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+function getResend(): Resend | null {
+  const apiKey = Deno.env.get('RESEND_API_KEY');
+  if (!apiKey) return null;
+  return new Resend(apiKey);
+}
 
 async function sendExpoPush(params: {
   to: string;
@@ -111,25 +117,19 @@ export function escapeHtml(value: string): string {
 }
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  // Stored as a Supabase Function secret (never hardcode API keys).
-  const apiKey = Deno.env.get('RESEND_API_KEY');
+  const resend = getResend();
+  if (!resend) return false;
+
   const from = Deno.env.get('RESEND_FROM') ?? 'Africana <noreply@africana.app>';
-  if (!apiKey) return false;
 
-  const response = await fetch(RESEND_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ from, to, subject, html }),
-  });
+  const { data, error } = await resend.emails.send({ from, to, subject, html });
 
-  if (!response.ok) {
-    throw new Error(`Resend returned ${response.status}`);
+  if (error) {
+    console.error('[resend]', error);
+    throw new Error(`Resend error: ${error.message}`);
   }
 
-  return true;
+  return !!data?.id;
 }
 
 export async function getRecipientContext(recipientId: string): Promise<RecipientContext> {

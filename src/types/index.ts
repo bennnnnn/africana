@@ -1,5 +1,5 @@
-export type Gender = 'male' | 'female';
-export type InterestedIn = 'men' | 'women';
+export type Gender = 'male' | 'female' | 'nonbinary' | 'other';
+export type InterestedIn = 'men' | 'women' | 'everyone';
 export type LookingFor = 'relationship' | 'friendship' | 'marriage' | 'pen_pal';
 export type OnlineStatus = 'online' | 'offline';
 export type MaritalStatus = 'single' | 'divorced' | 'widowed' | 'separated';
@@ -140,6 +140,8 @@ export interface Message {
   deleted_for?: string[];
   /** Stable list key across optimistic → server id swap (avoids FlatList remount jank). */
   listKey?: string;
+  /** True when the optimistic send failed — show retry affordance. */
+  sendFailed?: boolean;
 }
 
 export interface Conversation {
@@ -167,4 +169,5 @@ export interface FilterOptions {
   max_age: number;
   religion: Religion | null;
   online_only: boolean;
+  verified_only: boolean;
 }

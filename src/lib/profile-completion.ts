@@ -1,13 +1,15 @@
 import type { Href } from 'expo-router';
-import type { User } from '@/types';
+import type { User, Gender } from '@/types';
 import { isInterestedInProvided } from '@/lib/gender-match';
+
+const VALID_GENDERS: ReadonlySet<Gender> = new Set(['male', 'female', 'nonbinary', 'other']);
 
 /** Minimum profile needed before main app (Discover). Optional fields (bio, photo, work, etc.) do not block. */
 export function isProfileCompleteForDiscover(user: User | null | undefined): boolean {
   if (!user) return false;
   const nameOk = Boolean(user.full_name?.trim());
   const birthOk = Boolean(user.birthdate && String(user.birthdate).trim());
-  const genderOk = user.gender === 'male' || user.gender === 'female';
+  const genderOk = VALID_GENDERS.has(user.gender as Gender);
   const interestedOk = isInterestedInProvided(user.interested_in);
   const countryOk = Boolean(user.country?.trim());
   return nameOk && birthOk && genderOk && interestedOk && countryOk;
@@ -39,9 +41,18 @@ export function getProfileStrength(user: User | null | undefined): {
     { key: 'languages', label: 'Languages', done: (user.languages ?? []).length > 0 },
     { key: 'hobbies', label: 'Hobbies', done: (user.hobbies ?? []).length > 0 },
   ];
-  const doneCount = items.filter((i) => i.done).length;
-  const percent = items.length ? Math.round((doneCount / items.length) * 100) : 0;
-  const nextMissing = items.find((i) => !i.done) ?? null;
+  // Weighted scoring: photo 3x, bio 2x, everything else 1x. Total possible = 3+2+7 = 12.
+  const weights = [3, 2, 1, 1, 1, 1, 1, 1, 1];
+  const maxWeight = weights.reduce((a, b) => a + b, 0);
+  const scoredWeight = weights.reduce((sum, w, i) => sum + (items[i].done ? w : 0), 0);
+  const percent = Math.round((scoredWeight / maxWeight) * 100);
+
+  // Next missing: prefer the highest-weight undone item first
+  const nextMissing =
+    items.find((i) => i.key === 'photo' && !i.done) ??
+    items.find((i) => i.key === 'bio' && !i.done) ??
+    items.find((i) => !i.done) ??
+    null;
   return { percent, nextMissing, items };
 }
 

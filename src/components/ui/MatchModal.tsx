@@ -35,9 +35,10 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const heartAnim = useRef(new Animated.Value(1)).current;
+  const heartbeatLoop = useRef<Animated.CompositeAnimation | null>(null);
 
   const startHeartbeat = () => {
-    Animated.loop(
+    heartbeatLoop.current = Animated.loop(
       Animated.sequence([
         Animated.spring(heartAnim, {
           toValue: 1.3,
@@ -48,7 +49,8 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
         Animated.spring(heartAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 4 }),
       ]),
       { iterations: 6 },
-    ).start();
+    );
+    heartbeatLoop.current.start();
   };
 
   useEffect(() => {
@@ -61,6 +63,8 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
         Animated.timing(opacityAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
       ]).start(startHeartbeat);
     } else if (!visible) {
+      heartbeatLoop.current?.stop();
+      heartbeatLoop.current = null;
       scaleAnim.setValue(0);
       opacityAnim.setValue(0);
       heartAnim.setValue(1);
@@ -92,7 +96,7 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
   const theirAvatar =
     matchedUser.avatar_url ||
     (matchedUser.profile_photos ?? [])[0] ||
-    `${DEFAULT_AVATAR}${encodeURIComponent(matchedUser.full_name.charAt(0))}`;
+    `${DEFAULT_AVATAR}${encodeURIComponent((matchedUser.full_name ?? '?').charAt(0))}`;
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>

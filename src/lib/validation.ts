@@ -3,7 +3,8 @@ export type ValidationResult = {
   message?: string;
 };
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// RFC 5322 simplified: local@domain.tld with TLD ≥ 2 chars
+const EMAIL_RE = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
 // Allow Unicode letters (covers accented and non-Latin African names like Ndèye, Ọlúwasẹun, Aimé)
 const FIRST_NAME_RE = /^[\p{L}]+(?:[-'][\p{L}]+)*$/u;
 

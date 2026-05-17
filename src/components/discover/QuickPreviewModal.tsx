@@ -253,12 +253,18 @@ export function QuickPreviewModal({ visible, users, startIndex, onClose }: Quick
   const handleLike = useCallback(async () => {
     if (!user || !currentUser || isOwnProfile) return;
     haptics.tapLight();
+    const wasLiked = isLiked;
     const isMatch = await toggleLike(currentUser.id, user.id);
-    showToast({
-      icon: isMatch ? 'heart' : isLiked ? 'heart-outline' : 'heart',
-      message: isMatch ? "It's a match" : isLiked ? UI_TOAST.likeRemoved : UI_TOAST.liked,
-    });
-    advance();
+    // Only advance if the action succeeded — toggleLike returns false when
+    // blocked, rate-limited, or the insert failed (and shows its own dialog).
+    const succeeded = wasLiked || isMatch || isLiked !== wasLiked;
+    if (succeeded) {
+      showToast({
+        icon: isMatch ? 'heart' : wasLiked ? 'heart-outline' : 'heart',
+        message: isMatch ? "It's a match" : wasLiked ? UI_TOAST.likeRemoved : UI_TOAST.liked,
+      });
+      advance();
+    }
   }, [user, currentUser, isOwnProfile, isLiked, toggleLike, showToast, advance]);
 
   const handlePass = useCallback(() => {

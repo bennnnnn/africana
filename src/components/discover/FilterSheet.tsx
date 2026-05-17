@@ -41,7 +41,6 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
 
   const handleLocationChange = (val: Partial<LocationValue>) => {
     setLocationFilter(val);
-    // Persist country, state (subdivision), and city together
     setLocal((prev) => ({
       ...prev,
       country: val.country || null,
@@ -57,94 +56,106 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
-        {/* Header */}
-        <View style={s.header}>
-          <TouchableOpacity
-            onPress={() => {
-              onReset();
-              onClose();
-            }}
-          >
-            <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 15 }}>Reset</Text>
-          </TouchableOpacity>
-          <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>
-            Filter Members
-          </Text>
-          <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={24} color={COLORS.text} />
-          </TouchableOpacity>
+      <View style={s.header}>
+        <TouchableOpacity
+          onPress={() => {
+            onReset();
+            onClose();
+          }}
+        >
+          <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 15 }}>Reset</Text>
+        </TouchableOpacity>
+        <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>
+          Filter Members
+        </Text>
+        <TouchableOpacity onPress={onClose}>
+          <Ionicons name="close" size={24} color={COLORS.text} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        style={{ flex: 1, backgroundColor: COLORS.surface }}
+        contentContainerStyle={{ padding: 20 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Online Only */}
+        <View style={s.row}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View
+              style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.online }}
+            />
+            <Text style={s.rowLabel}>Online Only</Text>
+          </View>
+          <Switch
+            value={local.online_only}
+            onValueChange={(v) => update('online_only', v)}
+            trackColor={{ true: COLORS.primary, false: COLORS.border }}
+            thumbColor="#FFFFFF"
+          />
         </View>
 
-        <ScrollView
-          contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Online Only */}
-          <View style={s.row}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <View
-                style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.online }}
-              />
-              <Text style={s.rowLabel}>Online Only</Text>
-            </View>
-            <Switch
-              value={local.online_only}
-              onValueChange={(v) => update('online_only', v)}
-              trackColor={{ true: COLORS.primary, false: COLORS.border }}
-              thumbColor="#FFFFFF"
-            />
+        {/* Verified Only */}
+        <View style={s.row}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.success} />
+            <Text style={s.rowLabel}>Verified Only</Text>
           </View>
-
-          {/* Age Range */}
-          <SectionLabel label={`Age Range: ${local.min_age} – ${local.max_age}`} />
-          <RangeSlider
-            min={18}
-            max={100}
-            low={local.min_age}
-            high={local.max_age}
-            trackWidth={SLIDER_WIDTH}
-            onChange={(lo, hi) => {
-              update('min_age', lo);
-              update('max_age', hi);
-            }}
+          <Switch
+            value={local.verified_only}
+            onValueChange={(v) => update('verified_only', v)}
+            trackColor={{ true: COLORS.primary, false: COLORS.border }}
+            thumbColor="#FFFFFF"
           />
+        </View>
 
-          {/* Religion */}
-          <SectionLabel label="Religion" />
-          <SelectPicker
-            placeholder="Any religion..."
-            options={RELIGION_OPTIONS}
-            value={local.religion ?? null}
-            onChange={(v) => update('religion', v as Religion | null)}
+        {/* Age Range */}
+        <SectionLabel label={`Age Range: ${local.min_age} – ${local.max_age}`} />
+        <RangeSlider
+          min={18}
+          max={100}
+          low={local.min_age}
+          high={local.max_age}
+          trackWidth={SLIDER_WIDTH}
+          onChange={(lo, hi) => {
+            update('min_age', lo);
+            update('max_age', hi);
+          }}
+        />
+
+        {/* Religion */}
+        <SectionLabel label="Religion" />
+        <SelectPicker
+          placeholder="Any religion..."
+          options={RELIGION_OPTIONS}
+          value={local.religion ?? null}
+          onChange={(v) => update('religion', v as Religion | null)}
+        />
+
+        {/* Country / region */}
+        <View style={{ marginTop: 20 }}>
+          <LocationPicker
+            value={locationFilter}
+            onChange={handleLocationChange}
+            countryOnly={false}
+            countryLabel="Country"
+            countryPlaceholder="Select country"
           />
+          {locationFilter.country && (
+            <TouchableOpacity
+              onPress={() => {
+                setLocationFilter({});
+                setLocal((prev) => ({ ...prev, country: null, state: null, city: null }));
+              }}
+              style={s.clearBtn}
+            >
+              <Ionicons name="close-circle-outline" size={16} color={COLORS.textSecondary} />
+              <Text style={s.clearBtnText}>Clear country filter</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
-          {/* Country / region — whose profiles to show (not “your” location) */}
-          <View style={{ marginTop: 20 }}>
-            <LocationPicker
-              value={locationFilter}
-              onChange={handleLocationChange}
-              countryOnly={false}
-              countryLabel="Country"
-              countryPlaceholder="Select country"
-            />
-            {locationFilter.country && (
-              <TouchableOpacity
-                onPress={() => {
-                  setLocationFilter({});
-                  setLocal((prev) => ({ ...prev, country: null, state: null, city: null }));
-                }}
-                style={s.clearBtn}
-              >
-                <Ionicons name="close-circle-outline" size={16} color={COLORS.textSecondary} />
-                <Text style={s.clearBtnText}>Clear country filter</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </ScrollView>
-
-        <View style={{ padding: 20, borderTopWidth: 1, borderTopColor: COLORS.border }}>
+        <View style={{ marginTop: 40, marginBottom: 40 }}>
           <Button
             title="Apply Filters"
             onPress={() => {
@@ -155,7 +166,7 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
             size="lg"
           />
         </View>
-      </View>
+      </ScrollView>
     </Modal>
   );
 }

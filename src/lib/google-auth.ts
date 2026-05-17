@@ -7,6 +7,13 @@ WebBrowser.maybeCompleteAuthSession();
 
 export const getRedirectUri = () => makeRedirectUri({ scheme: 'africana', path: 'auth/callback' });
 
+/** JWT-like token: 3 base64url segments separated by dots. */
+function looksLikeJwt(token: string): boolean {
+  const parts = token.split('.');
+  if (parts.length !== 3) return false;
+  return parts.every((p) => p.length > 0);
+}
+
 export const createSessionFromUrl = async (url: string) => {
   const { params, errorCode } = QueryParams.getQueryParams(url);
   if (errorCode) throw new Error(errorCode);
@@ -17,11 +24,11 @@ export const createSessionFromUrl = async (url: string) => {
     if (error) throw error;
     return data.session;
   }
-  if (!access_token) return null;
+  if (!access_token || !looksLikeJwt(access_token)) return null;
 
   const { data, error } = await supabase.auth.setSession({
     access_token,
-    refresh_token,
+    refresh_token: refresh_token ?? '',
   });
   if (error) throw error;
   return data.session;

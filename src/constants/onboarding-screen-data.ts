@@ -45,11 +45,14 @@ export const ONBOARDING_INTEREST_OPTIONS: { value: InterestedIn; label: string; 
   [
     { value: 'women', label: 'Women', emoji: '👩' },
     { value: 'men', label: 'Men', emoji: '👨' },
+    { value: 'everyone', label: 'Everyone', emoji: '🌍' },
   ];
 
 export const ONBOARDING_GENDER_OPTIONS: { value: Gender; label: string; emoji: string }[] = [
   { value: 'male', label: 'Male', emoji: '👨' },
   { value: 'female', label: 'Female', emoji: '👩' },
+  { value: 'nonbinary', label: 'Non-binary', emoji: '🌈' },
+  { value: 'other', label: 'Other', emoji: '✨' },
 ];
 
 export const ONBOARDING_LOOKING_FOR_OPTIONS: {

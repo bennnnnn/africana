@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Text, ScrollView } from 'react-native';
+import { Text, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
@@ -95,6 +95,14 @@ export default function AccountSettingsScreen() {
                 actions: [{ label: UI_LABELS.ok, style: 'primary' }],
               })
             }
+          />
+          <SettingRow
+            icon="mail-outline"
+            iconColor={COLORS.primary}
+            label="Contact support"
+            description="Get help or report an issue — we read every message"
+            onPress={() => Linking.openURL('mailto:support@africana.app')}
+            isLast={false}
           />
           <SettingRow
             icon="cloud-download-outline"

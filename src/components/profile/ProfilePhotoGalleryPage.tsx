@@ -98,6 +98,8 @@ export function ProfilePhotoGalleryPage({
               style={{ width: winWidth, height: winHeight }}
               contentFit="contain"
               transition={180}
+              cachePolicy="memory-disk"
+              recyclingKey={uri}
             />
           </View>
         )}

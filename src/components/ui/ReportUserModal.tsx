@@ -87,7 +87,7 @@ export function ReportUserModal({
           <Text
             style={{ marginTop: 8, fontSize: FONT.md, lineHeight: 22, color: COLORS.textSecondary }}
           >
-            Choose a reason. We{"'"}ll review it.
+            Choose a reason. We{"'"}ll review it. {reportedUserName} will also be blocked from contacting you.
           </Text>
           <View style={{ marginTop: 18, gap: 10 }}>
             {USER_REPORT_REASONS.map((reason) => {

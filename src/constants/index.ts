@@ -221,11 +221,14 @@ export const AFRICAN_COUNTRIES = [
 export const GENDER_OPTIONS = [
   { value: 'male', label: 'Male' },
   { value: 'female', label: 'Female' },
+  { value: 'nonbinary', label: 'Non-binary' },
+  { value: 'other', label: 'Other' },
 ];
 
 export const INTERESTED_IN_OPTIONS = [
   { value: 'women', label: 'Women' },
   { value: 'men', label: 'Men' },
+  { value: 'everyone', label: 'Everyone' },
 ];
 
 export const HAS_CHILDREN_OPTIONS = [
@@ -348,9 +351,6 @@ if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   const err = new Error(
     'Missing Supabase env: set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY. Check EAS / .env.local.',
   );
-  void import('@/lib/sentry')
-    .then((m) => m.captureException(err, { phase: 'config', supabaseUrlSet: !!SUPABASE_URL }))
-    .catch(() => {});
   throw err;
 }
 

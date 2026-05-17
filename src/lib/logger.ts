@@ -4,9 +4,7 @@
 import { track } from '@/lib/analytics';
 
 export function logWarn(message: string, detail?: unknown): void {
-  if (__DEV__) {
-    console.warn(message, detail ?? '');
-  }
+  console.warn(message, detail ?? '');
 }
 
 export function logError(message: string, detail?: unknown): void {

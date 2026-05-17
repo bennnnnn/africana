@@ -32,7 +32,7 @@ export default function SettingsScreen() {
         <SettingsHubRow
           icon="sparkles-outline"
           iconColor={COLORS.primary}
-          label="Premium & trust"
+          label="Premium & Trust"
           onPress={() => router.push('/(settings)/premium-trust')}
         />
         <SettingsHubRow

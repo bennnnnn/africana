@@ -80,16 +80,11 @@ const cultureLoaders: Record<CultureRegion, () => Promise<Record<string, Country
 };
 
 const languageLoaders: Record<CultureRegion, () => Promise<Record<string, readonly string[]>>> = {
-  east_africa: async () =>
-    (await import('./generated/east_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
-  west_africa: async () =>
-    (await import('./generated/west_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
-  central_africa: async () =>
-    (await import('./generated/central_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
-  north_africa: async () =>
-    (await import('./generated/north_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
-  southern_africa: async () =>
-    (await import('./generated/southern_africa-languages.generated')).COUNTRY_LANGUAGE_MAP,
+  east_africa: async () => (await import('./east-africa')).EAST_AFRICA_LANGUAGES,
+  west_africa: async () => (await import('./west-africa')).WEST_AFRICA_LANGUAGES,
+  central_africa: async () => (await import('./central-africa')).CENTRAL_AFRICA_LANGUAGES,
+  north_africa: async () => (await import('./north-africa')).NORTH_AFRICA_LANGUAGES,
+  southern_africa: async () => (await import('./southern-africa')).SOUTHERN_AFRICA_LANGUAGES,
 };
 
 export type { CountryCultureData } from './types';

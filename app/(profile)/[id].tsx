@@ -35,7 +35,7 @@ import { supabase } from '@/lib/supabase';
 import { notifyUser } from '@/lib/notifications';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
-import { useDiscoverStore } from '@/store/discover.store';
+import { useDiscoverStore, invalidateDiscoverCache } from '@/store/discover.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import haptics from '@/lib/haptics';
 import { User } from '@/types';
@@ -555,7 +555,7 @@ export default function ProfileViewScreen() {
         ? safePhotos
         : [
             profile.avatar_url ||
-              `${DEFAULT_AVATAR}${encodeURIComponent(profile.full_name.charAt(0))}`,
+              `${DEFAULT_AVATAR}${encodeURIComponent((profile.full_name ?? '?').charAt(0))}`,
           ];
     void warmPhotoUris(photosToWarm.slice(0, 4));
   }, [profile]);
@@ -566,7 +566,7 @@ export default function ProfileViewScreen() {
       ? safePhotos
       : [
           profile.avatar_url ||
-            `${DEFAULT_AVATAR}${encodeURIComponent(profile.full_name.charAt(0))}`,
+            `${DEFAULT_AVATAR}${encodeURIComponent((profile.full_name ?? '?').charAt(0))}`,
         ]
     : [];
 
@@ -1181,7 +1181,7 @@ export default function ProfileViewScreen() {
     if (!profile) return;
     showDialog({
       title: `Block ${profile.full_name}?`,
-      message: "They won't see your profile or message you.",
+      message: "They won't be able to message you. You won't see each other in Discover.",
       icon: 'ban-outline',
       actions: [
         { label: UI_LABELS.cancel, style: 'cancel' },
@@ -1199,6 +1199,7 @@ export default function ProfileViewScreen() {
     if (!currentUser || !profile) return;
     try {
       await blockUser(currentUser.id, profile.id);
+      invalidateDiscoverCache();
       showToast({ icon: 'ban-outline', message: UI_TOAST.blocked });
       setTimeout(() => router.back(), 1300);
     } catch {
@@ -1244,6 +1245,7 @@ export default function ProfileViewScreen() {
                 source={{ uri: photos[0] }}
                 style={pr.collapsedAvatar}
                 contentFit="cover"
+                contentPosition="center"
                 cachePolicy="memory-disk"
                 recyclingKey={photos[0]}
               />
@@ -1372,6 +1374,7 @@ export default function ProfileViewScreen() {
                         backgroundColor: COLORS.savanna,
                       }}
                       contentFit="cover"
+                      contentPosition="center"
                       transition={220}
                       cachePolicy="memory-disk"
                       recyclingKey={photo}
@@ -1726,12 +1729,12 @@ export default function ProfileViewScreen() {
                   </View>
                 </View>
 
-                {/* Physical — hidden when nothing is filled */}
-                {(!!profile.height_cm || !!profile.body_type || profile.weight_kg != null) &&
+                {/* Physical — hidden when nothing is filled. Weight is intentionally
+                    omitted from the public profile; it lives in More details below. */}
+                {(!!profile.height_cm || !!profile.body_type) &&
                   (() => {
                     const hasH = !!profile.height_cm;
                     const hasB = !!bodyTypeLabel;
-                    const hasW = profile.weight_kg != null;
                     return (
                       <View>
                         <View style={pr.sectionCard}>
@@ -1742,19 +1745,13 @@ export default function ProfileViewScreen() {
                             value={
                               profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null
                             }
-                            isLast={hasH && !hasB && !hasW}
+                            isLast={hasH && !hasB}
                           />
                           <ProfileReadOnlyFieldRow
                             icon="body-outline"
                             label="Body type"
                             value={bodyTypeLabel}
-                            isLast={hasB && !hasW}
-                          />
-                          <ProfileReadOnlyFieldRow
-                            icon="barbell-outline"
-                            label="Weight"
-                            value={profile.weight_kg != null ? `${profile.weight_kg} kg` : null}
-                            isLast={hasW}
+                            isLast={hasB}
                           />
                         </View>
                       </View>
@@ -1979,19 +1976,7 @@ export default function ProfileViewScreen() {
             style={{
               flex: 1,
               transform: [{ translateX: photoViewerSwipeX }, { translateY: photoViewerSwipeY }],
-              opacity: Animated.add(
-                photoViewerSwipeX.interpolate({
-                  inputRange: [-120, 0, 120],
-                  outputRange: [0.92, 1, 0.92],
-                }),
-                photoViewerSwipeY.interpolate({
-                  inputRange: [-120, 0, 120],
-                  outputRange: [0, 0, 0],
-                }),
-              ).interpolate({
-                inputRange: [0.92, 1],
-                outputRange: [0.92, 1],
-              }),
+              opacity: 1,
             }}
             {...photoViewerPanResponder.panHandlers}
           >

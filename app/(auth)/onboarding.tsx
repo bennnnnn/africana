@@ -71,9 +71,11 @@ export default function OnboardingScreen() {
   const [gender, setGender] = useState<Gender | null>(null);
   const [interestedIn, setInterestedIn] = useState<InterestedIn | null>(null);
   const [ageYears, setAgeYears] = useState<number | null>(null);
+  const [step3Errors, setStep3Errors] = useState<Record<string, boolean>>({});
 
   const handleBirthdateChange = (d: Date | null) => {
     setBirthdate(d);
+    setStep3Errors((prev) => ({ ...prev, birthdate: false }));
     if (!d) {
       setAgeYears(null);
       return;
@@ -104,6 +106,7 @@ export default function OnboardingScreen() {
 
   const [loading, setLoading] = useState(false);
   const saveInFlightRef = useRef(false);
+  const [photoProgress, setPhotoProgress] = useState<{ uploaded: number; total: number } | null>(null);
 
   const firstNameValidation = validateFirstName(fullName);
   const showTermsConsent = !termsAccepted;
@@ -332,7 +335,11 @@ export default function OnboardingScreen() {
       return;
     }
     if (!birthdate || !gender || !interestedIn) {
-      appDialog({ title: 'Incomplete', message: 'Please complete step 3.' });
+      setStep3Errors({
+        birthdate: !birthdate,
+        gender: !gender,
+        interestedIn: !interestedIn,
+      });
       return;
     }
     const ageMs = Date.now() - birthdate.getTime();
@@ -399,10 +406,14 @@ export default function OnboardingScreen() {
 
       let uploadedUrls: string[] = [];
       if (photoUris.length > 0) {
-        const results = await Promise.all(
-          photoUris.map((uri) => uploadToAvatarsBucket(params.userId!, uri)),
-        );
+        setPhotoProgress({ uploaded: 0, total: photoUris.length });
+        const results: ({ publicUrl: string } | { error: string })[] = [];
+        for (let i = 0; i < photoUris.length; i++) {
+          results.push(await uploadToAvatarsBucket(params.userId!, photoUris[i]));
+          setPhotoProgress({ uploaded: i + 1, total: photoUris.length });
+        }
         uploadedUrls = results.flatMap((out) => ('error' in out ? [] : [out.publicUrl]));
+        setPhotoProgress(null);
         if (uploadedUrls.length === 0) {
           appDialog({
             title: 'Photo upload failed',
@@ -548,8 +559,8 @@ export default function OnboardingScreen() {
           <Text style={{ fontSize: 72, marginBottom: 24 }}>🎉</Text>
           <Text style={s.celebTitle}>Welcome to Africana!</Text>
           <Text style={s.celebSub}>
-            Your profile is live. You can enrich it anytime from your Profile tab — a fuller profile
-            attracts better matches.
+            Your profile is live. Start exploring members near you, and enrich your profile anytime
+            from the Me tab.
           </Text>
         </View>
         <View style={s.celebFooter}>
@@ -665,13 +676,19 @@ export default function OnboardingScreen() {
                 onChange={handleBirthdateChange}
                 placeholder="Tap to select"
               />
+              {step3Errors.birthdate && (
+                <Text style={s.fieldError}>Please select your date of birth</Text>
+              )}
 
               <Text style={s.label}>I am a</Text>
               <View style={s.rowEqual}>
                 {GENDER_ONBOARD.map((opt) => (
                   <Pressable
                     key={opt.value}
-                    onPress={() => setGender(opt.value)}
+                    onPress={() => {
+                      setGender(opt.value);
+                      setStep3Errors((prev) => ({ ...prev, gender: false }));
+                    }}
                     style={[s.bigChip, gender === opt.value && s.chipOn]}
                   >
                     <Text style={{ fontSize: 26, marginBottom: 6 }}>{opt.emoji}</Text>
@@ -681,13 +698,19 @@ export default function OnboardingScreen() {
                   </Pressable>
                 ))}
               </View>
+              {step3Errors.gender && (
+                <Text style={s.fieldError}>Please select your gender</Text>
+              )}
 
               <Text style={[s.label, { marginTop: 20 }]}>Interested in</Text>
               <View style={s.rowEqual}>
                 {INTEREST_OPTIONS.map((opt) => (
                   <Pressable
                     key={opt.value}
-                    onPress={() => setInterestedIn(opt.value)}
+                    onPress={() => {
+                      setInterestedIn(opt.value);
+                      setStep3Errors((prev) => ({ ...prev, interestedIn: false }));
+                    }}
                     style={[s.bigChip, interestedIn === opt.value && s.chipOn]}
                   >
                     <Text style={{ fontSize: 26, marginBottom: 6 }}>{opt.emoji}</Text>
@@ -697,6 +720,9 @@ export default function OnboardingScreen() {
                   </Pressable>
                 ))}
               </View>
+              {step3Errors.interestedIn && (
+                <Text style={s.fieldError}>Please select who you're interested in</Text>
+              )}
             </View>
           )}
 
@@ -839,6 +865,24 @@ export default function OnboardingScreen() {
             </View>
           )}
 
+          {/* ── Photo upload progress (visible during save) ── */}
+          {photoProgress && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                paddingVertical: 12,
+              }}
+            >
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={{ fontSize: 13, color: COLORS.textSecondary }}>
+                Uploading photo {photoProgress.uploaded} of {photoProgress.total}…
+              </Text>
+            </View>
+          )}
+
           {/* ── Buttons ── */}
           <View style={{ marginTop: 32, gap: 10 }}>
             <Button
@@ -909,6 +953,13 @@ const s = StyleSheet.create({
   },
 
   label: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 10 },
+  fieldError: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.error,
+    marginTop: 4,
+    marginBottom: 8,
+  },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   rowEqual: { flexDirection: 'row', flexWrap: 'nowrap', gap: 10 },
   chip: {

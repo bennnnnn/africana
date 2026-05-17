@@ -120,6 +120,7 @@ function UserCardInner({
           source={{ uri: displayPhoto }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
+          contentPosition="center"
           transition={0}
           cachePolicy="memory-disk"
           recyclingKey={`${user.id}:${photoUrl}`}

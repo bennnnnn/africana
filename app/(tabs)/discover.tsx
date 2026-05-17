@@ -64,8 +64,6 @@ export default function DiscoverScreen() {
     clearFetchError,
     setFilters,
     resetFilters,
-    subscribeToOnlineStatus,
-    unsubscribeFromOnlineStatus,
   } = useDiscoverStore(
     useShallow((s) => ({
       users: s.users,
@@ -77,8 +75,6 @@ export default function DiscoverScreen() {
       clearFetchError: s.clearFetchError,
       setFilters: s.setFilters,
       resetFilters: s.resetFilters,
-      subscribeToOnlineStatus: s.subscribeToOnlineStatus,
-      unsubscribeFromOnlineStatus: s.unsubscribeFromOnlineStatus,
     })),
   );
   const [showFilters, setShowFilters] = useState(false);
@@ -118,17 +114,11 @@ export default function DiscoverScreen() {
   useEffect(() => {
     if (!user) return;
     fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
-    subscribeToOnlineStatus();
-    return () => {
-      unsubscribeFromOnlineStatus();
-    };
   }, [
     user?.id,
     user?.interested_in,
     agePref,
     fetchUsers,
-    subscribeToOnlineStatus,
-    unsubscribeFromOnlineStatus,
   ]);
 
   // Prime the image cache for the first screenful as soon as the page lands
@@ -192,7 +182,14 @@ export default function DiscoverScreen() {
       chips.push({
         key: 'age',
         label: `Age ${filters.min_age}–${filters.max_age}`,
-        clear: () => setFilters({ min_age: 18, max_age: 100 } as Partial<FilterOptions>),
+        clear: () => setFilters({ min_age: 18, max_age: 100 }),
+      });
+    }
+    if (filters.verified_only) {
+      chips.push({
+        key: 'verified',
+        label: 'Verified',
+        clear: () => setFilters({ verified_only: false }),
       });
     }
     return chips;
@@ -248,8 +245,11 @@ export default function DiscoverScreen() {
   const handleViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
       if (viewableItems.length === 0) return;
-      const lastVisibleIdx = viewableItems[viewableItems.length - 1]?.index ?? 0;
-      const lookahead = usersRef.current.slice(lastVisibleIdx + 1, lastVisibleIdx + 7);
+      // viewableItems[].index is a row index into a 2-column grid; multiply by 2
+      // to get the correct user index offset for lookahead prefetching.
+      const lastVisibleRowIdx = viewableItems[viewableItems.length - 1]?.index ?? 0;
+      const lastVisibleUserIdx = (lastVisibleRowIdx + 1) * 2;
+      const lookahead = usersRef.current.slice(lastVisibleUserIdx, lastVisibleUserIdx + 6);
       const urls = lookahead
         .map((u) => u.profile_photos?.[0] || u.avatar_url)
         .filter((url): url is string => !!url && !prefetchedRef.current.has(url))
@@ -314,7 +314,7 @@ export default function DiscoverScreen() {
   const emptyContent =
     isLoading && users.length === 0 ? (
       <View style={s.skeletonGrid}>
-        {Array.from({ length: 8 }).map((_, i) => (
+        {Array.from({ length: 6 }).map((_, i) => (
           <SkeletonCard key={i} width={CARD_WIDTH} height={CARD_HEIGHT} radius={20} />
         ))}
       </View>

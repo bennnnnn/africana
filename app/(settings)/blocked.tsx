@@ -20,7 +20,7 @@ interface BlockedUser extends User {
   block_id: string;
 }
 
-const ROW_HEIGHT = 88; // 50 avatar + 14*2 padding + 10 marginBottom
+const ROW_HEIGHT = 98; // 50 avatar + 14*2 padding + 10 marginBottom + 10 gap between rows
 
 const BlockedRow = memo(function BlockedRow({
   item,
@@ -32,7 +32,7 @@ const BlockedRow = memo(function BlockedRow({
   const avatar =
     item.avatar_url ||
     (item.profile_photos ?? [])[0] ||
-    `${DEFAULT_AVATAR}${encodeURIComponent(item.full_name.charAt(0))}`;
+    `${DEFAULT_AVATAR}${encodeURIComponent((item.full_name ?? '?').charAt(0))}`;
   return (
     <View
       style={{
@@ -219,7 +219,7 @@ export default function BlockedUsersScreen() {
           maxToRenderPerBatch={8}
           windowSize={9}
           removeClippedSubviews={Platform.OS === 'android'}
-          contentContainerStyle={{ padding: 16 }}
+          contentContainerStyle={{ padding: 16, flexGrow: blockedUsers.length === 0 ? 1 : undefined }}
           ListEmptyComponent={
             <EmptyState
               icon="ban-outline"

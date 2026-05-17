@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Dimensions,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -461,9 +462,19 @@ export default function MyProfileScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity onPress={() => router.push('/(settings)/main')} style={s.iconBtn}>
-          <Ionicons name="settings-outline" size={20} color={COLORS.textStrong} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 4 }}>
+          <TouchableOpacity
+            onPress={() => {
+              if (user?.id) router.push({ pathname: '/(profile)/[id]', params: { id: user.id } });
+            }}
+            style={s.iconBtn}
+          >
+            <Ionicons name="eye-outline" size={20} color={COLORS.textStrong} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/(settings)/main')} style={s.iconBtn}>
+            <Ionicons name="settings-outline" size={20} color={COLORS.textStrong} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -474,6 +485,40 @@ export default function MyProfileScreen() {
         nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
       >
+        {/* Shadowban / hidden-profile notice */}
+        {user?.show_in_discover === false && (
+          <View
+            style={{
+              marginHorizontal: 16,
+              marginTop: 12,
+              backgroundColor: '#FEF3C7',
+              borderRadius: RADIUS.lg,
+              padding: 14,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+              borderWidth: 1,
+              borderColor: '#FCD34D',
+            }}
+          >
+            <Ionicons name="eye-off-outline" size={20} color={COLORS.earth} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: FONT.sm, fontWeight: FONT.bold, color: COLORS.textStrong }}>
+                Your profile is hidden
+              </Text>
+              <Text style={{ fontSize: FONT.xs, color: COLORS.textSecondary, marginTop: 2 }}>
+                You won't appear in Discover or Online. If this was unexpected, contact support — we'll review it.
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => Linking.openURL('mailto:support@africana.app')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="mail-outline" size={20} color={COLORS.earth} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Hero — swipe horizontally (ScrollView avoids FlatList-inside-ScrollView crash) */}
         {/* Neutral warm bg (not pure black) prevents the "dark flash" while the first
             image is still decoding on navigation. */}
@@ -606,7 +651,7 @@ export default function MyProfileScreen() {
                     style={[s.stripThumb, isMain && s.stripThumbActive]}
                     activeOpacity={0.8}
                   >
-                    <Image source={{ uri: photo }} style={s.stripImg} contentFit="cover" />
+                    <Image source={{ uri: photo }} style={s.stripImg} contentFit="cover" contentPosition="center" />
                     {isMain && (
                       <View style={s.stripCheck}>
                         <Ionicons name="checkmark" size={10} color="#FFF" />
@@ -801,7 +846,7 @@ export default function MyProfileScreen() {
             />
             <FieldRow
               icon="barbell-outline"
-              label="Weight"
+              label="Weight (optional)"
               value={user.weight_kg ? `${user.weight_kg} kg` : null}
               onEdit={() => {
                 setEditing('weight_kg');
@@ -946,6 +991,7 @@ export default function MyProfileScreen() {
                       source={{ uri: photo }}
                       style={{ width: tile, height: tile, borderRadius: 12 }}
                       contentFit="cover"
+                      contentPosition="center"
                     />
                   </Pressable>
                 );
@@ -1010,8 +1056,31 @@ export default function MyProfileScreen() {
           autoFocus
         />
         <Text style={{ fontSize: 11, color: COLORS.textMuted, textAlign: 'right', marginTop: 6 }}>
-          {editText.length}/300
+          {editText.length}/300{editText.trim().length > 0 && editText.trim().length < 20 && ' · Add at least 20 characters'}
         </Text>
+        {/* Example starter chips */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+          {[
+            'Sundays at the market 🌿',
+            'Lifelong Eagles fan 🦅',
+            'First-gen Ghanaian-American 🇬🇭',
+          ].map((example) => (
+            <TouchableOpacity
+              key={example}
+              onPress={() => setEditText(example)}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 16,
+                backgroundColor: COLORS.savanna,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+              }}
+            >
+              <Text style={{ fontSize: 11, color: COLORS.textSecondary }}>{example}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </EditModal>
 
       {/* ════ LOCATION ════ */}

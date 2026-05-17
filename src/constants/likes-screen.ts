@@ -17,7 +17,7 @@ export const LIKES_TAB_META: Record<
   matches: { label: 'Matches', icon: 'flame-outline', iconActive: 'flame' },
   received: { label: 'Likes', icon: 'heart-outline', iconActive: 'heart' },
   viewers: { label: 'Views', icon: 'eye-outline', iconActive: 'eye' },
-  favourites: { label: 'Stars', icon: 'star-outline', iconActive: 'star' },
+  favourites: { label: 'Favourites', icon: 'star-outline', iconActive: 'star' },
 };
 
 export const LIKES_EMPTY_STATES: Record<
@@ -27,7 +27,7 @@ export const LIKES_EMPTY_STATES: Record<
   matches: {
     icon: 'flame-outline',
     title: 'No matches yet',
-    desc: 'Like someone who already liked you to spark a match.',
+    desc: 'Browse members near you and like someone to spark a match.',
   },
   received: {
     icon: 'heart-outline',
@@ -41,8 +41,8 @@ export const LIKES_EMPTY_STATES: Record<
   },
   favourites: {
     icon: 'star-outline',
-    title: 'No stars yet',
-    desc: 'When someone stars your profile, they appear here.',
+    title: 'No favourites yet',
+    desc: 'When someone adds you to their favourites, they appear here.',
   },
 };
 

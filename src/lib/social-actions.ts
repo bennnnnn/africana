@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { logWarn } from '@/lib/logger';
+import { isUuidString } from '@/lib/utils';
 
 export function isDuplicateSocialError(message?: string | null) {
   return (
@@ -27,6 +28,8 @@ export async function hideSharedConversationsForBlock(blockerId: string, blocked
 }
 
 export async function isBlockedRelationship(userAId: string, userBId: string) {
+  if (!isUuidString(userAId) || !isUuidString(userBId)) return false;
+
   const { data, error } = await supabase
     .from('blocks')
     .select('id')
@@ -65,7 +68,7 @@ export async function removeFavourite(userId: string, favouritedId: string) {
 
 /**
  * One round-trip: rely on UNIQUE(reporter_id, reported_id) for idempotency.
- * Also blocks the pair and hides shared conversations (safety UX).
+ * Does NOT auto-block — blocking is a separate explicit user action.
  */
 export async function reportUser(reporterId: string, reportedId: string, reason: string) {
   const { error } = await supabase.from('reports').insert({
@@ -74,19 +77,16 @@ export async function reportUser(reporterId: string, reportedId: string, reason:
     reason,
   });
 
-  if (!error) {
-    try {
-      await blockUser(reporterId, reportedId);
-    } catch (e) {
-      logWarn('reportUser: auto-block failed', e);
-    }
-    return 'inserted' as const;
-  }
+  if (!error) return 'inserted' as const;
   if (isDuplicateSocialError(error.message)) return 'exists' as const;
   throw error;
 }
 
 export async function blockUser(blockerId: string, blockedId: string) {
+  if (!isUuidString(blockerId) || !isUuidString(blockedId)) {
+    throw new Error('Invalid UUID in blockUser');
+  }
+
   const { error } = await supabase.from('blocks').insert({
     blocker_id: blockerId,
     blocked_id: blockedId,

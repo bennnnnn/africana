@@ -1,6 +1,6 @@
 import { COLORS, SHADOWS } from '@/constants';
 
-export const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female' };
+export const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female', nonbinary: 'Non-binary', other: 'Other' };
 
 export const FLOAT_ACTION_SIZE = 56;
 

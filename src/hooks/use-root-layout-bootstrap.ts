@@ -12,7 +12,7 @@ import {
   resetLifecycleEmailQueue,
 } from '@/lib/notifications';
 import { initAnalytics, identify, resetAnalytics, track, EVENTS } from '@/lib/analytics';
-import { initSentry, setSentryUser } from '@/lib/sentry';
+
 import { hydrateProfileSeedCache } from '@/lib/profile-seed-cache';
 import { redirectAfterAuth } from '@/lib/profile-completion';
 import { logError, logWarn } from '@/lib/logger';
@@ -50,6 +50,12 @@ export function useRootLayoutBootstrap(params: {
       const parsed = Linking.parse(url);
       const schemeOk = parsed.scheme === 'africana' || parsed.scheme === `exp+africana`;
       if (!schemeOk) return false;
+      // Reject any hostname other than empty or the expected auth callback host.
+      // Some OAuth providers attach a hostname to the redirect URI; expo-linking
+      // parses it into `parsed.hostname`. We allow empty (no hostname) or the
+      // explicit auth callback hostname only.
+      const hostname = (parsed.hostname ?? '').toLowerCase();
+      if (hostname && hostname !== 'auth' && hostname !== 'auth/callback') return false;
       // Only accept the specific in-app auth/reset endpoints.
       const path = (parsed.path ?? '').replace(/^\//, '');
       if (path === 'auth/callback') return true;
@@ -72,7 +78,6 @@ export function useRootLayoutBootstrap(params: {
 
   useEffect(() => {
     let cancelled = false;
-    initSentry();
     void hydrateProfileSeedCache().catch(() => {});
     void initAnalytics();
 
@@ -93,7 +98,6 @@ export function useRootLayoutBootstrap(params: {
             // Avoid double-hydration when onAuthStateChange fires INITIAL_SESSION.
             bootHydratedUserId.current = uid;
             await hydrateUserFromServer(uid);
-            setSentryUser(uid);
             useAuthStore.getState().patchUser({ online_status: 'online' });
             InteractionManager.runAfterInteractions(() => {
               void setOnlineStatus(uid, 'online').catch(() => {});
@@ -187,7 +191,6 @@ export function useRootLayoutBootstrap(params: {
           // Boot path already hydrated this user.
           return;
         }
-        setSentryUser(uid);
         void hydrateUserFromServer(uid, { continueOnPartialFailure: true });
         InteractionManager.runAfterInteractions(() => {
           queueWelcomeEmail(uid);
@@ -207,7 +210,6 @@ export function useRootLayoutBootstrap(params: {
           void joinAppPresenceChannel(uid).catch((e) => logWarn('[presence] sign-in join', e));
         }
       } else if (event === 'SIGNED_OUT') {
-        setSentryUser(null);
         resetClientModuleStateAtLogout();
         track(EVENTS.AUTH_SIGNOUT);
         resetAnalytics();

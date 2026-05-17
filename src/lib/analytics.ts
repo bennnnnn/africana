@@ -1,7 +1,6 @@
 /**
  * Analytics stub — PostHog removed. All calls are no-ops.
  * Replace this file with a real provider (e.g. Mixpanel, Amplitude) when ready.
- * Crash reporting is handled by Sentry (src/lib/sentry.ts).
  */
 
 export async function initAnalytics(): Promise<void> {}

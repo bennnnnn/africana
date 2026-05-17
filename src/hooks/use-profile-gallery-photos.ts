@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   profileGalleryCache,
+  setProfileGalleryCache,
   warmPhotoUris,
   buildFallbackPhotoList,
 } from '@/lib/profile-gallery-cache';
@@ -40,7 +41,7 @@ export function useProfileGalleryPhotos(userId: string | null) {
         }
         const p = data.profile_photos ?? [];
         const list = p.length > 0 ? p : buildFallbackPhotoList(data.full_name, data.avatar_url);
-        profileGalleryCache.set(userId, list);
+        setProfileGalleryCache(userId, list);
         setPhotos(list);
         setLoading(false);
         void warmPhotoUris(list.slice(0, 4));

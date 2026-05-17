@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
-import { View, Text, FlatList, TextInput, Animated, Platform, StyleSheet } from 'react-native';
+import { View, Text, FlatList, ScrollView, TouchableOpacity, TextInput, Animated, Platform, StyleSheet } from 'react-native';
 // Universal keyboard handling. `KeyboardAvoidingView` from
 // react-native-keyboard-controller reads keyboard insets from native
 // platform APIs (WindowInsetsCompat on Android, native observer on iOS),
@@ -41,7 +41,8 @@ import { ChatReactionPickerOverlay } from '@/components/chat/ChatReactionPickerO
 import { ChatScreenHeaderChrome } from '@/components/chat/ChatScreenHeaderChrome';
 import { addFavourite, blockUser } from '@/lib/social-actions';
 import { User } from '@/types';
-import { COLORS, DEFAULT_AVATAR } from '@/constants';
+import { COLORS, DEFAULT_AVATAR, RADIUS } from '@/constants';
+import { Ionicons } from '@expo/vector-icons';
 import {
   EMPTY_REACTION_LIST,
   type ReactionEmoji,
@@ -57,6 +58,7 @@ import { useKeyboardHeight } from '@/hooks/use-keyboard-height';
 import { useChatRealtime } from '@/hooks/use-chat-realtime';
 import { useChatVisibilitySync } from '@/hooks/use-chat-visibility-sync';
 import { SPRING, SNAP_OUT } from '@/lib/motion';
+import { generateIcebreakers, type Icebreaker } from '@/lib/icebreakers';
 import haptics from '@/lib/haptics';
 import * as Clipboard from 'expo-clipboard';
 import { normalizeRouteParam } from '@/lib/chat-route-utils';
@@ -210,7 +212,16 @@ export default function ChatScreen() {
 
   const peer = otherUser ?? headerFallbackPeer;
   const convMessages = messages[conversationId ?? ''] ?? [];
-  const visibleMessages = convMessages;
+
+  // Icebreakers: show when the viewer hasn't sent a message yet
+  const myMessagesSent = useMemo(
+    () => convMessages.filter((m) => m.sender_id === user?.id && !m.id.startsWith('temp-')).length,
+    [convMessages, user?.id],
+  );
+  const icebreakers: Icebreaker[] = useMemo(
+    () => (user && peer && myMessagesSent === 0 ? generateIcebreakers(user, peer) : []),
+    [user, peer, myMessagesSent],
+  );
 
   // Keep the id set in sync with the rendered message list so the realtime
   // reactions handler can quickly tell whether an inbound row is for us.
@@ -262,16 +273,16 @@ export default function ChatScreen() {
     [reactionEmojiArrays, selectedMessages],
   );
 
-  const listData = visibleMessages;
+  const listData = convMessages;
   const listItems = useMemo<ChatListItem[]>(() => buildChatListItems(listData), [listData]);
 
   // Inverted FlatList expects newest-first data. Reversing here means index 0 =
   // latest message, which the list renders at the bottom with no initial scroll needed.
   const invertedListItems = useMemo(() => [...listItems].reverse(), [listItems]);
   const latestMessageKey =
-    visibleMessages.length > 0
-      ? (visibleMessages[visibleMessages.length - 1].listKey ??
-        visibleMessages[visibleMessages.length - 1].id)
+    convMessages.length > 0
+      ? (convMessages[convMessages.length - 1].listKey ??
+        convMessages[convMessages.length - 1].id)
       : undefined;
   const isLiked = peer ? likedUserIds.has(peer.id) : false;
   const avatarRaw = peer
@@ -322,7 +333,7 @@ export default function ChatScreen() {
   }, []);
 
   useEffect(() => {
-    const nextCount = visibleMessages.length;
+    const nextCount = convMessages.length;
     const prevCount = prevMessageCountRef.current;
     const prevLatestKey = prevLatestMessageKeyRef.current;
     const changed = nextCount !== prevCount || latestMessageKey !== prevLatestKey;
@@ -341,11 +352,17 @@ export default function ChatScreen() {
 
     prevMessageCountRef.current = nextCount;
     prevLatestMessageKeyRef.current = latestMessageKey;
-  }, [latestMessageKey, scrollToBottom, visibleMessages.length]);
+  }, [latestMessageKey, scrollToBottom, convMessages.length]);
 
   useEffect(() => {
     if (keyboardHeight > 0 && isNearBottomRef.current) {
-      scrollToBottom(false);
+      // Defer so the message-count effect above gets priority if both fire in
+      // the same render cycle — prevents racing scrollToBottom calls.
+      const handle = requestAnimationFrame(() => {
+        // Re-check: the message-count effect may already have scrolled.
+        if (isNearBottomRef.current) scrollToBottom(false);
+      });
+      return () => cancelAnimationFrame(handle);
     }
   }, [keyboardHeight, scrollToBottom]);
 
@@ -941,8 +958,71 @@ export default function ChatScreen() {
         isLoadingOlder={isLoadingOlder}
         onScroll={handleListScroll}
         renderItem={renderItem}
-        showEmptyHint={!loading && visibleMessages.length === 0 && !conversationHasMessages}
+        showEmptyHint={!loading && convMessages.length === 0 && !conversationHasMessages}
       />
+
+      {/* Verification upsell — one-time nudge after first message */}
+      {myMessagesSent === 1 && !user?.verified && composerVariant === 'active' && (
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginBottom: 4,
+            padding: 10,
+            borderRadius: RADIUS.lg,
+            backgroundColor: COLORS.successSurface,
+            borderWidth: 1,
+            borderColor: COLORS.success,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <Ionicons name="shield-checkmark-outline" size={18} color={COLORS.success} />
+          <Text style={{ flex: 1, fontSize: 12, color: COLORS.textSecondary }}>
+            Verified profiles get 2× more replies. Add yours — takes 30 seconds.
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.push('/(settings)/premium-trust')}
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 5,
+              borderRadius: 12,
+              backgroundColor: COLORS.success,
+            }}
+          >
+            <Text style={{ fontSize: 11, fontWeight: '600', color: COLORS.white }}>Verify</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Icebreaker starter prompts */}
+      {icebreakers.length > 0 && composerVariant === 'active' && (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8 }}
+          >
+            {icebreakers.map((ib) => (
+              <TouchableOpacity
+                key={ib.key}
+                onPress={() => setText(ib.text)}
+                activeOpacity={0.8}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  backgroundColor: COLORS.savanna,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                }}
+              >
+                <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>{ib.text}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       <ChatComposerArea
         variant={composerVariant}

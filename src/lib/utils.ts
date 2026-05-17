@@ -113,8 +113,8 @@ export function getEffectiveAgePreferenceRange(
   }
 
   return {
-    min: normalizedMin ?? DEFAULT_MIN_AGE_PREFERENCE,
-    max: normalizedMax ?? DEFAULT_MAX_AGE_PREFERENCE,
+    min: normalizedMin != null && normalizedMin >= DEFAULT_MIN_AGE_PREFERENCE ? normalizedMin : DEFAULT_MIN_AGE_PREFERENCE,
+    max: normalizedMax != null && normalizedMax <= DEFAULT_MAX_AGE_PREFERENCE ? normalizedMax : DEFAULT_MAX_AGE_PREFERENCE,
     isImplicit: false,
   };
 }

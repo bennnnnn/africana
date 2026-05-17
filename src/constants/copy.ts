@@ -14,7 +14,7 @@ export const UI_TOAST = {
   likeRemoved: 'Like removed',
   favouriteAdded: 'Added to favourites',
   favouriteRemoved: 'Removed from favourites',
-  reportSent: 'Report sent',
+  reportSent: 'Report sent · Blocked',
   reportExists: 'You already reported this user',
   refreshFailed: "Couldn't refresh. Try again.",
   copyFailed: "Couldn't copy. Try again.",

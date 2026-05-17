@@ -51,20 +51,9 @@ export default function PrivacySettingsScreen() {
             icon="eye-outline"
             iconColor={COLORS.earth}
             label="Show my profile"
-            description="Appear in Discover and Online. Hiding requires Pro."
+            description="Appear in Discover and Online for other members"
             value={settings?.profile_visible ?? true}
             onToggle={(v) => {
-              // Free users can turn visibility back ON, but hiding (turning it OFF)
-              // is a Pro-only feature. Pro check is currently a no-op while
-              // PAYMENTS_ENABLED = false; treat everyone as Free.
-              const isHiding = v === false;
-              if (isHiding && !isProSync()) {
-                showProGateDialog({
-                  title: 'Hiding your profile is a Pro feature',
-                  message: 'Disappear from Discover with Africana Pro.',
-                });
-                return;
-              }
               void applySettings({ profile_visible: v });
             }}
           />

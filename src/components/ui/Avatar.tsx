@@ -14,7 +14,7 @@ interface AvatarProps {
   style?: ViewStyle;
 }
 
-export function Avatar({
+export const Avatar = React.memo(function Avatar({
   uri,
   name = '?',
   size = 48,
@@ -47,6 +47,7 @@ export function Avatar({
           backgroundColor: COLORS.savanna,
         }}
         contentFit="cover"
+        contentPosition="center"
         transition={120}
         cachePolicy="memory-disk"
         recyclingKey={displayUri}
@@ -72,4 +73,4 @@ export function Avatar({
       )}
     </View>
   );
-}
+});

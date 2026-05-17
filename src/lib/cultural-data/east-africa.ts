@@ -1,5 +1,18 @@
 import { CountryCultureData } from './types';
 
+export const EAST_AFRICA_LANGUAGES: Record<string, readonly string[]> = {
+  ET: ['Amharic', 'English', 'Oromo', 'Tigrinya', 'Somali', 'Sidamo', 'Afar', 'Arabic', 'Gurage', 'Wolaytta', 'Hadiyisa', 'Kambaata', 'Gamo', 'Kafficho', 'Konso', 'Harari', 'Nuer', 'Anuak', 'Silte', 'Bench'],
+  KE: ['English', 'Swahili', 'Kikuyu', 'Luo', 'Kalenjin', 'Kamba', 'Luhya', 'Somali'],
+  SO: ['Somali', 'Arabic', 'English', 'Maay'],
+  UG: ['English', 'Swahili', 'Luganda', 'Runyankole', 'Ateso', 'Acholi', 'Lusoga'],
+  TZ: ['Swahili', 'English', 'Sukuma', 'Chaga', 'Makonde'],
+  RW: ['Kinyarwanda', 'English', 'French', 'Swahili'],
+  BI: ['Kirundi', 'French', 'English', 'Swahili'],
+  DJ: ['Arabic', 'French', 'Somali', 'Afar', 'English'],
+  ER: ['Tigrinya', 'Arabic', 'English', 'Tigre', 'Afar'],
+  MG: ['Malagasy', 'French', 'English'],
+};
+
 export const EAST_AFRICA_CULTURE: Record<string, CountryCultureData> = {
   ET: {
     ethnicities: [
@@ -65,7 +78,7 @@ export const EAST_AFRICA_CULTURE: Record<string, CountryCultureData> = {
       Gambela: ['Anuak', 'Nuer'],
       Harari: ['Harari', 'Oromo', 'Amhara'],
       Oromia: ['Oromo', 'Amhara', 'Borana', 'Arsi', 'Guji'],
-      Sidama: ['Sidama', 'Wolayta'],
+      Sidama: ['Sidama', 'Wolayta', 'Amhara'],
       SNNPR: [
         'Wolayta',
         'Hadiya',
@@ -114,7 +127,7 @@ export const EAST_AFRICA_CULTURE: Record<string, CountryCultureData> = {
       Hadiya: ['Hadiyisa', 'Amharic', 'English'],
       Harari: ['Harari', 'Amharic', 'English'],
       Anuak: ['Amharic', 'English'],
-      Nuer: ['Nuer', 'English'],
+      Nuer: ['Nuer', 'English', 'Amharic'],
       Agew: ['Amharic', 'English'],
       Gamo: ['Gamo', 'Amharic', 'English'],
       Kembata: ['Kambaata', 'Amharic', 'English'],
@@ -130,7 +143,7 @@ export const EAST_AFRICA_CULTURE: Record<string, CountryCultureData> = {
       Karo: ['Amharic', 'English'],
       Hamer: ['Amharic', 'English'],
       Borana: ['Oromo', 'Amharic', 'English'],
-      Argobba: ['Amharic', 'Arabic', 'English'],
+      Argobba: ['Amharic', 'English'],
       Arsi: ['Oromo', 'Amharic', 'English'],
       Guji: ['Oromo', 'Amharic', 'English'],
     },

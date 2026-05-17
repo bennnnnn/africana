@@ -38,6 +38,9 @@ interface AuthState {
   signOut: () => Promise<void>;
 }
 
+/** Serialize concurrent updateSettings calls to prevent lost-write races. */
+let updateSettingsPending: Promise<void> = Promise.resolve();
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   user: null,
@@ -115,36 +118,46 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   updateSettings: async (updates) => {
-    const { user, settings } = get();
-    if (!user) return { ok: false as const, message: 'Not signed in' };
+    // Serialize calls so two rapid updates don't race on the same settings snapshot.
+    const previousPromise = updateSettingsPending;
+    let resolve: () => void;
+    updateSettingsPending = new Promise<void>((r) => { resolve = r; });
 
-    const previous = settings;
-    const merged = { ...(settings ?? {}), ...updates, user_id: user.id };
-    set({ settings: merged as UserSettings });
+    try {
+      await previousPromise;
+      const { user, settings } = get();
+      if (!user) return { ok: false as const, message: 'Not signed in' };
 
-    const { data, error } = await supabase
-      .from('user_settings')
-      .upsert(merged, { onConflict: 'user_id' })
-      .select()
-      .single();
+      const previous = settings;
+      const merged = { ...(settings ?? {}), ...updates, user_id: user.id };
+      set({ settings: merged as UserSettings });
 
-    if (error) {
-      console.error('[updateSettings]', error.message);
-      set({ settings: previous });
-      await get().fetchSettings(user.id);
-      return { ok: false as const, message: error.message || 'Could not save settings' };
-    }
-    if (data) {
-      set({ settings: data });
-      if (
-        'profile_visible' in updates ||
-        'receive_messages' in updates ||
-        'show_online_status' in updates
-      ) {
-        void get().fetchProfile(user.id);
+      const { data, error } = await supabase
+        .from('user_settings')
+        .upsert(merged, { onConflict: 'user_id' })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[updateSettings]', error.message);
+        set({ settings: previous });
+        await get().fetchSettings(user.id);
+        return { ok: false as const, message: error.message || 'Could not save settings' };
       }
+      if (data) {
+        set({ settings: data });
+        if (
+          'profile_visible' in updates ||
+          'receive_messages' in updates ||
+          'show_online_status' in updates
+        ) {
+          void get().fetchProfile(user.id);
+        }
+      }
+      return { ok: true as const };
+    } finally {
+      resolve!();
     }
-    return { ok: true as const };
   },
 
   signOut: async () => {

@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { notifyLifecycleEmail, notifyUser } from '@/lib/notifications';
 import { appDialog } from '@/lib/app-dialog';
 import { maybeWarnLikeQuota } from '@/lib/rate-limit-warn';
-import { gateSendLike, noteSentLike, showFreeLimitDialog } from '@/lib/free-quota';
+import { gateSendLike, showFreeLimitDialog } from '@/lib/free-quota';
 import { track, EVENTS } from '@/lib/analytics';
 import { isBlockedRelationship } from '@/lib/social-actions';
 import { likesPathSegmentForNotifyType } from '@/constants/likes-routes';
@@ -37,7 +37,7 @@ function sortByLastSeenThenId<T extends { last_seen?: string | null; id: string 
 // Postgrest-js v2.49+ adds Result / RelationName / Relationships / Method — use `any` so the chain stays assignable without generated DB types.
 type DiscoverQuery = PostgrestFilterBuilder<any, any, any, any, any, any, any>;
 
-/** Location, religion, online, birthdate presence, and age — all in SQL so pagination matches the grid. */
+/** Location, religion, online, birthdate presence, age, looking-for, language, and verified — all in SQL so pagination matches the grid. */
 function applyDiscoverSheetFilters(
   query: DiscoverQuery,
   params: { filters: FilterOptions; today: Date; effMin: number; effMax: number },
@@ -48,12 +48,11 @@ function applyDiscoverSheetFilters(
   if (filters.city) query = query.eq('city', filters.city);
   if (filters.religion) query = query.eq('religion', filters.religion);
   if (filters.online_only) {
-    // Pair the column filter with a freshness cutoff on `last_seen` so the
-    // "Online only" toggle doesn't surface accounts that crashed/force-quit
-    // ages ago and got stuck on `online_status='online'`.
     query = query.eq('online_status', 'online').gte('last_seen', getOnlineFreshnessCutoffISO());
   }
-
+  if (filters.verified_only) {
+    query = query.eq('verified', true);
+  }
   query = query.not('birthdate', 'is', null);
 
   if (effMin > 18) {
@@ -106,6 +105,7 @@ const DEFAULT_FILTERS: FilterOptions = {
   max_age: 100,
   religion: null,
   online_only: false,
+  verified_only: false,
 };
 
 const PAGE_SIZE = 20;
@@ -456,7 +456,6 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       });
     }
     track(EVENTS.LIKE_SENT, { matched: isMatch });
-    noteSentLike();
 
     // Fire-and-forget soft warning when approaching the per-hour/day cap.
     void maybeWarnLikeQuota();
@@ -464,6 +463,11 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     return isMatch;
   },
 }));
+
+/** Invalidate module-level block/like cache so the next fetchUsers picks up changes from outside Discover (e.g. blocking from profile). */
+export function invalidateDiscoverCache(): void {
+  _cachedForUserId = null;
+}
 
 /** Tear down discover realtime + module caches on logout (avoids cross-user leakage). */
 export function resetDiscoverModuleState(): void {

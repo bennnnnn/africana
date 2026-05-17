@@ -26,7 +26,8 @@ export async function fetchProfileRow(userId: string): Promise<User | null> {
     : undefined;
 
   const rawGender = String(data.gender ?? '');
-  const gender: Gender = rawGender === 'male' || rawGender === 'female' ? rawGender : 'female';
+  const validGenders = new Set<string>(['male', 'female', 'nonbinary', 'other']);
+  const gender: Gender = validGenders.has(rawGender) ? (rawGender as Gender) : 'other';
   const interested_in = normalizeInterestedInFromDb(
     gender,
     data.interested_in as string | null | undefined,

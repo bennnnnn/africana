@@ -100,6 +100,6 @@ function buildCallbackUrl(params: Record<string, unknown>): string | undefined {
     return undefined;
   }
 
-  const query = new URLSearchParams(entries).toString();
+  const query = new URLSearchParams(entries as unknown as string[][]).toString();
   return `africana://auth/callback#${query}`;
 }

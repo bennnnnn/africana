@@ -128,12 +128,15 @@ export const ChatMessageRow = memo(function ChatMessageRow({
                 {item.content}
               </Text>
               <View style={[msgS.bubbleMetaRow, { alignSelf: 'flex-end' }]}>
+                {item.sendFailed && (
+                  <Ionicons name="alert-circle" size={12} color={COLORS.error} style={{ marginRight: 2 }} />
+                )}
                 <Text style={[msgS.bubbleMetaText, { color: metaColor }]}>
                   {dayjs(item.created_at).format('h:mm A')}
                 </Text>
                 {isOwn && (
                   <Text style={[msgS.bubbleMetaCheck, { color: readColor }]}>
-                    {item.read_at ? '✓✓' : isTemp ? '○' : '✓'}
+                    {item.read_at ? '✓✓' : isTemp && !item.sendFailed ? '○' : '✓'}
                   </Text>
                 )}
               </View>

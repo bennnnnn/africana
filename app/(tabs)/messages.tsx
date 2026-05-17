@@ -56,10 +56,10 @@ function formatConversationTime(iso: string): string {
   const diffMin = now.diff(then, 'minute');
   if (diffMin < 60) return `${diffMin}m`;
   if (now.isSame(then, 'day')) return `${now.diff(then, 'hour')}h`;
-  if (now.subtract(1, 'day').isSame(then, 'day')) return 'Yesterday';
+  if (now.diff(then, 'day') === 1 && now.diff(then, 'hour') < 48) return 'Yesterday';
   if (now.diff(then, 'day') < 7) return then.format('ddd');
   if (now.isSame(then, 'year')) return then.format('MMM D');
-  return then.format('MMM D, YY');
+  return then.format('MMM D, YYYY');
 }
 
 /**

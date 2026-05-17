@@ -17,7 +17,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { hasSymmetricBlockBetween } from '@/lib/block-queries';
 import { moderateMessage } from '@/lib/moderation';
 import { maybeWarnMessageQuota } from '@/lib/rate-limit-warn';
-import { gateSendMessage, noteSentMessage, showFreeLimitDialog } from '@/lib/free-quota';
+import { gateSendMessage, showFreeLimitDialog } from '@/lib/free-quota';
 import { track, EVENTS } from '@/lib/analytics';
 import { logError, logWarn } from '@/lib/logger';
 import {
@@ -42,8 +42,9 @@ export {
 const fetchConversationsPending = new Map<string, Promise<void>>();
 const fetchMessagesPending = new Map<string, Promise<void>>();
 const loadOlderPending = new Map<string, Promise<void>>();
-/** O(1) duplicate guard for addMessage — keyed by conversationId. */
+/** O(1) duplicate guard for addMessage — keyed by conversationId. Capped to prevent unbounded growth. */
 const messageIdSets = new Map<string, Set<string>>();
+const MAX_MESSAGE_ID_SETS = 50;
 
 /**
  * How many messages we pull per page from the server. The chat screen never
@@ -327,22 +328,28 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         const hasMore = (data ?? []).length === MESSAGE_PAGE_SIZE;
 
         if (older.length === 0) {
+          // If the server returned a full page but all rows were soft-deleted,
+          // don't halt pagination — there may be real messages further back.
           set((state) => ({
-            hasMoreMessages: { ...state.hasMoreMessages, [conversationId]: false },
+            hasMoreMessages: { ...state.hasMoreMessages, [conversationId]: hasMore },
           }));
           return;
         }
 
-        const existingIds = new Set((get().messages[conversationId] ?? []).map((m) => m.id));
-        const deduped = older.filter((m) => !existingIds.has(m.id));
-        const next = [...deduped, ...(get().messages[conversationId] ?? [])];
-
-        set((state) => ({
-          messages: { ...state.messages, [conversationId]: next },
-          hasMoreMessages: { ...state.hasMoreMessages, [conversationId]: hasMore },
-        }));
+        // Dedup inside set() so concurrent realtime inserts don't sneak between the
+        // read and the write, which would duplicate a message in the merged list.
+        let merged: Message[] = [];
+        set((state) => {
+          const existingIds = new Set((state.messages[conversationId] ?? []).map((m) => m.id));
+          const deduped = older.filter((m) => !existingIds.has(m.id));
+          merged = [...deduped, ...(state.messages[conversationId] ?? [])];
+          return {
+            messages: { ...state.messages, [conversationId]: merged },
+            hasMoreMessages: { ...state.hasMoreMessages, [conversationId]: hasMore },
+          };
+        });
         try {
-          await replaceCachedMessages(conversationId, tailForCache(next));
+          await replaceCachedMessages(conversationId, tailForCache(merged));
         } catch (e) {
           logWarn('[chat-cache] loadOlderMessages persist failed', e);
         }
@@ -388,7 +395,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Pre-flight checks (recipient prefs, block status) are enforced server-side
     // by DB triggers anyway. Doing the optimistic insert first means the bubble
     // appears in <1ms instead of after 200–600ms of pre-flight round-trips.
-    const tempId = `temp-${Date.now()}`;
+    const tempId = `temp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const tempMsg: Message = {
       id: tempId,
       listKey: tempId,
@@ -439,26 +446,30 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     if (error || !data) {
       logError('[sendMessage] insert failed', error);
-      // Roll back optimistic message AND last_message preview in inbox
-      set((state) => ({
-        messages: {
-          ...state.messages,
-          [conversationId]: (state.messages[conversationId] ?? []).filter((m) => m.id !== tempId),
-        },
-        conversations: state.conversations.map((c) =>
-          c.id === conversationId
-            ? {
-                ...c,
-                last_message: previousConvLastMessage,
-                last_message_at: previousConvLastMessageAt,
-              }
-            : c,
-        ),
-      }));
-      enqueueReplaceCachedMessages(
-        conversationId,
-        tailForCache((get().messages[conversationId] ?? []).filter((m) => m.id !== tempId)),
-      );
+      // Keep the optimistic bubble in the list but mark it as failed so the UI can show a retry affordance
+      set((state) => {
+        const updatedMessages = (state.messages[conversationId] ?? []).map((m) =>
+          m.id === tempId ? { ...m, sendFailed: true } : m,
+        );
+        // Recompute last_message from the latest real (non-failed) message in
+        // local state instead of rolling back to a potentially stale snapshot.
+        const lastReal = [...updatedMessages].reverse().find((m) => !m.sendFailed);
+        return {
+          messages: {
+            ...state.messages,
+            [conversationId]: updatedMessages,
+          },
+          conversations: state.conversations.map((c) =>
+            c.id === conversationId
+              ? {
+                  ...c,
+                  last_message: lastReal?.content ?? null,
+                  last_message_at: lastReal?.created_at ?? null,
+                }
+              : c,
+          ),
+        };
+      });
       const mapped = mapMessagesInsertError(error);
       if (mapped) {
         const isHour = mapped === ERROR_MESSAGE_RATE_LIMIT_HOUR;
@@ -502,7 +513,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
 
     track(EVENTS.MESSAGE_SENT);
-    noteSentMessage();
 
     // Fire-and-forget soft warning when approaching the per-hour/day cap.
     void maybeWarnMessageQuota();
@@ -578,12 +588,13 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   deleteMessage: async (conversationId, messageId) => {
-    const currentMessages = get().messages[conversationId] ?? [];
+    const previousMessages = get().messages[conversationId] ?? [];
+    const previousConversations = get().conversations;
     const isLast =
-      currentMessages.length > 0 && currentMessages[currentMessages.length - 1].id === messageId;
+      previousMessages.length > 0 && previousMessages[previousMessages.length - 1].id === messageId;
 
     // Hard delete: remove row for everyone (sender-only via RLS).
-    const updatedMessages = currentMessages.filter((m) => m.id !== messageId);
+    const updatedMessages = previousMessages.filter((m) => m.id !== messageId);
 
     set((state) => {
       let nextConversations = state.conversations;
@@ -611,18 +622,27 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     enqueueReplaceCachedMessages(conversationId, tailForCache(updatedMessages));
 
-    await supabase.from('messages').delete().eq('id', messageId);
+    const { error } = await supabase.from('messages').delete().eq('id', messageId);
+    if (error) {
+      logError('[deleteMessage] server delete failed', error);
+      set({
+        messages: { ...get().messages, [conversationId]: previousMessages },
+        conversations: previousConversations,
+      });
+      throw error;
+    }
 
     // `refresh_conversation_preview` trigger keeps last_message / last_message_at in sync.
   },
 
   softDeleteMessageForSelf: async (conversationId, messageId) => {
-    const currentMessages = get().messages[conversationId] ?? [];
+    const previousMessages = get().messages[conversationId] ?? [];
+    const previousConversations = get().conversations;
     const isLast =
-      currentMessages.length > 0 && currentMessages[currentMessages.length - 1].id === messageId;
+      previousMessages.length > 0 && previousMessages[previousMessages.length - 1].id === messageId;
 
     // Optimistic local removal.
-    const updatedMessages = currentMessages.filter((m) => m.id !== messageId);
+    const updatedMessages = previousMessages.filter((m) => m.id !== messageId);
     set((state) => {
       let nextConversations = state.conversations;
       if (isLast) {
@@ -647,12 +667,24 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     enqueueReplaceCachedMessages(conversationId, tailForCache(updatedMessages));
 
     // Server-side soft delete. (RPC verifies participant membership.)
-    await supabase.rpc('soft_delete_message_for_self', { p_message_id: messageId });
+    const { error } = await supabase.rpc('soft_delete_message_for_self', { p_message_id: messageId });
+    if (error) {
+      logError('[softDeleteMessageForSelf] RPC failed', error);
+      set({
+        messages: { ...get().messages, [conversationId]: previousMessages },
+        conversations: previousConversations,
+      });
+      throw error;
+    }
 
     // Preview text stays server-authoritative; soft-delete does not remove the row.
   },
 
   markMessagesRead: async (conversationId, userId) => {
+    // Snapshot pre-optimistic state for rollback on RPC failure.
+    const prevConversations = get().conversations;
+    const prevMessages = get().messages;
+
     const readAt = new Date().toISOString();
     set((state) => ({
       conversations: state.conversations.map((conversation) =>
@@ -687,15 +719,28 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
     if (readErr) {
       logWarn('[markMessagesRead] mark_conversation_read failed', readErr);
+      // Roll back optimistic changes so local state matches server.
+      set({
+        conversations: prevConversations,
+        messages: prevMessages,
+      });
     }
   },
 
   addMessage: (conversationId, message) => {
     // O(1) duplicate check using a Set, avoiding O(n) Array.some() on long threads
-    const idSet = messageIdSets.get(conversationId) ?? new Set<string>();
+    let idSet = messageIdSets.get(conversationId);
+    if (!idSet) {
+      // Evict oldest entry when the map exceeds the cap, preventing unbounded growth.
+      if (messageIdSets.size >= MAX_MESSAGE_ID_SETS) {
+        const oldest = messageIdSets.keys().next().value;
+        if (oldest !== undefined) messageIdSets.delete(oldest);
+      }
+      idSet = new Set<string>();
+      messageIdSets.set(conversationId, idSet);
+    }
     if (idSet.has(message.id)) return;
     idSet.add(message.id);
-    messageIdSets.set(conversationId, idSet);
 
     set((state) => {
       const list = state.messages[conversationId] ?? [];
