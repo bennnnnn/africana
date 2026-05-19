@@ -29,6 +29,7 @@ import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 import haptics from '@/lib/haptics';
 import { getEffectivePresence } from '@/lib/utils';
 import { usePresenceStore } from '@/store/presence.store';
+import { useInboxTypingStore } from '@/store/inbox-typing.store';
 import { primaryProfilePhotoUrl } from '@/lib/primary-profile-photo-url';
 import { TIMINGS } from '@/lib/timings';
 import dayjs from 'dayjs';
@@ -70,17 +71,16 @@ function formatConversationTime(iso: string): string {
  */
 const ConversationRow = memo(function ConversationRow({
   item,
-  isTyping,
   onPress,
   onLongPress,
   peerOnlineIds,
 }: {
   item: Conversation;
-  isTyping: boolean;
   onPress: (item: Conversation) => void;
   onLongPress: (item: Conversation) => void;
   peerOnlineIds: ReadonlySet<string>;
 }) {
+  const isTyping = useInboxTypingStore((s) => !!s.byConversationId[item.id]);
   const other = item.other_user;
   const hasUnread = (item.unread_count ?? 0) > 0;
   const timeLabel = item.last_message_at ? formatConversationTime(item.last_message_at) : '';
@@ -164,7 +164,8 @@ export default function MessagesScreen() {
   // postgres_changes for the chat screen — supabase-js dedupes channels by
   // topic and would refuse to add postgres_changes callbacks if the inbox
   // subscribed first. Cap to MAX_TYPING_SUBSCRIPTIONS for bounded fan-out.
-  const [typingMap, setTypingMap] = useState<Record<string, true>>({});
+  const setInboxTyping = useInboxTypingStore((s) => s.setTyping);
+  const clearInboxTyping = useInboxTypingStore((s) => s.clearAll);
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Re-fetch when app returns from background — catches messages missed while suspended
@@ -209,15 +210,11 @@ export default function MessagesScreen() {
         (convId) =>
           acquireTypingChannel(convId, ({ userId }) => {
             if (!userId || userId === user.id) return;
-            setTypingMap((prev) => (prev[convId] ? prev : { ...prev, [convId]: true }));
+            setInboxTyping(convId, true);
             const existing = typingTimersRef.current.get(convId);
             if (existing) clearTimeout(existing);
             const t = setTimeout(() => {
-              setTypingMap((prev) => {
-                if (!prev[convId]) return prev;
-                const { [convId]: _omit, ...rest } = prev;
-                return rest;
-              });
+              setInboxTyping(convId, false);
               typingTimersRef.current.delete(convId);
             }, TYPING_TTL_MS);
             typingTimersRef.current.set(convId, t);
@@ -228,10 +225,10 @@ export default function MessagesScreen() {
         typingTimersRef.current.forEach((t) => clearTimeout(t));
         typingTimersRef.current.clear();
         for (const release of releases) release();
-        setTypingMap({});
+        clearInboxTyping();
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user?.id, subscribedConvIdsKey]),
+    }, [user?.id, subscribedConvIdsKey, setInboxTyping, clearInboxTyping]),
   );
 
   const handleRefresh = useCallback(async () => {
@@ -297,6 +294,18 @@ export default function MessagesScreen() {
       });
     },
     [showDialog, showToast, deleteConversation],
+  );
+
+  const renderConversationRow = useCallback(
+    ({ item }: { item: Conversation }) => (
+      <ConversationRow
+        item={item}
+        onPress={handleRowPress}
+        onLongPress={handleRowLongPress}
+        peerOnlineIds={peerOnlineIds}
+      />
+    ),
+    [handleRowPress, handleRowLongPress, peerOnlineIds],
   );
 
   const ListHeader = useMemo(
@@ -373,15 +382,7 @@ export default function MessagesScreen() {
             />
           )
         }
-        renderItem={({ item }) => (
-          <ConversationRow
-            item={item}
-            isTyping={!!typingMap[item.id]}
-            onPress={handleRowPress}
-            onLongPress={handleRowLongPress}
-            peerOnlineIds={peerOnlineIds}
-          />
-        )}
+        renderItem={renderConversationRow}
       />
     </SafeAreaView>
   );

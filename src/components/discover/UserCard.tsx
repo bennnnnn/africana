@@ -1,5 +1,6 @@
-import React, { useRef, useEffect, memo, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React, { useEffect, memo, useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { OnlinePulseRing } from '@/components/discover/OnlinePulseProvider';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -51,8 +52,6 @@ function UserCardInner({
   const hasPhoto = !!photoUrl;
   const shortLocation = user.city || user.state || user.country || '';
 
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
   const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
   const isOnline =
     getEffectivePresence(
@@ -64,18 +63,6 @@ function UserCardInner({
       },
       peerOnlineIds,
     ) === 'online';
-
-  useEffect(() => {
-    if (!isOnline) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.9, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [isOnline]);
 
   const [isNew, setIsNew] = useState(false);
   useEffect(() => {
@@ -151,15 +138,7 @@ function UserCardInner({
       {/* ── Online pulse dot — top-right ── */}
       {isOnline && (
         <View style={s.onlineDotWrap}>
-          <Animated.View
-            style={[
-              s.onlinePulse,
-              {
-                transform: [{ scale: pulseAnim }],
-                opacity: pulseAnim.interpolate({ inputRange: [1, 1.9], outputRange: [0.55, 0] }),
-              },
-            ]}
-          />
+          <OnlinePulseRing style={s.onlinePulse} />
           <View style={s.onlineDot} />
         </View>
       )}

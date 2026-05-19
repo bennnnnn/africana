@@ -21,7 +21,7 @@ import { useChatStore } from '@/store/chat.store';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { User } from '@/types';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
-import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
+import { PROFILE_CARD_SELECT } from '@/constants/profile-select';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { UI_TOAST } from '@/constants/copy';
@@ -148,7 +148,7 @@ export default function OnlineScreen() {
 
     let query = supabase
       .from('profiles')
-      .select(PROFILE_LIST_SELECT as '*')
+      .select(PROFILE_CARD_SELECT as '*')
       .neq('id', user.id)
       .eq('show_in_discover', true)
       .eq('online_visible', true)

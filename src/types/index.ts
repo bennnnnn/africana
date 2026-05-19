@@ -147,6 +147,8 @@ export interface Message {
 export interface Conversation {
   id: string;
   participant_ids: string[];
+  user_low_id?: string;
+  user_high_id?: string;
   last_message: string | null;
   last_message_at: string | null;
   created_at: string;

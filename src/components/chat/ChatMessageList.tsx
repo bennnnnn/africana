@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,7 @@ type Props = {
   showEmptyHint: boolean;
 };
 
-export function ChatMessageList({
+function ChatMessageListInner({
   listRef,
   data,
   extraData,
@@ -97,3 +97,14 @@ export function ChatMessageList({
     </>
   );
 }
+
+export const ChatMessageList = memo(ChatMessageListInner, (prev, next) => {
+  return (
+    prev.data.length === next.data.length &&
+    prev.extraData === next.extraData &&
+    prev.isLoadingOlder === next.isLoadingOlder &&
+    prev.showEmptyHint === next.showEmptyHint &&
+    prev.renderItem === next.renderItem &&
+    prev.onScroll === next.onScroll
+  );
+});

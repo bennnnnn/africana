@@ -150,8 +150,12 @@ export default function TabLayout() {
           content?: string;
         };
         // Drop messages from conversations this user is not in.
-        const knownConvIds = new Set(useChatStore.getState().conversations.map((c) => c.id));
-        if (message.conversation_id && !knownConvIds.has(message.conversation_id)) return;
+        if (
+          message.conversation_id &&
+          !useChatStore.getState().conversationIdSet.has(message.conversation_id)
+        ) {
+          return;
+        }
         scheduleConvRefresh();
         // Foreground ping rationale: see docs/foreground-notifications.md
         if (isViewingConversation(message.conversation_id)) return;

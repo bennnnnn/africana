@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { ChatStoreState } from '@/store/chat-store.types';
-import { Message, User } from '@/types';
-import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
+import { Message, User, type Conversation } from '@/types';
+import { PROFILE_CARD_SELECT } from '@/constants/profile-select';
 import { supabase } from '@/lib/supabase';
 import { notifyLifecycleEmail, notifyUser } from '@/lib/notifications';
 import {
@@ -10,6 +10,7 @@ import {
   getCachedConversationSnapshot,
   getCachedMessages,
   replaceCachedConversations,
+  patchCachedConversationUnread,
   replaceCachedMessages,
   enqueueReplaceCachedMessages,
 } from '@/lib/chat-cache';
@@ -66,10 +67,22 @@ function tailForCache(messages: Message[]): Message[] {
     : messages;
 }
 
+function conversationIdSetFrom(conversations: Conversation[]): Set<string> {
+  return new Set(conversations.map((c) => c.id));
+}
+
+function withConversationIds(conversations: Conversation[]) {
+  return {
+    conversations,
+    conversationIdSet: conversationIdSetFrom(conversations),
+  };
+}
+
 export type { ChatStoreState } from '@/store/chat-store.types';
 
 export const useChatStore = create<ChatStoreState>((set, get) => ({
   conversations: [],
+  conversationIdSet: new Set<string>(),
   messages: {},
   hasMoreMessages: {},
   loadingOlderMessages: {},
@@ -86,7 +99,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     const run = async () => {
       const cachedSnapshot = await getCachedConversationSnapshot(userId);
       if (cachedSnapshot.found) {
-        set({ conversations: cachedSnapshot.conversations, isLoading: false });
+        set({
+          ...withConversationIds(cachedSnapshot.conversations),
+          isLoading: false,
+        });
       } else {
         set({ isLoading: true });
       }
@@ -96,7 +112,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           supabase
             .from('conversations')
             .select('*')
-            .contains('participant_ids', [userId])
+            .or(`user_low_id.eq.${userId},user_high_id.eq.${userId}`)
             .order('last_message_at', { ascending: false, nullsFirst: false }),
           supabase.from('conversation_hidden').select('conversation_id').eq('user_id', userId),
         ]);
@@ -121,25 +137,25 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             otherUserIds.length > 0
               ? supabase
                   .from('profiles')
-                  .select(PROFILE_LIST_SELECT as '*')
+                  .select(PROFILE_CARD_SELECT as '*')
                   .in('id', otherUserIds)
               : Promise.resolve({ data: [] as User[] }),
             conversationIds.length > 0
-              ? supabase
-                  .from('messages')
-                  .select('conversation_id')
-                  .in('conversation_id', conversationIds)
-                  .is('read_at', null)
-                  .neq('sender_id', userId)
-              : Promise.resolve({ data: [] as { conversation_id: string }[] }),
+              ? supabase.rpc('conversation_unread_counts', {
+                  p_conversation_ids: conversationIds,
+                })
+              : Promise.resolve({ data: [] as { conversation_id: string; count: number }[] }),
           ]);
 
           const profilesById = new Map(
             ((profilesResult.data ?? []) as User[]).map((profile) => [profile.id, profile]),
           );
           const unreadCounts = new Map<string, number>();
-          for (const row of (unreadResult.data ?? []) as { conversation_id: string }[]) {
-            unreadCounts.set(row.conversation_id, (unreadCounts.get(row.conversation_id) ?? 0) + 1);
+          for (const row of (unreadResult.data ?? []) as {
+            conversation_id: string;
+            count: number;
+          }[]) {
+            unreadCounts.set(row.conversation_id, Number(row.count) || 0);
           }
 
           const conversationsWithUsers = visible.map((conv) => {
@@ -151,7 +167,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             };
           });
 
-          set({ conversations: conversationsWithUsers });
+          set(withConversationIds(conversationsWithUsers));
           try {
             await replaceCachedConversations(userId, conversationsWithUsers);
           } catch (e) {
@@ -525,17 +541,25 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       return { ok: false, reason: 'blocked' };
     }
 
+    const userLowId = userId < otherUserId ? userId : otherUserId;
+    const userHighId = userId < otherUserId ? otherUserId : userId;
+
     const { data: existing } = await supabase
       .from('conversations')
       .select('id')
-      .contains('participant_ids', [userId, otherUserId])
+      .eq('user_low_id', userLowId)
+      .eq('user_high_id', userHighId)
       .maybeSingle();
 
     if (existing?.id) return { ok: true, conversationId: existing.id };
 
     const { data: newConv, error } = await supabase
       .from('conversations')
-      .insert({ participant_ids: [userId, otherUserId] })
+      .insert({
+        participant_ids: [userId, otherUserId],
+        user_low_id: userLowId,
+        user_high_id: userHighId,
+      })
       .select('id')
       .single();
 
@@ -555,7 +579,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Optimistic: remove instantly from local state
     set((state) => ({
-      conversations: state.conversations.filter((c) => c.id !== conversationId),
+      ...withConversationIds(state.conversations.filter((c) => c.id !== conversationId)),
       messages: Object.fromEntries(
         Object.entries(state.messages).filter(([id]) => id !== conversationId),
       ),
@@ -570,7 +594,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
 
     if (!userId) {
-      set({ conversations: previousConversations, messages: previousMessages });
+      set({ ...withConversationIds(previousConversations), messages: previousMessages });
       throw new Error('Not authenticated');
     }
 
@@ -582,7 +606,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       );
     if (hideErr) {
       logError('[deleteConversation] Failed to hide conversation', hideErr);
-      set({ conversations: previousConversations, messages: previousMessages });
+      set({ ...withConversationIds(previousConversations), messages: previousMessages });
       throw hideErr;
     }
   },
@@ -627,7 +651,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       logError('[deleteMessage] server delete failed', error);
       set({
         messages: { ...get().messages, [conversationId]: previousMessages },
-        conversations: previousConversations,
+        ...withConversationIds(previousConversations),
       });
       throw error;
     }
@@ -672,7 +696,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       logError('[softDeleteMessageForSelf] RPC failed', error);
       set({
         messages: { ...get().messages, [conversationId]: previousMessages },
-        conversations: previousConversations,
+        ...withConversationIds(previousConversations),
       });
       throw error;
     }
@@ -705,14 +729,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     );
     // Persist only the zeroed-unread conversation so a cold start doesn't revive
     // the badge from a stale snapshot — much cheaper than re-writing ALL convos.
-    const updatedConv = get().conversations.find((c) => c.id === conversationId);
-    if (updatedConv) {
-      const currentSnapshot = get().conversations;
-      try {
-        await replaceCachedConversations(userId, currentSnapshot);
-      } catch (e) {
-        logWarn('[chat-cache] markMessagesRead persist failed', e);
-      }
+    try {
+      await patchCachedConversationUnread(userId, conversationId, 0);
+    } catch (e) {
+      logWarn('[chat-cache] markMessagesRead persist failed', e);
     }
     const { error: readErr } = await supabase.rpc('mark_conversation_read', {
       p_conversation_id: conversationId,
@@ -721,7 +741,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       logWarn('[markMessagesRead] mark_conversation_read failed', readErr);
       // Roll back optimistic changes so local state matches server.
       set({
-        conversations: prevConversations,
+        ...withConversationIds(prevConversations),
         messages: prevMessages,
       });
     }
@@ -821,6 +841,7 @@ export function resetChatModuleStateAtLogout(): void {
   messageIdSets.clear();
   useChatStore.setState({
     conversations: [],
+    conversationIdSet: new Set<string>(),
     messages: {},
     hasMoreMessages: {},
     loadingOlderMessages: {},

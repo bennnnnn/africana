@@ -10,10 +10,13 @@ export function isDuplicateSocialError(message?: string | null) {
 
 /** Hide shared 1:1 threads from both users' inboxes after a block (idempotent). */
 export async function hideSharedConversationsForBlock(blockerId: string, blockedId: string) {
+  const userLowId = blockerId < blockedId ? blockerId : blockedId;
+  const userHighId = blockerId < blockedId ? blockedId : blockerId;
   const { data: convs, error } = await supabase
     .from('conversations')
     .select('id')
-    .contains('participant_ids', [blockerId, blockedId]);
+    .eq('user_low_id', userLowId)
+    .eq('user_high_id', userHighId);
 
   if (error || !convs?.length) return;
 

@@ -44,6 +44,8 @@ export function useRootLayoutBootstrap(params: {
   const notifResponseSub = useRef<any>(null);
   const notifReceivedSub = useRef<any>(null);
   const bootHydratedUserId = useRef<string | null>(null);
+  const onlineStatusDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ONLINE_STATUS_DEBOUNCE_MS = 2500;
 
   function isTrustedInboundUrl(url: string): boolean {
     try {
@@ -76,6 +78,23 @@ export function useRootLayoutBootstrap(params: {
       .eq('id', userId);
   }
 
+  function scheduleOnlineStatusWrite(userId: string, status: 'online' | 'offline') {
+    if (onlineStatusDebounceRef.current) {
+      clearTimeout(onlineStatusDebounceRef.current);
+    }
+    onlineStatusDebounceRef.current = setTimeout(() => {
+      onlineStatusDebounceRef.current = null;
+      void setOnlineStatus(userId, status).catch((e) => logError('setOnlineStatus', e));
+    }, ONLINE_STATUS_DEBOUNCE_MS);
+  }
+
+  function flushOnlineStatusWrite() {
+    if (onlineStatusDebounceRef.current) {
+      clearTimeout(onlineStatusDebounceRef.current);
+      onlineStatusDebounceRef.current = null;
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     void hydrateProfileSeedCache().catch(() => {});
@@ -100,6 +119,7 @@ export function useRootLayoutBootstrap(params: {
             await hydrateUserFromServer(uid);
             useAuthStore.getState().patchUser({ online_status: 'online' });
             InteractionManager.runAfterInteractions(() => {
+              flushOnlineStatusWrite();
               void setOnlineStatus(uid, 'online').catch(() => {});
               void joinAppPresenceChannel(uid).catch((e) =>
                 logWarn('[presence] bootstrap join', e),
@@ -170,13 +190,13 @@ export function useRootLayoutBootstrap(params: {
       const userId = useAuthStore.getState().session?.user?.id;
       if (!userId) return;
       if (nextState === 'active' && prev !== 'active') {
-        void setOnlineStatus(userId, 'online').catch((e) => logError('setOnlineStatus', e));
         useAuthStore.getState().patchUser({ online_status: 'online' });
         void joinAppPresenceChannel(userId).catch((e) => logWarn('[presence] foreground join', e));
+        scheduleOnlineStatusWrite(userId, 'online');
       } else if (nextState === 'background' || nextState === 'inactive') {
         void leaveAppPresenceChannel().catch(() => {});
-        void setOnlineStatus(userId, 'offline').catch((e) => logError('setOnlineStatus', e));
         useAuthStore.getState().patchUser({ online_status: 'offline' });
+        scheduleOnlineStatusWrite(userId, 'offline');
       }
     });
 
@@ -210,6 +230,7 @@ export function useRootLayoutBootstrap(params: {
           void joinAppPresenceChannel(uid).catch((e) => logWarn('[presence] sign-in join', e));
         }
       } else if (event === 'SIGNED_OUT') {
+        flushOnlineStatusWrite();
         resetClientModuleStateAtLogout();
         track(EVENTS.AUTH_SIGNOUT);
         resetAnalytics();
@@ -260,6 +281,7 @@ export function useRootLayoutBootstrap(params: {
 
     return () => {
       cancelled = true;
+      flushOnlineStatusWrite();
       subscription.unsubscribe();
       linkSub.remove();
       appStateSub.remove();

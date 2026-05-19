@@ -45,3 +45,24 @@ export const PROFILE_LIST_SELECT = [
   'created_at',
   'updated_at',
 ].join(',');
+
+/** Narrow select for Discover/Online grid cards and inbox peer avatars. */
+export const PROFILE_CARD_SELECT = [
+  'id',
+  'full_name',
+  'birthdate',
+  'gender',
+  'country',
+  'state',
+  'city',
+  'avatar_url',
+  'profile_photos',
+  'online_status',
+  'last_seen',
+  'online_visible',
+  'verified',
+  'religion',
+  'show_in_discover',
+  'accepts_messages',
+  'created_at',
+].join(',');

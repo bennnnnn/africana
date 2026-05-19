@@ -10,7 +10,7 @@ import haptics from '@/lib/haptics';
 import { User } from '@/types';
 import { isUuidString } from '@/lib/utils';
 import { fetchSymmetricBlockedPeerIds } from '@/lib/block-queries';
-import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
+import { PROFILE_CARD_SELECT } from '@/constants/profile-select';
 import { LIKES_LIST_STALE_MS, LIKES_SEEN_AT_COLUMN, type LikesTab } from '@/constants/likes-screen';
 import { likesParamForTab, likesTabFromPathSegment } from '@/constants/likes-routes';
 import {
@@ -147,7 +147,7 @@ export function useLikesHubController(): LikesHubContextValue {
             t,
             user.id,
             blockedSet,
-            PROFILE_LIST_SELECT,
+            PROFILE_CARD_SELECT,
             offset,
           );
 

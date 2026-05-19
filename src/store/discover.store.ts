@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { PostgrestFilterBuilder } from '@supabase/postgrest-js';
 import { User, FilterOptions, InterestedIn } from '@/types';
-import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
+import { PROFILE_CARD_SELECT } from '@/constants/profile-select';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { notifyLifecycleEmail, notifyUser } from '@/lib/notifications';
@@ -24,14 +24,23 @@ const interestedInToGender = (v: InterestedIn | undefined): string | null => {
   return null;
 };
 
+type WithLastSeenMs = { last_seen_ms: number; id: string };
+
 /** Stable ordering so the grid does not jump when refetched (random shuffle caused vigorous reordering). */
-function sortByLastSeenThenId<T extends { last_seen?: string | null; id: string }>(rows: T[]): T[] {
+function sortByLastSeenThenId<T extends WithLastSeenMs>(rows: T[]): T[] {
   return [...rows].sort((a, b) => {
-    const ta = a.last_seen ? new Date(a.last_seen).getTime() : 0;
-    const tb = b.last_seen ? new Date(b.last_seen).getTime() : 0;
-    if (tb !== ta) return tb - ta;
+    if (b.last_seen_ms !== a.last_seen_ms) return b.last_seen_ms - a.last_seen_ms;
     return a.id.localeCompare(b.id);
   });
+}
+
+function withLastSeenMs<T extends { last_seen?: string | null; id: string }>(
+  rows: T[],
+): (T & WithLastSeenMs)[] {
+  return rows.map((row) => ({
+    ...row,
+    last_seen_ms: row.last_seen ? new Date(row.last_seen).getTime() : 0,
+  }));
 }
 
 // Postgrest-js v2.49+ adds Result / RelationName / Relationships / Method — use `any` so the chain stays assignable without generated DB types.
@@ -184,7 +193,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       // until they upload a photo from Me → Edit profile.
       let query = supabase
         .from('profiles')
-        .select(PROFILE_LIST_SELECT as '*')
+        .select(PROFILE_CARD_SELECT as '*')
         .neq('id', userId)
         .eq('show_in_discover', true)
         .not('avatar_url', 'is', null)
@@ -267,7 +276,9 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
 
       // Online users first; offline keeps DB order (last_seen) so lists stay stable across refetches
       const online = processed.filter((u) => u.online_status === 'online');
-      const offline = sortByLastSeenThenId(processed.filter((u) => u.online_status !== 'online'));
+      const offline = sortByLastSeenThenId(
+        withLastSeenMs(processed.filter((u) => u.online_status !== 'online')),
+      );
       let result: User[] = [...online, ...offline];
 
       // ── Fallback: pad with liked users if results are sparse ─────────────
@@ -277,7 +288,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           const needed = PAGE_SIZE - result.length;
           let likedQuery = supabase
             .from('profiles')
-            .select(PROFILE_LIST_SELECT as '*')
+            .select(PROFILE_CARD_SELECT as '*')
             .in('id', likedIdsArr)
             .eq('show_in_discover', true)
             .not('avatar_url', 'is', null);
@@ -287,7 +298,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           const { data: likedData } = await likedQuery;
           if (likedData) {
             const likedProcessed = processRaw(likedData as Record<string, unknown>[]);
-            const likedUsers = sortByLastSeenThenId(likedProcessed);
+            const likedUsers = sortByLastSeenThenId(withLastSeenMs(likedProcessed));
             result = [...result, ...likedUsers];
           }
         }

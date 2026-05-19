@@ -51,6 +51,21 @@ export async function getCachedConversationSnapshot(
   };
 }
 
+export async function patchCachedConversationUnread(
+  userId: string,
+  conversationId: string,
+  unreadCount: number,
+): Promise<void> {
+  const snapshot = conversationSnapshotStore.get(userId);
+  if (snapshot) {
+    const next = snapshot.map((c) =>
+      c.id === conversationId ? { ...c, unread_count: unreadCount } : c,
+    );
+    lruSet(conversationSnapshotStore, userId, next);
+    lruSet(conversationStore, userId, next);
+  }
+}
+
 export async function replaceCachedConversations(
   userId: string,
   conversations: Conversation[],

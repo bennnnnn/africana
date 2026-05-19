@@ -168,6 +168,65 @@ export async function getCachedConversationSnapshot(
   });
 }
 
+/** Patch unread_count for one conversation in snapshot + per-row cache without rewriting the full list. */
+export async function patchCachedConversationUnread(
+  userId: string,
+  conversationId: string,
+  unreadCount: number,
+): Promise<void> {
+  if (!userId || !conversationId) return;
+  await runSerialized(async () => {
+    const db = await getDb();
+    if (!db) return;
+
+    const snapshotRow = await db.getFirstAsync<{ payload: string }>(
+      'SELECT payload FROM cached_conversation_snapshots WHERE user_id = ?',
+      userId,
+    );
+    if (snapshotRow?.payload) {
+      try {
+        const parsed = JSON.parse(snapshotRow.payload) as Conversation[];
+        if (Array.isArray(parsed)) {
+          let changed = false;
+          const next = parsed.map((c) => {
+            if (c.id !== conversationId) return c;
+            changed = true;
+            return { ...c, unread_count: unreadCount };
+          });
+          if (changed) {
+            await db.runAsync(
+              'UPDATE cached_conversation_snapshots SET payload = ? WHERE user_id = ?',
+              JSON.stringify(next),
+              userId,
+            );
+          }
+        }
+      } catch (e) {
+        console.warn('[chat-cache] patchCachedConversationUnread snapshot failed:', e);
+      }
+    }
+
+    const row = await db.getFirstAsync<{ payload: string }>(
+      'SELECT payload FROM cached_conversations WHERE user_id = ? AND conversation_id = ?',
+      userId,
+      conversationId,
+    );
+    if (row?.payload) {
+      try {
+        const conv = JSON.parse(row.payload) as Conversation;
+        await db.runAsync(
+          `UPDATE cached_conversations SET payload = ? WHERE user_id = ? AND conversation_id = ?`,
+          JSON.stringify({ ...conv, unread_count: unreadCount }),
+          userId,
+          conversationId,
+        );
+      } catch (e) {
+        console.warn('[chat-cache] patchCachedConversationUnread row failed:', e);
+      }
+    }
+  });
+}
+
 export async function replaceCachedConversations(
   userId: string,
   conversations: Conversation[],

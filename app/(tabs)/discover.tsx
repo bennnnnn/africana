@@ -30,6 +30,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { useDiscoverStore } from '@/store/discover.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { UserCard } from '@/components/discover/UserCard';
+import { OnlinePulseProvider } from '@/components/discover/OnlinePulseProvider';
 import { FilterSheet } from '@/components/discover/FilterSheet';
 import { QuickPreviewModal } from '@/components/discover/QuickPreviewModal';
 import { SkeletonCard } from '@/components/ui/Skeleton';
@@ -402,6 +403,7 @@ export default function DiscoverScreen() {
     );
 
   return (
+    <OnlinePulseProvider>
     <View style={s.screen}>
       {/* ── Full-screen scrollable grid (stays under header in z-order) ── */}
       <View style={[s.flex, s.listUnderHeader]}>
@@ -539,6 +541,7 @@ export default function DiscoverScreen() {
         onClose={handleClosePreview}
       />
     </View>
+    </OnlinePulseProvider>
   );
 }
 

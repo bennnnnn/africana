@@ -2,6 +2,8 @@ import type { Conversation, Message } from '@/types';
 
 export interface ChatStoreState {
   conversations: Conversation[];
+  /** O(1) membership check for realtime filters — rebuilt when conversation IDs change. */
+  conversationIdSet: Set<string>;
   messages: Record<string, Message[]>;
   /** True while we still believe there are older messages on the server. */
   hasMoreMessages: Record<string, boolean>;

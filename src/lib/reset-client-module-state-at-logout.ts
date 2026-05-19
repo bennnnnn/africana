@@ -5,6 +5,7 @@ import { clearAllChatCacheTables } from '@/lib/chat-cache';
 import { clearProfileSeedCache } from '@/lib/profile-seed-cache';
 import { resetAllLikesTabPagination } from '@/lib/likes-tab-pagination';
 import { resetChatModuleStateAtLogout } from '@/store/chat.store';
+import { useInboxTypingStore } from '@/store/inbox-typing.store';
 import { resetDiscoverModuleState } from '@/store/discover.store';
 import { resetPresenceModuleStateAtLogout } from '@/lib/app-presence-channel';
 import { resetLifecycleEmailQueue } from '@/lib/notifications';
@@ -23,6 +24,7 @@ export function resetClientModuleStateAtLogout(): void {
   resetProfileGalleryModuleState();
   resetAllLikesTabPagination();
   resetChatModuleStateAtLogout();
+  useInboxTypingStore.getState().clearAll();
   resetDiscoverModuleState();
   useActivityStore.getState().clearAll();
   useProfileBrowseStore.getState().clearOrderedUserIds();

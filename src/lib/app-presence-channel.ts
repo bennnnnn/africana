@@ -8,12 +8,22 @@ const TOPIC = 'app-global-presence-v1';
 let channel: RealtimeChannel | null = null;
 let joinedUserId: string | null = null;
 
+function setsEqual(a: ReadonlySet<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of b) {
+    if (!a.has(id)) return false;
+  }
+  return true;
+}
+
 function applyPresenceState(ch: RealtimeChannel): void {
   const state = ch.presenceState();
   const ids = new Set<string>();
   for (const key of Object.keys(state)) {
     if (key) ids.add(key);
   }
+  const prev = usePresenceStore.getState().peerOnlineIds;
+  if (setsEqual(prev, ids)) return;
   usePresenceStore.getState().setPeerOnlineIds(ids);
 }
 
