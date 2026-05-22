@@ -1,11 +1,9 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
+import React, { useRef } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Pressable,
   ActivityIndicator,
   Dimensions,
@@ -15,43 +13,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
-import { useAuthStore } from '@/store/auth.store';
 import {
   COLORS,
   RADIUS,
   FONT,
-  DEFAULT_AVATAR,
   MAX_PROFILE_PHOTOS,
   GENDER_OPTIONS,
-  INTERESTED_IN_OPTIONS,
   LOOKING_FOR_OPTIONS,
-  RELIGION_OPTIONS,
-  EDUCATION_OPTIONS,
-  MARITAL_STATUS_OPTIONS,
-  WANT_CHILDREN_YES_NO,
-  PHYSICAL_CONDITION_OPTIONS,
-  OCCUPATION_OPTIONS,
-  HAS_CHILDREN_OPTIONS,
 } from '@/constants';
-import { SliderPicker } from '@/components/ui/SliderPicker';
-import { DatePicker } from '@/components/ui/DatePicker';
-import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
-import * as ImagePicker from 'expo-image-picker';
-import { resolveCountryFromStored, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
-import { getProfileStrength } from '@/lib/profile-completion';
-import { oppositeInterestedIn } from '@/lib/gender-match';
-import type { Gender } from '@/types';
 import { ScreenTitle } from '@/components/ui/ScreenTitle';
 import { HeroPlaceholder } from '@/components/ui/HeroPlaceholder';
-import { appDialog } from '@/lib/app-dialog';
-import { UI_LABELS } from '@/constants/copy';
-import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
-import { EditModal, FieldRow, HOBBY_OPTIONS, em } from '@/components/me/MyProfileEditPrimitives';
-import { useMeProfileCultureData } from '@/hooks/use-me-profile-culture-data';
+import { FieldRow } from '@/components/me/MyProfileEditPrimitives';
+import { MyProfileEditModals } from '@/components/me/MyProfileEditModals';
+import { useMeProfileController } from '@/hooks/use-me-profile-controller';
+import { sectionForMissingKey } from '@/lib/me-profile-sections';
 
 const { width } = Dimensions.get('window');
 // Self-profile hero height. Shorter than a typical portrait dating photo so
@@ -60,86 +37,14 @@ const { width } = Dimensions.get('window');
 // lose the face to a center crop.
 const HERO_HEIGHT = width * 0.9;
 
-// ── Main screen ───────────────────────────────────────────────────────────────
 export default function MyProfileScreen() {
-  const { user, updateProfile, fetchProfile } = useAuthStore(
-    useShallow((s) => ({
-      user: s.user,
-      updateProfile: s.updateProfile,
-      fetchProfile: s.fetchProfile,
-    })),
-  );
-  const { cultureEthnicityOpts, cultureLanguageOpts, cultureLoading, loadCultureData } =
-    useMeProfileCultureData(user ?? null);
   const scrollRef = useRef<ScrollView>(null);
-  const heroPhotoScrollRef = useRef<ScrollView>(null);
   const sectionY = useRef<Record<string, number>>({});
-  const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
 
-  // Generic edit state
-  const [editText, setEditText] = useState('');
-  const [editSelect, setEditSelect] = useState<string | null>(null);
-  const [editMulti, setEditMulti] = useState<string[]>([]);
-  const [editBool, setEditBool] = useState<boolean | null>(null);
-  const [editHeight, setEditHeight] = useState(170);
-  const [editWeight, setEditWeight] = useState(70);
-  const [editDate, setEditDate] = useState<Date | null>(null);
-  const [editLocation, setEditLocation] = useState<Partial<LocationValue>>({});
-  const [editOriginLocation, setEditOriginLocation] = useState<Partial<LocationValue>>({});
-  const [photoUploading, setPhotoUploading] = useState(false);
-  const [heroPage, setHeroPage] = useState(0);
+  const ctrl = useMeProfileController();
+  const { user, display } = ctrl;
 
-  // Search within long lists
-  const [listSearch, setListSearch] = useState('');
-
-  useFocusEffect(
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization -- narrow deps: focus refetch only when user id changes
-    useCallback(() => {
-      if (!user?.id) return;
-      void fetchProfile(user.id);
-    }, [fetchProfile, user?.id]),
-  );
-
-  const avatarForHero = useMemo(() => {
-    if (!user) return '';
-    return (
-      user.avatar_url ||
-      (user.profile_photos ?? [])[0] ||
-      `${DEFAULT_AVATAR}${encodeURIComponent((user.full_name ?? '?').charAt(0))}`
-    );
-  }, [user]);
-
-  const heroPhotos = useMemo(() => {
-    if (!user) return [] as string[];
-    const list = (user.profile_photos ?? [])
-      .filter((u) => typeof u === 'string' && u.trim().length > 0)
-      .slice(0, MAX_PROFILE_PHOTOS);
-    if (list.length > 0) return list;
-    return avatarForHero ? [avatarForHero] : [];
-  }, [user, avatarForHero]);
-
-  const mainPhotoIndex = useMemo(() => {
-    if (!user) return 0;
-    const list = user.profile_photos ?? [];
-    if (list.length === 0) return 0;
-    if (user.avatar_url) {
-      const i = list.indexOf(user.avatar_url);
-      if (i >= 0) return i;
-    }
-    return 0;
-  }, [user]);
-
-  useEffect(() => {
-    if (!user || heroPhotos.length === 0 || width <= 0) return;
-    const idx = Math.min(mainPhotoIndex, heroPhotos.length - 1);
-    setHeroPage(idx);
-    requestAnimationFrame(() => {
-      heroPhotoScrollRef.current?.scrollTo({ x: idx * width, y: 0, animated: false });
-    });
-  }, [user?.id, mainPhotoIndex, heroPhotos.length]);
-
-  if (!user)
+  if (!user || !display) {
     return (
       <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <Ionicons name="person-outline" size={32} color={COLORS.primary} />
@@ -148,302 +53,80 @@ export default function MyProfileScreen() {
         </Text>
       </SafeAreaView>
     );
+  }
 
-  // ── Open helpers ───────────────────────────────────────────────────────────
-  const close = () => {
-    setEditing(null);
-    setListSearch('');
-  };
+  const {
+    photos,
+    location,
+    age,
+    isOnline,
+    religionLabel,
+    educationLabel,
+    maritalLabel,
+    wantChildrenLabel,
+    bodyTypeLabel,
+    occupationLabel,
+    interestedInLabel,
+    locationDisplay,
+    originDisplay,
+    livesInAfrica,
+    needsOriginForData,
+    completionPct,
+    nextMissing,
+  } = display;
 
-  const save = async (updates: Record<string, any>) => {
-    setSaving(true);
-    try {
-      await updateProfile(updates);
-      close();
-    } catch (e: any) {
-      appDialog({
-        title: 'Save failed',
-        message: e?.message ?? "Couldn't save changes. Try again.",
-        icon: 'alert-circle-outline',
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const openText = (k: string, v: string | null) => {
-    setEditing(k);
-    setEditText(v ?? '');
-    setListSearch('');
-  };
-  const openSelect = (k: string, v: string | null | undefined) => {
-    setEditing(k);
-    setEditSelect(v ?? null);
-    setListSearch('');
-  };
-  const openMulti = (k: string, v: string[]) => {
-    setEditing(k);
-    setEditMulti([...v]);
-  };
-  const openBool = (k: string, v: boolean | null) => {
-    setEditing(k);
-    setEditBool(v);
-  };
-
-  const openDate = () => {
-    setEditing('birthdate');
-    setEditDate(user.birthdate ? new Date(user.birthdate) : null);
-  };
-
-  const openLocation = () => {
-    const countryData = resolveCountryFromStored(user.country ?? '');
-    setEditing('location');
-    setEditLocation({
-      country: user.country ?? '',
-      countryCode: countryData?.code ?? '',
-      subdivision: user.state ?? '',
-      city: user.city ?? '',
-    });
-  };
-
-  const openOriginLocation = () => {
-    const countryData = resolveCountryFromStored(user.origin_country ?? '');
-    setEditing('origin_location');
-    setEditOriginLocation({
-      country: user.origin_country ?? '',
-      countryCode: countryData?.code ?? '',
-      subdivision: user.origin_state ?? '',
-      city: user.origin_city ?? '',
-    });
-  };
-
-  const confirmRemovePhoto = (photoUrl: string) => {
-    appDialog({
-      title: 'Remove photo',
-      message: 'Remove this photo from your profile?',
-      icon: 'trash-outline',
-      actions: [
-        { label: UI_LABELS.cancel, style: 'cancel' },
-        {
-          label: UI_LABELS.delete,
-          style: 'destructive',
-          onPress: async () => {
-            const current = user.profile_photos ?? [];
-            const updated = current.filter((p) => p !== photoUrl);
-            try {
-              await updateProfile({
-                profile_photos: updated,
-                avatar_url: updated[0] ?? null,
-              });
-            } catch (e: unknown) {
-              appDialog({
-                title: 'Remove failed',
-                message: e instanceof Error ? e.message : "Couldn't remove the photo. Try again.",
-                icon: 'alert-circle-outline',
-              });
-            }
-          },
-        },
-      ],
-    });
-  };
-
-  const pickAndUploadPhoto = async () => {
-    const currentPhotos = user.profile_photos ?? [];
-    const remaining = MAX_PROFILE_PHOTOS - currentPhotos.length;
-    if (remaining <= 0) {
-      appDialog({
-        title: 'Photo limit',
-        message: `You can have up to ${MAX_PROFILE_PHOTOS} photos. Long press a photo below to remove one.`,
-      });
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      quality: 0.8,
-    });
-    if (result.canceled || result.assets.length === 0) return;
-    setPhotoUploading(true);
-    try {
-      const picked = result.assets.slice(0, remaining);
-      const { approved, rejected } = await validateFacesInPhotos(picked.map((a) => a.uri));
-      if (rejected.length > 0) {
-        const { title, message } = faceRejectionMessage(rejected.length, approved.length);
-        appDialog({ title, message, icon: 'happy-outline' });
-      }
-      const toUpload = picked.filter((a) => approved.includes(a.uri));
-      if (toUpload.length === 0) {
-        setPhotoUploading(false);
-        return;
-      }
-
-      const uploaded: string[] = [];
-      for (const asset of toUpload) {
-        const out = await uploadToAvatarsBucket(user.id, asset.uri, asset.mimeType);
-        if (!('error' in out)) uploaded.push(out.publicUrl);
-      }
-      if (uploaded.length === 0) throw new Error("Couldn't upload photos. Try again.");
-      const updatedPhotos = [...currentPhotos, ...uploaded];
-      await updateProfile({
-        profile_photos: updatedPhotos,
-        avatar_url: currentPhotos.length === 0 ? updatedPhotos[0] : user.avatar_url,
-      });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Couldn't upload photos. Try again.";
-      appDialog({ title: 'Upload failed', message: msg, icon: 'cloud-offline-outline' });
-    } finally {
-      setPhotoUploading(false);
-    }
-  };
-
-  const openEthnicity = async () => {
-    setEditing('ethnicity');
-    setEditText(user.ethnicity ?? '');
-    setListSearch('');
-    await loadCultureData();
-  };
-  const openLanguages = async () => {
-    setEditing('languages');
-    setEditMulti([...(user.languages ?? [])]);
-    setListSearch('');
-    await loadCultureData();
-  };
-
-  // ── Display values ─────────────────────────────────────────────────────────
-  const photos = user.profile_photos ?? [];
-  const location = [user.city, user.state, user.country].filter(Boolean).join(', ');
-  const today = new Date();
-  const bday = user.birthdate ? new Date(user.birthdate) : null;
-  const age = bday
-    ? today.getFullYear() -
-      bday.getFullYear() -
-      (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
-    : null;
-  const isOnline = user.online_status === 'online';
-
-  const religionLabel = user.religion
-    ? (RELIGION_OPTIONS.find((o) => o.value === user.religion)?.label ?? user.religion)
-    : null;
-  const educationLabel = user.education
-    ? (EDUCATION_OPTIONS.find((o) => o.value === user.education)?.label ?? user.education)
-    : null;
-  const maritalLabel = user.marital_status
-    ? (MARITAL_STATUS_OPTIONS.find((o) => o.value === user.marital_status)?.label ??
-      user.marital_status)
-    : null;
-  const wantChildrenLabel = user.want_children
-    ? (WANT_CHILDREN_YES_NO.find((o) => o.value === user.want_children)?.label ??
-      user.want_children)
-    : null;
-  const bodyTypeLabel = user.body_type
-    ? (PHYSICAL_CONDITION_OPTIONS.find((o) => o.value === user.body_type)?.label ?? user.body_type)
-    : null;
-  const occupationLabel = user.occupation
-    ? (OCCUPATION_OPTIONS.find((o) => o.value === user.occupation)?.label ?? user.occupation)
-    : null;
-  const interestedInLabel =
-    INTERESTED_IN_OPTIONS.find((o) => o.value === user.interested_in)?.label ?? null;
-  const locationDisplay = [user.city, user.state, user.country].filter(Boolean).join(', ');
-  const originDisplay = [user.origin_city, user.origin_state, user.origin_country]
-    .filter(Boolean)
-    .join(', ');
-
-  // Detect if diaspora user has no origin set (needed for ethnicity/language data)
-  const livesInAfrica = user.country
-    ? AFRICAN_COUNTRY_CODES.has(resolveCountryFromStored(user.country)?.code ?? '')
-    : false;
-  const hasAfricanOrigin =
-    !!user.origin_country &&
-    AFRICAN_COUNTRY_CODES.has(resolveCountryFromStored(user.origin_country)?.code ?? '');
-  const needsOriginForData = !livesInAfrica && !hasAfricanOrigin;
-
-  const strength = getProfileStrength(user);
-  const completionPct = strength.percent;
-  const nextMissing = strength.nextMissing;
+  const {
+    heroPhotoScrollRef,
+    heroPhotos,
+    heroPage,
+    setHeroPage,
+    saving,
+    editing,
+    editText,
+    setEditText,
+    editSelect,
+    setEditSelect,
+    editMulti,
+    setEditMulti,
+    editBool,
+    setEditBool,
+    editHeight,
+    setEditHeight,
+    editWeight,
+    setEditWeight,
+    editDate,
+    setEditDate,
+    editLocation,
+    setEditLocation,
+    editOriginLocation,
+    setEditOriginLocation,
+    photoUploading,
+    listSearch,
+    setListSearch,
+    close,
+    save,
+    openText,
+    openSelect,
+    openMulti,
+    openBool,
+    openDate,
+    openLocation,
+    openOriginLocation,
+    confirmRemovePhoto,
+    pickAndUploadPhoto,
+    openEthnicity,
+    openLanguages,
+    openHeight,
+    openWeight,
+    cultureEthnicityOpts,
+    cultureLanguageOpts,
+    cultureLoading,
+  } = ctrl;
 
   const scrollToSection = (id: string) => {
     const y = sectionY.current[id];
     if (y == null) return;
     scrollRef.current?.scrollTo({ y: Math.max(0, y - 10), animated: true });
-  };
-
-  /** Map a `getProfileStrength` item key onto the on-screen section anchor. */
-  const sectionForMissingKey = (key: string | undefined): string => {
-    switch (key) {
-      case 'photo':
-        return 'photos';
-      case 'bio':
-        return 'about';
-      case 'religion':
-      case 'ethnicity':
-      case 'languages':
-        return 'personal';
-      case 'education':
-      case 'occupation':
-        return 'work';
-      case 'height':
-        return 'physical';
-      case 'hobbies':
-        return 'hobbies';
-      default:
-        return 'about';
-    }
-  };
-
-  // ── Reusable select list renderer ─────────────────────────────────────────
-  const renderSelectList = (
-    options: { value: string; label: string; emoji?: string }[],
-    current: string | null,
-    onPick: (v: string | null) => void,
-    withSearch = false,
-  ) => {
-    const filtered =
-      withSearch && listSearch.trim()
-        ? options.filter((o) => o.label.toLowerCase().includes(listSearch.toLowerCase()))
-        : options;
-    return (
-      <View>
-        {withSearch && (
-          <View style={em.searchRow}>
-            <Ionicons name="search-outline" size={16} color="#999" />
-            <TextInput
-              value={listSearch}
-              onChangeText={setListSearch}
-              placeholder="Search..."
-              placeholderTextColor="#BBB"
-              style={{ flex: 1, fontSize: 14, color: '#111', marginLeft: 8 }}
-              autoCorrect={false}
-            />
-          </View>
-        )}
-        <View style={{ gap: 8 }}>
-          {filtered.map((opt) => {
-            const on = current === opt.value;
-            return (
-              <Pressable
-                key={opt.value}
-                onPress={() => onPick(on ? null : opt.value)}
-                style={[em.option, on && em.optionOn]}
-              >
-                {opt.emoji ? (
-                  <Text style={{ fontSize: 18, marginRight: 10 }}>{opt.emoji}</Text>
-                ) : null}
-                <Text style={[em.optionTxt, on && em.optionTxtOn]}>{opt.label}</Text>
-                {on && (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={18}
-                    color={COLORS.success}
-                    style={{ marginLeft: 'auto' }}
-                  />
-                )}
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-    );
   };
 
   return (
@@ -507,7 +190,7 @@ export default function MyProfileScreen() {
                 Your profile is hidden
               </Text>
               <Text style={{ fontSize: FONT.xs, color: COLORS.textSecondary, marginTop: 2 }}>
-                You won't appear in Discover or Online. If this was unexpected, contact support — we'll review it.
+                You won&apos;t appear in Discover or Online. If this was unexpected, contact support — we&apos;ll review it.
               </Text>
             </View>
             <TouchableOpacity
@@ -833,10 +516,7 @@ export default function MyProfileScreen() {
               icon="resize-outline"
               label="Height"
               value={user.height_cm ? `${(user.height_cm / 100).toFixed(2)} m` : null}
-              onEdit={() => {
-                setEditing('height');
-                setEditHeight(user.height_cm ?? 170);
-              }}
+              onEdit={openHeight}
             />
             <FieldRow
               icon="body-outline"
@@ -848,10 +528,7 @@ export default function MyProfileScreen() {
               icon="barbell-outline"
               label="Weight (optional)"
               value={user.weight_kg ? `${user.weight_kg} kg` : null}
-              onEdit={() => {
-                setEditing('weight_kg');
-                setEditWeight(user.weight_kg ?? 70);
-              }}
+              onEdit={openWeight}
             />
           </View>
         </View>
@@ -1036,505 +713,39 @@ export default function MyProfileScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ════ BIO ════ */}
-      <EditModal
-        visible={editing === 'bio'}
-        title="About Me"
-        onClose={close}
+      <MyProfileEditModals
+        user={user}
+        editing={editing}
         saving={saving}
-        onSave={() => save({ bio: editText.trim() || null })}
-      >
-        <TextInput
-          value={editText}
-          onChangeText={setEditText}
-          multiline
-          numberOfLines={6}
-          maxLength={300}
-          placeholder="Tell others a little about yourself..."
-          placeholderTextColor={COLORS.textMuted}
-          style={em.textArea}
-          autoFocus
-        />
-        <Text style={{ fontSize: 11, color: COLORS.textMuted, textAlign: 'right', marginTop: 6 }}>
-          {editText.length}/300{editText.trim().length > 0 && editText.trim().length < 20 && ' · Add at least 20 characters'}
-        </Text>
-        {/* Example starter chips */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-          {[
-            'Sundays at the market 🌿',
-            'Lifelong Eagles fan 🦅',
-            'First-gen Ghanaian-American 🇬🇭',
-          ].map((example) => (
-            <TouchableOpacity
-              key={example}
-              onPress={() => setEditText(example)}
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 16,
-                backgroundColor: COLORS.savanna,
-                borderWidth: 1,
-                borderColor: COLORS.border,
-              }}
-            >
-              <Text style={{ fontSize: 11, color: COLORS.textSecondary }}>{example}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </EditModal>
+        close={close}
+        save={save}
+        editText={editText}
+        setEditText={setEditText}
+        editSelect={editSelect}
+        setEditSelect={setEditSelect}
+        editMulti={editMulti}
+        setEditMulti={setEditMulti}
+        editBool={editBool}
+        setEditBool={setEditBool}
+        editHeight={editHeight}
+        setEditHeight={setEditHeight}
+        editWeight={editWeight}
+        setEditWeight={setEditWeight}
+        editDate={editDate}
+        setEditDate={setEditDate}
+        editLocation={editLocation}
+        setEditLocation={setEditLocation}
+        editOriginLocation={editOriginLocation}
+        setEditOriginLocation={setEditOriginLocation}
+        listSearch={listSearch}
+        setListSearch={setListSearch}
+        needsOriginForData={needsOriginForData}
+        openOriginLocation={openOriginLocation}
+        cultureEthnicityOpts={cultureEthnicityOpts}
+        cultureLanguageOpts={cultureLanguageOpts}
+        cultureLoading={cultureLoading}
+      />
 
-      {/* ════ LOCATION ════ */}
-      <EditModal
-        visible={editing === 'location'}
-        title="Where do you live?"
-        onClose={close}
-        saving={saving}
-        onSave={() =>
-          save({
-            country: editLocation.country ?? user.country,
-            state: editLocation.subdivision?.trim() || null,
-            city: editLocation.city?.trim() || null,
-          })
-        }
-      >
-        <LocationPicker value={editLocation} onChange={setEditLocation} />
-      </EditModal>
-
-      {/* ════ ORIGIN ════ */}
-      <EditModal
-        visible={editing === 'origin_location'}
-        title="Origin"
-        onClose={close}
-        saving={saving}
-        onSave={() =>
-          save({
-            origin_country: editOriginLocation.country?.trim() || null,
-            origin_state: editOriginLocation.subdivision?.trim() || null,
-            origin_city: editOriginLocation.city?.trim() || null,
-          })
-        }
-      >
-        <Text
-          style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 16, lineHeight: 20 }}
-        >
-          Setting your origin enables ethnicity and language options specific to your country.
-        </Text>
-        <LocationPicker value={editOriginLocation} onChange={setEditOriginLocation} />
-      </EditModal>
-
-      {/* ════ BIRTHDATE ════ */}
-      <EditModal
-        visible={editing === 'birthdate'}
-        title="Date of Birth"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ birthdate: editDate ? editDate.toISOString().split('T')[0] : null })}
-      >
-        <DatePicker
-          label="Date of Birth"
-          value={editDate}
-          onChange={setEditDate}
-          placeholder="Tap to select"
-        />
-      </EditModal>
-
-      {/* ════ HEIGHT — same slider as onboarding ════ */}
-      <EditModal
-        visible={editing === 'height'}
-        title="Height"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ height_cm: editHeight })}
-      >
-        <SliderPicker
-          label="Height"
-          value={editHeight}
-          min={120}
-          max={220}
-          unit=""
-          formatValue={(v) => `${(v / 100).toFixed(2)} m`}
-          onChange={setEditHeight}
-        />
-      </EditModal>
-
-      {/* ════ WEIGHT ════ */}
-      <EditModal
-        visible={editing === 'weight_kg'}
-        title="Weight"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ weight_kg: editWeight })}
-      >
-        <SliderPicker
-          label="Weight"
-          value={editWeight}
-          min={35}
-          max={180}
-          unit="kg"
-          onChange={setEditWeight}
-        />
-      </EditModal>
-
-      {/* ════ ETHNICITY — cultural data list matching onboarding ════ */}
-      <EditModal
-        visible={editing === 'ethnicity'}
-        title="Ethnicity"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ ethnicity: editText.trim() || null })}
-      >
-        {cultureLoading ? (
-          <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
-        ) : cultureEthnicityOpts.length > 0 ? (
-          renderSelectList(
-            cultureEthnicityOpts.map((e) => ({ value: e, label: e })),
-            editText || null,
-            (v) => setEditText(v ?? ''),
-            true,
-          )
-        ) : needsOriginForData ? (
-          <TouchableOpacity
-            onPress={() => {
-              close();
-              setTimeout(openOriginLocation, 300);
-            }}
-            style={{
-              borderRadius: 14,
-              borderWidth: 1,
-              borderStyle: 'dashed',
-              borderColor: COLORS.emptyFieldBorder,
-              backgroundColor: COLORS.emptyFieldSurface,
-              padding: 18,
-              alignItems: 'center',
-              gap: 10,
-            }}
-          >
-            <Ionicons name="flag-outline" size={28} color={COLORS.emptyField} />
-            <Text
-              style={{
-                fontSize: 15,
-                fontWeight: '700',
-                color: COLORS.emptyField,
-                textAlign: 'center',
-              }}
-            >
-              Set your origin first
-            </Text>
-            <Text
-              style={{
-                fontSize: 13,
-                color: COLORS.textSecondary,
-                textAlign: 'center',
-                lineHeight: 18,
-              }}
-            >
-              Tap to set your origin country and unlock ethnicity options for your heritage.
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View>
-            <TextInput
-              value={editText}
-              onChangeText={setEditText}
-              autoFocus
-              placeholder="e.g. Yoruba, Amhara, Zulu, Habesha…"
-              placeholderTextColor={COLORS.textMuted}
-              style={em.input}
-            />
-            <Text style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 8 }}>
-              Type your ethnicity if it{"'"}s not in the list
-            </Text>
-          </View>
-        )}
-      </EditModal>
-
-      {/* ════ LANGUAGES — cultural chip list matching onboarding ════ */}
-      <EditModal
-        visible={editing === 'languages'}
-        title="Languages"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ languages: editMulti })}
-      >
-        {cultureLoading ? (
-          <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
-        ) : cultureLanguageOpts.suggested.length > 0 || cultureLanguageOpts.all.length > 0 ? (
-          <View>
-            {cultureLanguageOpts.suggested.length > 0 && (
-              <View style={{ marginBottom: 20 }}>
-                <Text style={em.groupLabel}>Suggested languages</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                  {cultureLanguageOpts.suggested.map((lang) => {
-                    const on = editMulti.includes(lang);
-                    return (
-                      <Pressable
-                        key={lang}
-                        onPress={() =>
-                          setEditMulti((p) => (on ? p.filter((v) => v !== lang) : [...p, lang]))
-                        }
-                        style={[em.chip, on && em.chipOn]}
-                      >
-                        <Text style={[em.chipTxt, on && em.chipTxtOn]}>{lang}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-            {cultureLanguageOpts.all.filter((l) => !cultureLanguageOpts.suggested.includes(l))
-              .length > 0 && (
-              <View>
-                <Text style={em.groupLabel}>More languages</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                  {cultureLanguageOpts.all
-                    .filter((l) => !cultureLanguageOpts.suggested.includes(l))
-                    .map((lang) => {
-                      const on = editMulti.includes(lang);
-                      return (
-                        <Pressable
-                          key={lang}
-                          onPress={() =>
-                            setEditMulti((p) => (on ? p.filter((v) => v !== lang) : [...p, lang]))
-                          }
-                          style={[em.chip, on && em.chipOn]}
-                        >
-                          <Text style={[em.chipTxt, on && em.chipTxtOn]}>{lang}</Text>
-                        </Pressable>
-                      );
-                    })}
-                </View>
-              </View>
-            )}
-          </View>
-        ) : needsOriginForData ? (
-          <TouchableOpacity
-            onPress={() => {
-              close();
-              setTimeout(openOriginLocation, 300);
-            }}
-            style={{
-              borderRadius: 14,
-              borderWidth: 1,
-              borderStyle: 'dashed',
-              borderColor: COLORS.emptyFieldBorder,
-              backgroundColor: COLORS.emptyFieldSurface,
-              padding: 18,
-              alignItems: 'center',
-              gap: 10,
-            }}
-          >
-            <Ionicons name="flag-outline" size={28} color={COLORS.emptyField} />
-            <Text
-              style={{
-                fontSize: 15,
-                fontWeight: '700',
-                color: COLORS.emptyField,
-                textAlign: 'center',
-              }}
-            >
-              Set your origin first
-            </Text>
-            <Text
-              style={{
-                fontSize: 13,
-                color: COLORS.textSecondary,
-                textAlign: 'center',
-                lineHeight: 18,
-              }}
-            >
-              Tap to set your origin country and unlock language options for your heritage.
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View>
-            <TextInput
-              value={editMulti.join(', ')}
-              onChangeText={(t) =>
-                setEditMulti(
-                  t
-                    .split(',')
-                    .map((l) => l.trim())
-                    .filter(Boolean),
-                )
-              }
-              autoFocus
-              placeholder="e.g. English, Amharic, French"
-              placeholderTextColor={COLORS.textMuted}
-              style={em.input}
-            />
-            <Text style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 8 }}>
-              Separate with commas
-            </Text>
-          </View>
-        )}
-      </EditModal>
-
-      {/* ════ OCCUPATION — from OCCUPATION_OPTIONS like onboarding ════ */}
-      <EditModal
-        visible={editing === 'occupation'}
-        title="Occupation"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ occupation: editSelect })}
-      >
-        {renderSelectList(OCCUPATION_OPTIONS as any, editSelect, setEditSelect, true)}
-      </EditModal>
-
-      {/* ════ GENDER ════ */}
-      <EditModal
-        visible={editing === 'gender'}
-        title="I am a"
-        onClose={close}
-        saving={saving}
-        onSave={() =>
-          save({
-            gender: editSelect,
-            interested_in: oppositeInterestedIn(editSelect as Gender),
-          })
-        }
-      >
-        {renderSelectList(GENDER_OPTIONS, editSelect, setEditSelect)}
-      </EditModal>
-
-      {/* ════ INTERESTED IN ════ */}
-      <EditModal
-        visible={editing === 'interested_in'}
-        title="Interested in"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ interested_in: editSelect })}
-      >
-        {renderSelectList(INTERESTED_IN_OPTIONS, editSelect, setEditSelect)}
-      </EditModal>
-
-      {/* ════ RELIGION ════ */}
-      <EditModal
-        visible={editing === 'religion'}
-        title="Religion"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ religion: editSelect })}
-      >
-        {renderSelectList(RELIGION_OPTIONS, editSelect, setEditSelect)}
-      </EditModal>
-
-      {/* ════ EDUCATION ════ */}
-      <EditModal
-        visible={editing === 'education'}
-        title="Highest Education"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ education: editSelect })}
-      >
-        {renderSelectList(EDUCATION_OPTIONS as any, editSelect, setEditSelect)}
-      </EditModal>
-
-      {/* ════ MARITAL STATUS ════ */}
-      <EditModal
-        visible={editing === 'marital_status'}
-        title="Marital Status"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ marital_status: editSelect })}
-      >
-        {renderSelectList(MARITAL_STATUS_OPTIONS, editSelect, setEditSelect)}
-      </EditModal>
-
-      {/* ════ BODY TYPE ════ */}
-      <EditModal
-        visible={editing === 'body_type'}
-        title="Body Type"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ body_type: editSelect })}
-      >
-        {renderSelectList(PHYSICAL_CONDITION_OPTIONS as any, editSelect, setEditSelect)}
-      </EditModal>
-
-      {/* ════ WANT CHILDREN ════ */}
-      <EditModal
-        visible={editing === 'want_children'}
-        title="Want Children?"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ want_children: editSelect })}
-      >
-        {renderSelectList(WANT_CHILDREN_YES_NO, editSelect, setEditSelect)}
-      </EditModal>
-
-      {/* ════ HAS CHILDREN ════ */}
-      <EditModal
-        visible={editing === 'has_children'}
-        title="Has children"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ has_children: editBool })}
-      >
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          {HAS_CHILDREN_OPTIONS.map((opt) => {
-            const on = editBool === (opt.value === 'true');
-            return (
-              <Pressable
-                key={opt.value}
-                onPress={() => setEditBool(opt.value === 'true')}
-                style={[em.bigChip, on && em.bigChipOn]}
-              >
-                <Text style={[em.bigChipTxt, on && em.bigChipTxtOn]}>{opt.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </EditModal>
-
-      {/* ════ LOOKING FOR ════ */}
-      <EditModal
-        visible={editing === 'looking_for'}
-        title="Looking For"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ looking_for: editMulti })}
-      >
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-          {LOOKING_FOR_OPTIONS.map((opt) => {
-            const on = editMulti.includes(opt.value);
-            return (
-              <Pressable
-                key={opt.value}
-                onPress={() =>
-                  setEditMulti((p) => (on ? p.filter((v) => v !== opt.value) : [...p, opt.value]))
-                }
-                style={[em.chip, on && em.chipOn]}
-              >
-                <Text style={[em.chipTxt, on && em.chipTxtOn]}>{opt.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </EditModal>
-
-      {/* ════ HOBBIES ════ */}
-      <EditModal
-        visible={editing === 'hobbies'}
-        title="Hobbies & Interests"
-        onClose={close}
-        saving={saving}
-        onSave={() => save({ hobbies: editMulti })}
-      >
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-          {HOBBY_OPTIONS.map((h) => {
-            const on = editMulti.includes(h);
-            return (
-              <Pressable
-                key={h}
-                onPress={() => setEditMulti((p) => (on ? p.filter((v) => v !== h) : [...p, h]))}
-                style={[em.chip, on && em.chipOn]}
-              >
-                <Text style={[em.chipTxt, on && em.chipTxtOn]}>{h}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </EditModal>
     </SafeAreaView>
   );
 }

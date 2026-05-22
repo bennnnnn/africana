@@ -10,7 +10,10 @@
     "web": "expo start --web",
     "test": "jest",
     "test:watch": "jest --watch",
+    "typecheck": "tsc --noEmit",
+    "types:gen": "bash scripts/gen-database-types.sh",
     "lint": "eslint . --ext .ts,.tsx",
+    "lint:ci": "eslint \"app/**/*.{ts,tsx}\" \"src/**/*.{ts,tsx}\" \"__tests__/**/*.ts\" --quiet",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write \"**/*.{ts,tsx,json}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json}\""

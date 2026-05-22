@@ -3,19 +3,19 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const cors = {
-  'Access-Control-Allow-Origin': '*',
+/** Mobile clients do not rely on browser CORS; avoid wildcard origin. */
+const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: cors });
+    return new Response('ok', { headers: CORS_HEADERS });
   }
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'method_not_allowed' }), {
       status: 405,
-      headers: { ...cors, 'Content-Type': 'application/json' },
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
 
@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
   if (!authHeader?.startsWith('Bearer ')) {
     return new Response(JSON.stringify({ error: 'missing_authorization' }), {
       status: 401,
-      headers: { ...cors, 'Content-Type': 'application/json' },
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
 
@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   if (userErr || !user?.id) {
     return new Response(JSON.stringify({ error: 'invalid_token' }), {
       status: 401,
-      headers: { ...cors, 'Content-Type': 'application/json' },
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
 
@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
   if (storageErr) {
     return new Response(JSON.stringify({ error: storageErr.message }), {
       status: 500,
-      headers: { ...cors, 'Content-Type': 'application/json' },
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
 
@@ -54,13 +54,13 @@ Deno.serve(async (req) => {
   if (rpcErr) {
     return new Response(JSON.stringify({ error: rpcErr.message }), {
       status: 500,
-      headers: { ...cors, 'Content-Type': 'application/json' },
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
 
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
-    headers: { ...cors, 'Content-Type': 'application/json' },
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
 });
 

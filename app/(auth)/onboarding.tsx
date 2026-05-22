@@ -721,7 +721,7 @@ export default function OnboardingScreen() {
                 ))}
               </View>
               {step3Errors.interestedIn && (
-                <Text style={s.fieldError}>Please select who you're interested in</Text>
+                <Text style={s.fieldError}>Please select who you&apos;re interested in</Text>
               )}
             </View>
           )}

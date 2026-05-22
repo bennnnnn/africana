@@ -29,6 +29,11 @@ export interface ChatStoreState {
   ) => Promise<{ ok: true; conversationId: string } | { ok: false; reason: 'blocked' | 'error' }>;
   markMessagesRead: (conversationId: string, userId: string) => Promise<void>;
   addMessage: (conversationId: string, message: Message) => void;
+  /** Patch inbox preview + unread from a realtime INSERT without refetching all conversations. */
+  applyInboundMessagePreview: (
+    conversationId: string,
+    preview: { senderId: string; content?: string; createdAt: string },
+  ) => void;
   applyMessageUpdate: (conversationId: string, message: Message) => void;
   removeMessage: (conversationId: string, messageId: string) => void;
 }

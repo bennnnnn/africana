@@ -60,6 +60,7 @@ import { useChatVisibilitySync } from '@/hooks/use-chat-visibility-sync';
 import { SPRING, SNAP_OUT } from '@/lib/motion';
 import { generateIcebreakers, type Icebreaker } from '@/lib/icebreakers';
 import haptics from '@/lib/haptics';
+import { showLikeToggleFailure } from '@/lib/discover-like-result';
 import * as Clipboard from 'expo-clipboard';
 import { normalizeRouteParam } from '@/lib/chat-route-utils';
 import {
@@ -812,8 +813,12 @@ export default function ChatScreen() {
       return;
     }
     if (!wasLiked) haptics.tapLight();
-    await toggleLike(user.id, peer.id);
-    if (!wasLiked && !useDiscoverStore.getState().likedUserIds.has(peer.id)) {
+    const result = await toggleLike(user.id, peer.id);
+    if (!result.ok) {
+      showLikeToggleFailure(result);
+      return;
+    }
+    if (!wasLiked && !result.matched && !useDiscoverStore.getState().likedUserIds.has(peer.id)) {
       return;
     }
     showToast({ message: wasLiked ? UI_TOAST.likeRemoved : UI_TOAST.liked });

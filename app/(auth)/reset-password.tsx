@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { COLORS } from '@/constants';
 import { appDialog } from '@/lib/app-dialog';
+import { MIN_PASSWORD_LENGTH, validatePassword } from '@/lib/validation';
 
 export default function ResetPasswordScreen() {
   const params = useLocalSearchParams<{ url?: string }>();
@@ -49,10 +50,11 @@ export default function ResetPasswordScreen() {
 
   const handleReset = async () => {
     if (restoringSession) return;
-    if (password.length < 6) {
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.valid) {
       appDialog({
         title: 'Weak password',
-        message: 'Password must be at least 6 characters.',
+        message: passwordCheck.message ?? 'Password is too weak.',
         icon: 'key-outline',
       });
       return;
@@ -163,7 +165,7 @@ export default function ResetPasswordScreen() {
               onChangeText={setPassword}
               isPassword
               leftIcon="lock-closed-outline"
-              placeholder="Min. 6 characters"
+              placeholder={`Min. ${MIN_PASSWORD_LENGTH} characters`}
               autoFocus
             />
             <Input

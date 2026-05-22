@@ -18,6 +18,7 @@ import { useDiscoverStore } from '@/store/discover.store';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { UI_TOAST } from '@/constants/copy';
 import haptics from '@/lib/haptics';
+import { showLikeToggleFailure } from '@/lib/discover-like-result';
 
 // ─── Floating action circle — identical to profile screen ────────────────────
 const FLOAT_SIZE = 56;
@@ -254,9 +255,12 @@ export function QuickPreviewModal({ visible, users, startIndex, onClose }: Quick
     if (!user || !currentUser || isOwnProfile) return;
     haptics.tapLight();
     const wasLiked = isLiked;
-    const isMatch = await toggleLike(currentUser.id, user.id);
-    // Only advance if the action succeeded — toggleLike returns false when
-    // blocked, rate-limited, or the insert failed (and shows its own dialog).
+    const result = await toggleLike(currentUser.id, user.id);
+    if (!result.ok) {
+      showLikeToggleFailure(result);
+      return;
+    }
+    const isMatch = result.matched;
     const succeeded = wasLiked || isMatch || isLiked !== wasLiked;
     if (succeeded) {
       showToast({

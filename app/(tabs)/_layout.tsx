@@ -148,15 +148,23 @@ export default function TabLayout() {
           sender_id?: string;
           conversation_id?: string;
           content?: string;
+          created_at?: string;
         };
         // Drop messages from conversations this user is not in.
-        if (
-          message.conversation_id &&
-          !useChatStore.getState().conversationIdSet.has(message.conversation_id)
-        ) {
+        const convId = message.conversation_id;
+        if (!convId) return;
+
+        const chat = useChatStore.getState();
+        if (!chat.conversationIdSet.has(convId)) {
+          scheduleConvRefresh();
           return;
         }
-        scheduleConvRefresh();
+
+        chat.applyInboundMessagePreview(convId, {
+          senderId: message.sender_id ?? '',
+          content: message.content,
+          createdAt: message.created_at ?? new Date().toISOString(),
+        });
         // Foreground ping rationale: see docs/foreground-notifications.md
         if (isViewingConversation(message.conversation_id)) return;
         if (!allowIncomingMessageNotificationCue(useAuthStore.getState().settings)) return;

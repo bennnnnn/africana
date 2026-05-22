@@ -76,7 +76,7 @@ export function ChatComposerArea({
         <Text
           style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 }}
         >
-          You've used all {quotaCap ?? 10} free messages today. Upgrade to Africana Pro for
+          You&apos;ve used all {quotaCap ?? 10} free messages today. Upgrade to Africana Pro for
           unlimited.
         </Text>
       </View>

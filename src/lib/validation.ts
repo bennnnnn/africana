@@ -15,9 +15,14 @@ export function validateEmail(value: string): ValidationResult {
   return { valid: true };
 }
 
+/** Keep in sync with Supabase Auth password policy (Dashboard → Auth). */
+export const MIN_PASSWORD_LENGTH = 12;
+
 export function validatePassword(value: string): ValidationResult {
   if (!value) return { valid: false, message: 'Password is required.' };
-  if (value.length < 6) return { valid: false, message: 'Use at least 6 characters.' };
+  if (value.length < MIN_PASSWORD_LENGTH) {
+    return { valid: false, message: `Use at least ${MIN_PASSWORD_LENGTH} characters.` };
+  }
   return { valid: true };
 }
 

@@ -5,14 +5,13 @@ import { PROFILE_CARD_SELECT } from '@/constants/profile-select';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { notifyLifecycleEmail, notifyUser } from '@/lib/notifications';
-import { appDialog } from '@/lib/app-dialog';
+import type { LikeToggleResult } from '@/lib/discover-like-result';
 import { maybeWarnLikeQuota } from '@/lib/rate-limit-warn';
-import { gateSendLike, showFreeLimitDialog } from '@/lib/free-quota';
+import { gateSendLike } from '@/lib/free-quota';
 import { track, EVENTS } from '@/lib/analytics';
 import { isBlockedRelationship } from '@/lib/social-actions';
 import { likesPathSegmentForNotifyType } from '@/constants/likes-routes';
 import { classifyLikesInsertError } from '@/lib/map-likes-insert-error';
-import { UI_TOAST } from '@/constants/copy';
 import { getOnlineFreshnessCutoffISO, getEffectivePresence } from '@/lib/utils';
 import { fetchSymmetricBlockedPeerIds } from '@/lib/block-queries';
 import { usePresenceStore } from '@/store/presence.store';
@@ -100,7 +99,7 @@ interface DiscoverState {
   resetFilters: () => void;
   clearFetchError: () => void;
   fetchUsers: (params: DiscoverFetchUsersParams) => Promise<void>;
-  toggleLike: (fromUserId: string, toUserId: string) => Promise<boolean>;
+  toggleLike: (fromUserId: string, toUserId: string) => Promise<LikeToggleResult>;
   fetchLikedUserIds: (userId: string) => Promise<void>;
   subscribeToOnlineStatus: () => void;
   unsubscribeFromOnlineStatus: () => void;
@@ -163,7 +162,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     try {
       const today = new Date();
 
-      // ── Blocks + liked IDs: fetch fresh on reset or user switch, reuse cache on pagination ──
+      // Liked IDs for heart UI + sparse-grid fallback; blocks only for fallback filter.
       let blockedIds: string[];
       let likedIds: Set<string>;
 
@@ -173,7 +172,9 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           supabase.from('likes').select('to_user_id').eq('from_user_id', userId),
         ]);
         if (likedRes.error) {
-          logWarn('discover/fetchUsers: failed to load liked IDs', { error: likedRes.error.message });
+          logWarn('discover/fetchUsers: failed to load liked IDs', {
+            error: likedRes.error.message,
+          });
         }
         blockedIds = blockedIdsRes;
         likedIds = new Set<string>((likedRes.data ?? []).map((l) => l.to_user_id));
@@ -182,37 +183,12 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         _cachedForUserId = userId;
         set({ likedUserIds: likedIds });
       } else {
-        // Pagination: reuse cached values — no extra round-trips
         blockedIds = _cachedBlockedIds;
         likedIds = _cachedLikedIds;
       }
 
-      // ── Build main query ───────────────────────────────────────────────────
-      // Photo gate: require avatar_url so every card in Discover has at least
-      // one visible photo. Empty-photo profiles stay signed in but are hidden
-      // until they upload a photo from Me → Edit profile.
-      let query = supabase
-        .from('profiles')
-        .select(PROFILE_CARD_SELECT as '*')
-        .neq('id', userId)
-        .eq('show_in_discover', true)
-        .not('avatar_url', 'is', null)
-        .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
-
-      // Exclude blocked
-      if (blockedIds.length > 0) {
-        query = query.not('id', 'in', `(${blockedIds.join(',')})`);
-      }
-      // Exclude already-liked (primary pass — liked users are shown only as fallback)
-      if (likedIds.size > 0) {
-        query = query.not('id', 'in', `(${[...likedIds].join(',')})`);
-      }
-
-      // Gender filter
       const genderFilter = interestedInToGender(interestedIn);
-      if (genderFilter) query = query.eq('gender', genderFilter);
 
-      // ── Age: intersect Discover sheet range with profile dating-age preference ──
       const fMin = filters.min_age;
       const fMax = filters.max_age;
       const pMin = agePref?.min ?? 18;
@@ -225,11 +201,22 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         return;
       }
 
-      query = applyDiscoverSheetFilters(query, { filters, today, effMin, effMax });
-
-      query = query.order('last_seen', { ascending: false });
-
-      const { data, error } = await query;
+      // Primary discover page: server-side block/like exclusion (no giant NOT IN).
+      const { data, error } = await supabase.rpc('fetch_discover_profiles_page', {
+        p_viewer_id: userId,
+        p_gender: genderFilter,
+        p_min_age: effMin,
+        p_max_age: effMax,
+        p_country: filters.country,
+        p_state: filters.state,
+        p_city: filters.city,
+        p_religion: filters.religion,
+        p_online_only: filters.online_only,
+        p_verified_only: filters.verified_only,
+        p_exclude_liked: true,
+        p_limit: PAGE_SIZE,
+        p_offset: currentPage * PAGE_SIZE,
+      });
 
       if (error) {
         const msg = error.message || 'Could not load members';
@@ -363,24 +350,16 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       });
       _cachedLikedIds.delete(toUserId);
       track(EVENTS.LIKE_REMOVED);
-      return false;
+      return { ok: true, matched: false };
     }
 
     if (await isBlockedRelationship(fromUserId, toUserId)) {
-      appDialog({
-        title: 'Can\u2019t send like',
-        message: UI_TOAST.interactionBlocked,
-        icon: 'ban-outline',
-      });
-      return false;
+      return { ok: false, reason: 'blocked' };
     }
 
-    // Free-tier daily cap. Pro users skip this. Shows a friendly upsell
-    // dialog instead of failing the like at the DB anti-spam ceiling.
     const gate = await gateSendLike();
     if (!gate.allowed) {
-      showFreeLimitDialog('likes', gate.cap);
-      return false;
+      return { ok: false, reason: 'free_limit', freeLimitCap: gate.cap };
     }
 
     const { error: insertError } = await supabase
@@ -389,36 +368,19 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     if (insertError) {
       const kind = classifyLikesInsertError(insertError);
       if (kind === 'interaction_blocked') {
-        appDialog({
-          title: 'Can\u2019t send like',
-          message: UI_TOAST.interactionBlocked,
-          icon: 'ban-outline',
-        });
-        return false;
+        return { ok: false, reason: 'blocked' };
       }
       if (kind === 'rate_hour') {
-        track(EVENTS.RATE_LIMIT_HIT, { topic: 'likes', window: 'hour' });
-        appDialog({
-          title: 'Slow down',
-          message: 'You\u2019re liking too fast. Take a breather and try again in a bit.',
-          icon: 'time-outline',
-        });
-      } else if (kind === 'rate_day') {
-        track(EVENTS.RATE_LIMIT_HIT, { topic: 'likes', window: 'day' });
-        appDialog({
-          title: 'Daily like limit reached',
-          message:
-            'You\u2019ve reached today\u2019s like limit. Come back tomorrow or upgrade for more.',
-          icon: 'heart-dislike-outline',
-        });
-      } else {
-        appDialog({
-          title: 'Like failed',
-          message: insertError.message ?? "Couldn't send your like. Try again.",
-          icon: 'alert-circle-outline',
-        });
+        return { ok: false, reason: 'rate_hour' };
       }
-      return false;
+      if (kind === 'rate_day') {
+        return { ok: false, reason: 'rate_day' };
+      }
+      return {
+        ok: false,
+        reason: 'error',
+        message: insertError.message ?? "Couldn't send your like. Try again.",
+      };
     }
     set((state) => {
       const s = new Set(state.likedUserIds);
@@ -471,7 +433,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     // Fire-and-forget soft warning when approaching the per-hour/day cap.
     void maybeWarnLikeQuota();
 
-    return isMatch;
+    return { ok: true, matched: isMatch };
   },
 }));
 

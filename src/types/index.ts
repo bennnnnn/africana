@@ -1,3 +1,5 @@
+export type { Database, Json, Tables, TablesInsert, TablesUpdate, Enums } from './database';
+
 export type Gender = 'male' | 'female' | 'nonbinary' | 'other';
 export type InterestedIn = 'men' | 'women' | 'everyone';
 export type LookingFor = 'relationship' | 'friendship' | 'marriage' | 'pen_pal';
@@ -99,6 +101,8 @@ export interface UserSettings {
   receive_messages: boolean;
   show_online_status: boolean;
   profile_visible: boolean;
+  /** Set by moderation; blocks re-enabling profile_visible from the app. */
+  moderation_locked?: boolean;
   email_notifications: boolean;
   notify_messages: boolean;
   notify_likes: boolean;

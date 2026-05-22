@@ -20,7 +20,12 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { AuthLegalConsentRow } from '@/components/auth/AuthLegalConsentRow';
 import { COLORS } from '@/constants';
-import { getValidationState, validateEmail, validatePassword } from '@/lib/validation';
+import {
+  getValidationState,
+  MIN_PASSWORD_LENGTH,
+  validateEmail,
+  validatePassword,
+} from '@/lib/validation';
 import { redirectAfterAuth } from '@/lib/profile-completion';
 import { appDialog } from '@/lib/app-dialog';
 
@@ -278,7 +283,7 @@ export default function RegisterScreen() {
             onBlur={() => setTouched((current) => ({ ...current, password: true }))}
             isPassword
             leftIcon="lock-closed-outline"
-            placeholder="6 characters"
+            placeholder={`${MIN_PASSWORD_LENGTH}+ characters`}
             validationState={getValidationState(
               showPasswordState,
               passwordValidation,

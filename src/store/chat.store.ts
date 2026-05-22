@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 import type { ChatStoreState } from '@/store/chat-store.types';
 import { Message, User, type Conversation } from '@/types';
-import { PROFILE_CARD_SELECT } from '@/constants/profile-select';
+import {
+  CONVERSATION_LIST_SELECT,
+  MESSAGE_LIST_SELECT,
+  PROFILE_CARD_SELECT,
+} from '@/constants/profile-select';
 import { supabase } from '@/lib/supabase';
 import { notifyLifecycleEmail, notifyUser } from '@/lib/notifications';
 import {
@@ -111,7 +115,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         const [{ data, error }, hiddenRes] = await Promise.all([
           supabase
             .from('conversations')
-            .select('*')
+            .select(CONVERSATION_LIST_SELECT)
             .or(`user_low_id.eq.${userId},user_high_id.eq.${userId}`)
             .order('last_message_at', { ascending: false, nullsFirst: false }),
           supabase.from('conversation_hidden').select('conversation_id').eq('user_id', userId),
@@ -244,7 +248,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // older messages page in on scroll.
       const { data, error } = await supabase
         .from('messages')
-        .select('*')
+        .select(MESSAGE_LIST_SELECT)
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
         .limit(MESSAGE_PAGE_SIZE);
@@ -326,7 +330,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       try {
         const { data, error } = await supabase
           .from('messages')
-          .select('*')
+          .select(MESSAGE_LIST_SELECT)
           .eq('conversation_id', conversationId)
           .lt('created_at', oldestReal.created_at)
           .order('created_at', { ascending: false })
@@ -745,6 +749,37 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         messages: prevMessages,
       });
     }
+  },
+
+  applyInboundMessagePreview: (conversationId, preview) => {
+    const userId = useAuthStore.getState().user?.id;
+    if (!userId) return;
+
+    set((state) => {
+      const exists = state.conversationIdSet.has(conversationId);
+      if (!exists) return state;
+
+      const content = (preview.content ?? '').trim();
+      const isInbound = preview.senderId !== userId;
+
+      const nextConversations = state.conversations
+        .map((c) => {
+          if (c.id !== conversationId) return c;
+          return {
+            ...c,
+            last_message: content || c.last_message,
+            last_message_at: preview.createdAt,
+            unread_count: isInbound ? (c.unread_count ?? 0) + 1 : (c.unread_count ?? 0),
+          };
+        })
+        .sort((a, b) => {
+          const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+          const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+          return tb - ta;
+        });
+
+      return withConversationIds(nextConversations);
+    });
   },
 
   addMessage: (conversationId, message) => {

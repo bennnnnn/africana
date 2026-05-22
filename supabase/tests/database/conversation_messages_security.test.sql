@@ -4,7 +4,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(8);
+select plan(9);
 
 -- mark_conversation_read / export_user_data are SECURITY INVOKER (no privilege jump for callers).
 select results_eq(
@@ -67,10 +67,22 @@ select ok(
     from pg_policies
     where schemaname = 'public'
       and tablename = 'messages'
-      and policyname = 'Recipients can mark inbound messages read'
+      and policyname = 'Participants can update message delivery state'
       and cmd = 'UPDATE'
   ),
-  'messages has read-receipt UPDATE policy'
+  'messages has participant UPDATE policy for read receipts / soft delete'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'messages'
+      and policyname = 'Senders can delete own messages'
+      and cmd = 'DELETE'
+  ),
+  'messages DELETE is sender-only (not all participants)'
 );
 
 select * from finish();

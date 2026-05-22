@@ -13,7 +13,6 @@ import {
   useWindowDimensions,
   StatusBar,
   InteractionManager,
-  Share,
   RefreshControl,
   Platform,
 } from 'react-native';
@@ -31,32 +30,11 @@ import { BlurView } from 'expo-blur';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '@/lib/supabase';
-import { notifyUser } from '@/lib/notifications';
 import { useAuthStore } from '@/store/auth.store';
-import { useChatStore } from '@/store/chat.store';
-import { useDiscoverStore, invalidateDiscoverCache } from '@/store/discover.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import haptics from '@/lib/haptics';
-import { User } from '@/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  COLORS,
-  DEFAULT_AVATAR,
-  INTERESTED_IN_OPTIONS,
-  RELIGION_OPTIONS,
-  EDUCATION_OPTIONS,
-  MARITAL_STATUS_OPTIONS,
-  LOOKING_FOR_OPTIONS,
-  WANT_CHILDREN_YES_NO,
-  OCCUPATION_OPTIONS,
-  PHYSICAL_CONDITION_OPTIONS,
-  RADIUS,
-  SHADOWS,
-} from '@/constants';
-import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
-import { likesPathSegmentForNotifyType } from '@/constants/likes-routes';
-import { UI_LABELS, UI_TOAST } from '@/constants/copy';
+import { COLORS, LOOKING_FOR_OPTIONS, RADIUS, SHADOWS } from '@/constants';
 import { Button } from '@/components/ui/Button';
 import { MatchModal } from '@/components/ui/MatchModal';
 import {
@@ -69,18 +47,8 @@ import { useDialog } from '@/components/ui/DialogProvider';
 import { ReportUserModal } from '@/components/ui/ReportUserModal';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { SkeletonProfile } from '@/components/ui/Skeleton';
-import { track, EVENTS } from '@/lib/analytics';
-import { addFavourite, blockUser, isBlockedRelationship } from '@/lib/social-actions';
-import { recordProfileShareEvent, SHARE_REWARD_TOAST } from '@/lib/share-reward';
-import { getProfileShareUrl } from '@/lib/share-profile-url';
-import { getProfileSeed } from '@/lib/profile-seed-cache';
 import { normalizeRouteParam } from '@/lib/chat-route-utils';
-import {
-  profileGalleryCache,
-  buildFallbackPhotoList,
-  warmPhotoUris,
-  loadProfilePhotoList,
-} from '@/lib/profile-gallery-cache';
+import { loadProfilePhotoList } from '@/lib/profile-gallery-cache';
 import { ProfilePhotoGalleryPage } from '@/components/profile/ProfilePhotoGalleryPage';
 import { ProfileReadOnlyFieldRow } from '@/components/profile/ProfileReadOnlyFieldRow';
 import { ProfileDiscoverGateModal } from '@/components/profile/ProfileDiscoverGateModal';
@@ -90,29 +58,9 @@ import {
   FLOAT_ACTION_SIZE,
   floatingActionCircle,
 } from '@/components/profile/profile-view-constants';
-import { getEffectivePresence, isUserEffectivelyOnline, isUuidString } from '@/lib/utils';
-import { usePresenceStore } from '@/store/presence.store';
+import { isUuidString } from '@/lib/utils';
 import { SPRING, SNAP_IN } from '@/lib/motion';
-
-/** Relative "Seen … ago" label for profile activity row (not worth memoizing; depends on `Date.now()`). */
-function formatShortLastSeenLabel(
-  lastSeen: string | null | undefined,
-  useLastActiveLabel: boolean,
-): string | null {
-  if (!useLastActiveLabel || !lastSeen) return null;
-  const seenAt = new Date(lastSeen).getTime();
-  if (Number.isNaN(seenAt)) return null;
-  const diffMs = Date.now() - seenAt;
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return 'Seen just now';
-  if (diffMin < 60) return `Seen ${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `Seen ${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay === 1) return 'Seen 1 day ago';
-  if (diffDay < 7) return `Seen ${diffDay} days ago`;
-  return 'Seen a while ago';
-}
+import { useProfileViewController } from '@/hooks/use-profile-view-controller';
 
 export default function ProfileViewScreen() {
   const {
@@ -130,10 +78,7 @@ export default function ProfileViewScreen() {
   const photoParam = normalizeRouteParam(rawPhoto);
   const routeWantsPhotoViewer = viewerParam === '1';
   const routePhotoIndex = Math.max(0, Number.parseInt(photoParam ?? '0', 10) || 0);
-  const { user: currentUser, session } = useAuthStore(
-    useShallow((s) => ({ user: s.user, session: s.session })),
-  );
-  const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
+  const { session } = useAuthStore(useShallow((s) => ({ session: s.session })));
   const profileScrollRef = useRef<ScrollView>(null);
   const pullPanRef = useRef(null);
   const [strengthBannerDismissed, setStrengthBannerDismissed] = useState(false);
@@ -196,14 +141,6 @@ export default function ProfileViewScreen() {
     [btnScaleAnim, scrollY],
   );
 
-  const getOrCreateConversation = useChatStore((s) => s.getOrCreateConversation);
-  const { likedUserIds, toggleLike, fetchLikedUserIds } = useDiscoverStore(
-    useShallow((s) => ({
-      likedUserIds: s.likedUserIds,
-      toggleLike: s.toggleLike,
-      fetchLikedUserIds: s.fetchLikedUserIds,
-    })),
-  );
   const { showDialog, showToast } = useDialog();
   const insets = useSafeAreaInsets();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
@@ -293,56 +230,19 @@ export default function ProfileViewScreen() {
     };
   }, []);
 
-  // Seed from the in-memory cache the caller just wrote (discover / likes / etc.)
-  // so the profile paints instantly. A background fetch replaces this with fresh
-  // DB data a moment later.
-  const [profile, setProfile] = useState<User | null>(() => getProfileSeed(id));
-  const [isLoading, setIsLoading] = useState(() => !getProfileSeed(id));
   const [photoIndex, setPhotoIndex] = useState(0);
-  const [matchUser, setMatchUser] = useState<User | null>(null);
-  const [isFavourite, setIsFavourite] = useState(false);
-  /** Symmetric block with the profile being viewed (for actions other than messaging). */
-  const [relationshipBlocked, setRelationshipBlocked] = useState(false);
-  const likeInFlightRef = useRef(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
-  const [reportPromptVisible, setReportPromptVisible] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [profileHeroMenuVisible, setProfileHeroMenuVisible] = useState(false);
 
   useEffect(() => {
     setDetailsExpanded(false);
-    setIsFavourite(false);
-    setReportPromptVisible(false);
     setStrengthBannerDismissed(false);
     setPhotoIndex(0);
-    setLoadError(null);
     setProfileHeroMenuVisible(false);
-    // Re-seed from the cache when navigating between profiles so the screen
-    // paints instantly instead of flashing a spinner between rows.
-    const seed = getProfileSeed(id);
-    if (seed) {
-      setProfile(seed);
-      setIsLoading(false);
-    }
     requestAnimationFrame(() => {
       heroPhotoListRef.current?.scrollToOffset({ offset: 0, animated: false });
     });
   }, [id]);
-
-  useEffect(() => {
-    if (!currentUser || !id || currentUser.id === id) {
-      setRelationshipBlocked(false);
-      return;
-    }
-    let cancelled = false;
-    void isBlockedRelationship(currentUser.id, id).then((blocked) => {
-      if (!cancelled) setRelationshipBlocked(blocked);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentUser?.id, id]);
 
   useEffect(() => {
     setPhotoViewerVisible(routeWantsPhotoViewer);
@@ -351,134 +251,60 @@ export default function ProfileViewScreen() {
     }
   }, [routePhotoIndex, routeWantsPhotoViewer, id]);
 
-  const fetchProfile = useCallback(
-    async (opts?: { background?: boolean }) => {
-      if (!id) {
-        setIsLoading(false);
-        setRefreshing(false);
-        setLoadError(null);
-        setProfile(null);
-        return;
-      }
-      const bg = opts?.background === true;
-      // If we already have any profile data for this id (from the seed cache or
-      // a previous fetch), treat the fetch as a silent refresh — don't blank the
-      // screen back to a spinner just to replace `data` with a slightly newer
-      // copy of the same row.
-      const hasExistingData = !!getProfileSeed(id);
-      const silent = bg || hasExistingData;
-
-      if (!silent) {
-        setLoadError(null);
-        setIsLoading(true);
-        setProfile(null);
-      } else {
-        if (bg) setRefreshing(true);
-        setLoadError(null);
-      }
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(PROFILE_LIST_SELECT as '*')
-        .eq('id', id)
-        .maybeSingle();
-
-      if (!silent) setIsLoading(false);
-      setRefreshing(false);
-
-      if (error) {
-        console.error('[ProfileView] load profile:', error.message);
-        setLoadError(error.message);
-        if (!silent) setProfile(null);
-        return;
-      }
-
-      setLoadError(null);
-      if (data) {
-        const today = new Date();
-        const bday = data.birthdate ? new Date(data.birthdate) : null;
-        const age = bday
-          ? today.getFullYear() -
-            bday.getFullYear() -
-            (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0)
-          : undefined;
-        const pphotos = data.profile_photos ?? [];
-        const galleryList =
-          pphotos.length > 0 ? pphotos : buildFallbackPhotoList(data.full_name, data.avatar_url);
-        profileGalleryCache.set(id, galleryList);
-        setProfile({
-          ...data,
-          age,
-          profile_photos: pphotos,
-          languages: data.languages ?? [],
-          looking_for: data.looking_for ?? [],
-          hobbies: data.hobbies ?? [],
-        });
-      } else {
-        setProfile(null);
-      }
+  const openPhotoViewer = useCallback(
+    (index: number) => {
+      setViewerPhotoIndex(index);
+      setPhotoViewerVisible(true);
+      router.setParams({ viewer: '1', photo: String(index) });
     },
-    [id],
+    [],
   );
 
-  useEffect(() => {
-    void fetchProfile();
-  }, [fetchProfile]);
+  const closePhotoViewer = useCallback(() => {
+    prevProfileIdInPhotoViewerRef.current = null;
+    setPhotoIndex(viewerPhotoIndex);
+    requestAnimationFrame(() => {
+      if (winWidth > 0) {
+        heroPhotoListRef.current?.scrollToOffset({
+          offset: viewerPhotoIndex * winWidth,
+          animated: false,
+        });
+      }
+    });
+    setPhotoViewerVisible(false);
+    router.setParams({ viewer: undefined, photo: undefined });
+  }, [viewerPhotoIndex, winWidth]);
 
-  // Record view + notify once we know both profile and viewer (session can resolve after first paint)
-  useEffect(() => {
-    if (!profile || !currentUser?.id || currentUser.id === profile.id) return;
-
-    // Pro-only: when the viewer has incognito on, skip the profile_views upsert
-    // entirely so they browse silently. No row → no notification → no Views-tab entry.
-    const incognito = useAuthStore.getState().settings?.incognito === true;
-    if (incognito) {
-      track(EVENTS.PROFILE_VIEWED);
-      return;
-    }
-
-    // ignoreDuplicates:true → ON CONFLICT DO NOTHING. The .select() returns the
-    // inserted row only on a true new insert — empty on conflict. This means we
-    // notify exactly once per unique (viewer, viewed) pair, surviving app restarts
-    // and clearing the need for the module-scoped Set entirely.
-    void supabase
-      .from('profile_views')
-      .upsert(
-        { viewer_id: currentUser.id, viewed_id: profile.id, viewed_at: new Date().toISOString() },
-        { onConflict: 'viewer_id,viewed_id', ignoreDuplicates: true },
-      )
-      .select('id')
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          notifyUser({
-            type: 'view',
-            recipientId: profile.id,
-            senderId: currentUser.id,
-            senderName: currentUser.full_name ?? 'Someone',
-            extra: { userId: currentUser.id, likesSegment: likesPathSegmentForNotifyType('view') },
-          });
-        }
-      });
-    track(EVENTS.PROFILE_VIEWED);
-  }, [profile?.id, currentUser?.id]);
-
-  // Hydrate likes once if Discover (or elsewhere) has not already loaded them.
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    if (useDiscoverStore.getState().likedUserIds.size > 0) return;
-    void fetchLikedUserIds(currentUser.id);
-  }, [currentUser?.id, fetchLikedUserIds]);
-
-  useEffect(() => {
-    if (!currentUser || !profile || currentUser.id === profile.id) return;
-    supabase
-      .from('favourites')
-      .select('id')
-      .eq('user_id', currentUser.id)
-      .eq('favourited_id', profile.id)
-      .maybeSingle()
-      .then(({ data }) => setIsFavourite(!!data));
-  }, [currentUser?.id, profile?.id]);
+  const {
+    profile,
+    isLoading,
+    loadError,
+    refreshing,
+    fetchProfile,
+    refreshProfile,
+    matchUser,
+    setMatchUser,
+    isFavourite,
+    relationshipBlocked,
+    reportPromptVisible,
+    setReportPromptVisible,
+    photos,
+    display,
+    likedUserIds,
+    currentUser,
+    handleLike,
+    handleMessage,
+    handleFavourite,
+    handleBlock,
+    handleReport,
+    handleShareProfile,
+  } = useProfileViewController(id, {
+    showToast,
+    showViewerToast,
+    showDialog,
+    photoViewerVisible,
+    closePhotoViewer,
+  });
 
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
@@ -546,29 +372,6 @@ export default function ProfileViewScreen() {
     });
     return () => handle.cancel();
   }, [adjacentBrowse.pages.join('|')]);
-
-  useEffect(() => {
-    if (!profile) return;
-    const safePhotos = profile.profile_photos ?? [];
-    const photosToWarm =
-      safePhotos.length > 0
-        ? safePhotos
-        : [
-            profile.avatar_url ||
-              `${DEFAULT_AVATAR}${encodeURIComponent((profile.full_name ?? '?').charAt(0))}`,
-          ];
-    void warmPhotoUris(photosToWarm.slice(0, 4));
-  }, [profile]);
-
-  const safePhotos = profile?.profile_photos ?? [];
-  const photos = profile
-    ? safePhotos.length > 0
-      ? safePhotos
-      : [
-          profile.avatar_url ||
-            `${DEFAULT_AVATAR}${encodeURIComponent((profile.full_name ?? '?').charAt(0))}`,
-        ]
-    : [];
 
   const scrollToHeroPhoto = useCallback(
     (index: number, animated = true) => {
@@ -746,22 +549,6 @@ export default function ProfileViewScreen() {
       resetPhotoViewerSwipe,
     ],
   );
-
-  const handleShareProfile = useCallback(async () => {
-    if (!profile?.id) return;
-    try {
-      const url = getProfileShareUrl(profile.id);
-      const result = await Share.share({
-        message: `${profile.full_name} on Africana — open in the app:\n${url}`,
-      });
-      if (result?.action === Share.sharedAction && currentUser?.id) {
-        const { ok } = await recordProfileShareEvent(currentUser.id, profile.id);
-        if (ok) showToast({ icon: 'leaf-outline', message: SHARE_REWARD_TOAST });
-      }
-    } catch {
-      /* dismissed */
-    }
-  }, [profile, currentUser?.id]);
 
   const triggerHeartBurst = useCallback(() => {
     heartBurstScale.setValue(0.3);
@@ -946,84 +733,31 @@ export default function ProfileViewScreen() {
     );
   }
 
-  const religionLabel = profile.religion
-    ? (RELIGION_OPTIONS.find((r) => r.value === profile.religion)?.label ?? profile.religion)
-    : null;
-  const educationLabel = profile.education
-    ? (EDUCATION_OPTIONS.find((e) => e.value === profile.education)?.label ?? profile.education)
-    : null;
-  const maritalLabel = profile.marital_status
-    ? (MARITAL_STATUS_OPTIONS.find((m) => m.value === profile.marital_status)?.label ??
-      profile.marital_status)
-    : null;
-  const wantChildLabel = profile.want_children
-    ? (WANT_CHILDREN_YES_NO.find((o) => o.value === profile.want_children)?.label ??
-      profile.want_children)
-    : null;
-  const bodyTypeLabel = profile.body_type
-    ? (PHYSICAL_CONDITION_OPTIONS.find((o) => o.value === profile.body_type)?.label ??
-      profile.body_type)
-    : null;
-  const occupationLabel = profile.occupation
-    ? (OCCUPATION_OPTIONS.find((o) => o.value === profile.occupation)?.label ?? profile.occupation)
-    : null;
-  const interestedInLabel =
-    INTERESTED_IN_OPTIONS.find((o) => o.value === profile.interested_in)?.label ??
-    profile.interested_in ??
-    null;
-
-  const location = [profile.city, profile.state, profile.country].filter(Boolean).join(', ');
-  const heritageLine = [profile.origin_city, profile.origin_state, profile.origin_country]
-    .filter(Boolean)
-    .join(', ');
-  const showHeritage =
-    heritageLine.length > 0 &&
-    heritageLine.trim().toLowerCase() !== (location || '').trim().toLowerCase();
-  const isVerified = profile.verified === true || profile.verification_status === 'approved';
-  const isLiked = likedUserIds.has(profile.id);
-  const isOwnProfile = currentUser?.id === profile.id;
-  /** Viewers respect `online_visible`; your own card uses freshness only (matches previous behavior). */
-  const displayOnlineStatus: 'online' | 'offline' = isOwnProfile
-    ? isUserEffectivelyOnline(profile.online_status, profile.last_seen)
-      ? 'online'
-      : 'offline'
-    : getEffectivePresence(
-        {
-          id: profile.id,
-          online_visible: profile.online_visible,
-          online_status: profile.online_status,
-          last_seen: profile.last_seen ?? '',
-        },
-        peerOnlineIds,
-      );
-
-  const recipientMessagesPaused = !isOwnProfile && profile.accepts_messages === false;
-
-  /** Single activity treatment: online badge, or last-active time when available, else offline. */
-  const isActiveOnline = displayOnlineStatus === 'online';
-  const useLastActiveLabel =
-    !isActiveOnline && !isOwnProfile && profile.online_visible !== false && !!profile.last_seen;
-  const shortLastSeenLabel = formatShortLastSeenLabel(profile.last_seen, useLastActiveLabel);
-  const activityLabel = isActiveOnline ? 'Online' : (shortLastSeenLabel ?? 'Offline');
+  const {
+    religionLabel,
+    educationLabel,
+    maritalLabel,
+    wantChildLabel,
+    bodyTypeLabel,
+    occupationLabel,
+    interestedInLabel,
+    location,
+    heritageLine,
+    showHeritage,
+    isVerified,
+    isLiked,
+    isOwnProfile,
+    isActiveOnline,
+    activityLabel,
+    recipientMessagesPaused,
+    commonHobbies,
+    commonLanguages,
+  } = display!;
 
   const photoModalDotBottom =
     !isOwnProfile && currentUser
       ? Math.max(insets.bottom + FLOAT_ACTION_SIZE + 28, 94)
       : Math.max(insets.bottom + 16, 24);
-
-  const normalizeText = (value: string | null | undefined) => value?.trim().toLowerCase() ?? '';
-  const viewerLanguages = new Set(
-    (currentUser?.languages ?? []).map((lang) => normalizeText(lang)).filter(Boolean),
-  );
-  const viewerHobbies = new Set(
-    (currentUser?.hobbies ?? []).map((h) => normalizeText(h)).filter(Boolean),
-  );
-  const commonHobbies = !isOwnProfile
-    ? (profile.hobbies ?? []).filter((h) => viewerHobbies.has(normalizeText(h)))
-    : [];
-  const commonLanguages = !isOwnProfile
-    ? (profile.languages ?? []).filter((l) => viewerLanguages.has(normalizeText(l)))
-    : [];
 
   const viewerStrength = getProfileStrength(currentUser);
   const showStrengthNudge =
@@ -1035,177 +769,6 @@ export default function ProfileViewScreen() {
 
   const needsDiscoverGate =
     !isOwnProfile && !!currentUser && !!session && !isProfileCompleteForDiscover(currentUser);
-
-  const handleLike = async () => {
-    if (!currentUser || likeInFlightRef.current) return;
-    likeInFlightRef.current = true;
-    try {
-      const wasLiked = likedUserIds.has(profile.id);
-      if (!wasLiked && relationshipBlocked) {
-        showToast({ message: UI_TOAST.interactionBlocked, icon: 'ban-outline' });
-        return;
-      }
-      if (!wasLiked) haptics.tapLight();
-      const isMatch = await toggleLike(currentUser.id, profile.id);
-      if (isMatch && !wasLiked) {
-        haptics.success();
-        setMatchUser(profile);
-      } else {
-        const toastCfg = {
-          icon: (wasLiked ? 'heart-outline' : 'heart') as keyof typeof Ionicons.glyphMap,
-          message: wasLiked ? UI_TOAST.likeRemoved : UI_TOAST.liked,
-        };
-        if (photoViewerVisible) showViewerToast(toastCfg);
-        else showToast(toastCfg);
-      }
-    } finally {
-      likeInFlightRef.current = false;
-    }
-  };
-
-  const handleMessage = async () => {
-    if (!currentUser || recipientMessagesPaused) return;
-    if (relationshipBlocked) {
-      showToast({ icon: 'ban-outline', message: UI_TOAST.openChatBlocked });
-      return;
-    }
-    const wasInViewer = photoViewerVisible;
-    if (wasInViewer) {
-      // Use closePhotoViewer (not raw setState) so the viewer/photo route
-      // params get reset — otherwise navigating back to the profile from the
-      // chat reopens the photo viewer.
-      closePhotoViewer();
-    }
-    let convResult: Awaited<ReturnType<typeof getOrCreateConversation>> | null = null;
-    try {
-      convResult = await getOrCreateConversation(currentUser.id, profile.id);
-    } catch {
-      // fall through to error handling below
-    }
-    if (!convResult?.ok) {
-      showToast({
-        icon: 'alert-circle-outline',
-        message:
-          convResult?.reason === 'blocked' ? UI_TOAST.openChatBlocked : UI_TOAST.openChatFailed,
-      });
-      return;
-    }
-    const convId = convResult.conversationId;
-    const peerId = profile.id;
-    const navigate = () => {
-      router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: peerId } });
-    };
-    if (wasInViewer) {
-      // Wait for the modal-close animation to actually run before pushing the
-      // chat route. Pushing while the modal is still on screen makes the new
-      // screen render behind it on iOS and feels like nothing happened.
-      setTimeout(() => InteractionManager.runAfterInteractions(navigate), 220);
-      return;
-    }
-    InteractionManager.runAfterInteractions(navigate);
-  };
-
-  const handleFavourite = async () => {
-    if (!currentUser) return;
-    if (isFavourite) {
-      setIsFavourite(false);
-      const { error } = await supabase
-        .from('favourites')
-        .delete()
-        .eq('user_id', currentUser.id)
-        .eq('favourited_id', profile.id);
-      if (error) {
-        setIsFavourite(true);
-        showToast({ icon: 'alert-circle-outline', message: UI_TOAST.favouritesUpdateFailed });
-        return;
-      }
-      const toastCfg = {
-        icon: 'star-outline' as keyof typeof Ionicons.glyphMap,
-        message: UI_TOAST.favouriteRemoved,
-      };
-      if (photoViewerVisible) showViewerToast(toastCfg);
-      else showToast(toastCfg);
-    } else {
-      setIsFavourite(true);
-      try {
-        const result = await addFavourite(currentUser.id, profile.id);
-        if (result === 'blocked') {
-          setIsFavourite(false);
-          showToast({ icon: 'ban-outline', message: UI_TOAST.interactionBlocked });
-          return;
-        }
-      } catch {
-        setIsFavourite(false);
-        showToast({ icon: 'alert-circle-outline', message: UI_TOAST.favouritesUpdateFailed });
-        return;
-      }
-      const toastCfg = {
-        icon: 'star' as keyof typeof Ionicons.glyphMap,
-        message: UI_TOAST.favouriteAdded,
-      };
-      if (photoViewerVisible) showViewerToast(toastCfg);
-      else showToast(toastCfg);
-      track(EVENTS.FAVOURITE_ADDED);
-      void notifyUser({
-        type: 'favourite',
-        recipientId: profile.id,
-        senderId: currentUser.id,
-        senderName: currentUser.full_name ?? 'Someone',
-        extra: { userId: currentUser.id, likesSegment: likesPathSegmentForNotifyType('favourite') },
-      });
-    }
-  };
-
-  const openPhotoViewer = (index: number) => {
-    setViewerPhotoIndex(index);
-    setPhotoViewerVisible(true);
-    router.setParams({ viewer: '1', photo: String(index) });
-  };
-
-  const closePhotoViewer = () => {
-    prevProfileIdInPhotoViewerRef.current = null;
-    setPhotoIndex(viewerPhotoIndex);
-    requestAnimationFrame(() => {
-      if (winWidth > 0) {
-        heroPhotoListRef.current?.scrollToOffset({
-          offset: viewerPhotoIndex * winWidth,
-          animated: false,
-        });
-      }
-    });
-    setPhotoViewerVisible(false);
-    router.setParams({ viewer: undefined, photo: undefined });
-  };
-
-  const handleBlock = () => {
-    if (!profile) return;
-    showDialog({
-      title: `Block ${profile.full_name}?`,
-      message: "They won't be able to message you. You won't see each other in Discover.",
-      icon: 'ban-outline',
-      actions: [
-        { label: UI_LABELS.cancel, style: 'cancel' },
-        { label: UI_LABELS.block, style: 'destructive', onPress: () => void confirmBlockUser() },
-      ],
-    });
-  };
-
-  const handleReport = () => {
-    if (!currentUser || !profile) return;
-    setReportPromptVisible(true);
-  };
-
-  const confirmBlockUser = async () => {
-    if (!currentUser || !profile) return;
-    try {
-      await blockUser(currentUser.id, profile.id);
-      invalidateDiscoverCache();
-      showToast({ icon: 'ban-outline', message: UI_TOAST.blocked });
-      setTimeout(() => router.back(), 1300);
-    } catch {
-      showToast({ icon: 'alert-circle-outline', message: UI_TOAST.blockFailed });
-    }
-  };
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
@@ -1312,7 +875,7 @@ export default function ProfileViewScreen() {
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
-                onRefresh={() => void fetchProfile({ background: true })}
+                onRefresh={() => void refreshProfile()}
                 tintColor={COLORS.textStrong}
               />
             }

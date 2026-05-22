@@ -71,6 +71,7 @@ export async function fetchOrCreateSettingsRow(userId: string): Promise<UserSett
     receive_messages: true,
     show_online_status: true,
     profile_visible: true,
+    moderation_locked: false,
     email_notifications: true,
     notify_messages: true,
     notify_likes: true,

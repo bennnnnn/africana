@@ -51,9 +51,21 @@ export default function PrivacySettingsScreen() {
             icon="eye-outline"
             iconColor={COLORS.earth}
             label="Show my profile"
-            description="Appear in Discover and Online for other members"
+            description={
+              settings?.moderation_locked
+                ? 'Your profile is hidden by moderation and cannot be re-enabled here'
+                : 'Appear in Discover and Online for other members'
+            }
             value={settings?.profile_visible ?? true}
+            disabled={settings?.moderation_locked === true}
             onToggle={(v) => {
+              if (settings?.moderation_locked) {
+                showToast({
+                  message: 'Profile visibility is restricted. Contact support if you need help.',
+                  icon: 'alert-circle-outline',
+                });
+                return;
+              }
               void applySettings({ profile_visible: v });
             }}
           />

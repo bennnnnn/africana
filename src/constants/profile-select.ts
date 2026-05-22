@@ -66,3 +66,11 @@ export const PROFILE_CARD_SELECT = [
   'accepts_messages',
   'created_at',
 ].join(',');
+
+/** Inbox + chat list conversation rows (excludes unused profile fields). */
+export const CONVERSATION_LIST_SELECT =
+  'id,participant_ids,user_low_id,user_high_id,last_message,last_message_at,created_at';
+
+/** Message thread pages (excludes heavy/unused columns). */
+export const MESSAGE_LIST_SELECT =
+  'id,conversation_id,sender_id,content,read_at,created_at,edited_at,reactions,deleted_for';

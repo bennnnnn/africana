@@ -66,5 +66,6 @@ module.exports = {
     '*.generated.ts',
     'src/lib/africa-city-data/',
     'src/lib/cultural-data/generated/',
+    'src/types/database.ts',
   ],
 };
