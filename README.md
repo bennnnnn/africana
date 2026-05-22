@@ -93,6 +93,8 @@ africana/
 
 ## Database Schema
 
+Canonical schema: **`supabase/migrations/`** (apply with `supabase db reset`; requires Docker). The empty-looking `00000000000000_initial_schema.sql` is a placeholder — see `supabase/migrations/README.md`. Regenerate TS types with `npm run types:gen`.
+
 - **profiles** — User profile data with location hierarchy (country/state/city)
 - **user_settings** — Privacy settings per user
 - **likes** — User-to-user likes

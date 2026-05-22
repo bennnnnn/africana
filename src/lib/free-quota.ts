@@ -10,8 +10,8 @@
  * `isProSync()` first).
  *
  * Backed by the `rate_limit_counts` RPC for the initial read; subsequent
- * sends increment an in-memory counter to avoid round-tripping the server
- * for every send. Cache resets at UTC day rollover and on sign-out.
+ * sends/likes bump the in-memory counter only after a successful insert so a
+ * failed send does not consume quota. Cache resets at UTC day rollover and on sign-out.
  */
 
 import { supabase } from '@/lib/supabase';
@@ -88,9 +88,6 @@ export async function gateSendMessage(): Promise<QuotaGate> {
     if (counts.messages >= FREE_DAILY_MESSAGES) {
       return { allowed: false, cap: FREE_DAILY_MESSAGES };
     }
-    // Increment optimistically so concurrent sends can't both pass on the same
-    // cached count. Self-heals on next getCounts() if the send ultimately fails.
-    noteSentMessage();
     return { allowed: true };
   } finally {
     release!();
@@ -109,7 +106,6 @@ export async function gateSendLike(): Promise<QuotaGate> {
     if (counts.likes >= FREE_DAILY_LIKES) {
       return { allowed: false, cap: FREE_DAILY_LIKES };
     }
-    noteSentLike();
     return { allowed: true };
   } finally {
     release!();

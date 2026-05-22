@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Expo doctor
+        run: npx expo-doctor
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -33,3 +36,19 @@ jobs:
 
       - name: Test
         run: npm test
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase and apply migrations
+        run: supabase db reset
+
+      - name: Database tests (pgTAP)
+        run: supabase test db

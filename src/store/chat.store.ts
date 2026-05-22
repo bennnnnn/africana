@@ -22,7 +22,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { hasSymmetricBlockBetween } from '@/lib/block-queries';
 import { moderateMessage } from '@/lib/moderation';
 import { maybeWarnMessageQuota } from '@/lib/rate-limit-warn';
-import { gateSendMessage, showFreeLimitDialog } from '@/lib/free-quota';
+import { gateSendMessage, noteSentMessage, showFreeLimitDialog } from '@/lib/free-quota';
 import { track, EVENTS } from '@/lib/analytics';
 import { logError, logWarn } from '@/lib/logger';
 import {
@@ -498,6 +498,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       }
       return { error: error?.message ?? 'Failed to send message' };
     }
+
+    noteSentMessage();
 
     // Replace temp with confirmed message in-place; keep listKey so FlatList row does not remount.
     const confirmed: Message = { ...(data as Message), listKey: tempId };

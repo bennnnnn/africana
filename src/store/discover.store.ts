@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { notifyLifecycleEmail, notifyUser } from '@/lib/notifications';
 import type { LikeToggleResult } from '@/lib/discover-like-result';
 import { maybeWarnLikeQuota } from '@/lib/rate-limit-warn';
-import { gateSendLike } from '@/lib/free-quota';
+import { gateSendLike, noteSentLike } from '@/lib/free-quota';
 import { track, EVENTS } from '@/lib/analytics';
 import { isBlockedRelationship } from '@/lib/social-actions';
 import { likesPathSegmentForNotifyType } from '@/constants/likes-routes';
@@ -382,6 +382,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         message: insertError.message ?? "Couldn't send your like. Try again.",
       };
     }
+    noteSentLike();
     set((state) => {
       const s = new Set(state.likedUserIds);
       s.add(toUserId);
