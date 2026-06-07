@@ -291,15 +291,7 @@ export function useProfileViewController(
     } finally {
       likeInFlightRef.current = false;
     }
-  }, [
-    currentUser,
-    profile,
-    likedUserIds,
-    relationshipBlocked,
-    toggleLike,
-    showToast,
-    routeToast,
-  ]);
+  }, [currentUser, profile, likedUserIds, relationshipBlocked, toggleLike, showToast, routeToast]);
 
   const handleMessage = useCallback(async () => {
     if (!currentUser || !profile || display?.recipientMessagesPaused) return;

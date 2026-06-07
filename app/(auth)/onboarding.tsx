@@ -106,7 +106,9 @@ export default function OnboardingScreen() {
 
   const [loading, setLoading] = useState(false);
   const saveInFlightRef = useRef(false);
-  const [photoProgress, setPhotoProgress] = useState<{ uploaded: number; total: number } | null>(null);
+  const [photoProgress, setPhotoProgress] = useState<{ uploaded: number; total: number } | null>(
+    null,
+  );
 
   const firstNameValidation = validateFirstName(fullName);
   const showTermsConsent = !termsAccepted;
@@ -698,9 +700,7 @@ export default function OnboardingScreen() {
                   </Pressable>
                 ))}
               </View>
-              {step3Errors.gender && (
-                <Text style={s.fieldError}>Please select your gender</Text>
-              )}
+              {step3Errors.gender && <Text style={s.fieldError}>Please select your gender</Text>}
 
               <Text style={[s.label, { marginTop: 20 }]}>Interested in</Text>
               <View style={s.rowEqual}>

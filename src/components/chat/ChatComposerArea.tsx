@@ -5,7 +5,12 @@ import { COLORS } from '@/constants';
 import { UI_TOAST } from '@/constants/copy';
 import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
 
-export type ChatComposerVariant = 'active' | 'outgoing-off' | 'blocked' | 'peer-off' | 'quota-exceeded';
+export type ChatComposerVariant =
+  | 'active'
+  | 'outgoing-off'
+  | 'blocked'
+  | 'peer-off'
+  | 'quota-exceeded';
 
 type Props = {
   variant: ChatComposerVariant;

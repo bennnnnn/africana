@@ -190,7 +190,8 @@ export default function MyProfileScreen() {
                 Your profile is hidden
               </Text>
               <Text style={{ fontSize: FONT.xs, color: COLORS.textSecondary, marginTop: 2 }}>
-                You won&apos;t appear in Discover or Online. If this was unexpected, contact support — we&apos;ll review it.
+                You won&apos;t appear in Discover or Online. If this was unexpected, contact support
+                — we&apos;ll review it.
               </Text>
             </View>
             <TouchableOpacity
@@ -334,7 +335,12 @@ export default function MyProfileScreen() {
                     style={[s.stripThumb, isMain && s.stripThumbActive]}
                     activeOpacity={0.8}
                   >
-                    <Image source={{ uri: photo }} style={s.stripImg} contentFit="cover" contentPosition="center" />
+                    <Image
+                      source={{ uri: photo }}
+                      style={s.stripImg}
+                      contentFit="cover"
+                      contentPosition="center"
+                    />
                     {isMain && (
                       <View style={s.stripCheck}>
                         <Ionicons name="checkmark" size={10} color="#FFF" />
@@ -745,7 +751,6 @@ export default function MyProfileScreen() {
         cultureLanguageOpts={cultureLanguageOpts}
         cultureLoading={cultureLoading}
       />
-
     </SafeAreaView>
   );
 }

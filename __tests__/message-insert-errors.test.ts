@@ -6,15 +6,15 @@ import {
 
 describe('mapMessagesInsertError', () => {
   it('maps rate_limit:messages:hour detail', () => {
-    expect(
-      mapMessagesInsertError({ code: '23P01', details: 'rate_limit:messages:hour' }),
-    ).toBe(ERROR_MESSAGE_RATE_LIMIT_HOUR);
+    expect(mapMessagesInsertError({ code: '23P01', details: 'rate_limit:messages:hour' })).toBe(
+      ERROR_MESSAGE_RATE_LIMIT_HOUR,
+    );
   });
 
   it('maps rate_limit:messages:day detail', () => {
-    expect(
-      mapMessagesInsertError({ code: '23P01', details: 'rate_limit:messages:day' }),
-    ).toBe(ERROR_MESSAGE_RATE_LIMIT_DAY);
+    expect(mapMessagesInsertError({ code: '23P01', details: 'rate_limit:messages:day' })).toBe(
+      ERROR_MESSAGE_RATE_LIMIT_DAY,
+    );
   });
 
   it('returns null for unknown errors', () => {

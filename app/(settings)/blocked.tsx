@@ -219,7 +219,10 @@ export default function BlockedUsersScreen() {
           maxToRenderPerBatch={8}
           windowSize={9}
           removeClippedSubviews={Platform.OS === 'android'}
-          contentContainerStyle={{ padding: 16, flexGrow: blockedUsers.length === 0 ? 1 : undefined }}
+          contentContainerStyle={{
+            padding: 16,
+            flexGrow: blockedUsers.length === 0 ? 1 : undefined,
+          }}
           ListEmptyComponent={
             <EmptyState
               icon="ban-outline"

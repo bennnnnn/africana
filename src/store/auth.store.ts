@@ -121,7 +121,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Serialize calls so two rapid updates don't race on the same settings snapshot.
     const previousPromise = updateSettingsPending;
     let resolve: () => void;
-    updateSettingsPending = new Promise<void>((r) => { resolve = r; });
+    updateSettingsPending = new Promise<void>((r) => {
+      resolve = r;
+    });
 
     try {
       await previousPromise;

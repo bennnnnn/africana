@@ -190,8 +190,7 @@ export function useMeProfileController() {
               } catch (e: unknown) {
                 appDialog({
                   title: 'Remove failed',
-                  message:
-                    e instanceof Error ? e.message : "Couldn't remove the photo. Try again.",
+                  message: e instanceof Error ? e.message : "Couldn't remove the photo. Try again.",
                   icon: 'alert-circle-outline',
                 });
               }

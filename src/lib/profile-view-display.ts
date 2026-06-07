@@ -76,8 +76,7 @@ export function buildProfileDisplayModel(args: {
     .filter(Boolean)
     .join(', ');
   const showHeritage =
-    heritageLine.length > 0 &&
-    heritageLine.trim().toLowerCase() !== location.trim().toLowerCase();
+    heritageLine.length > 0 && heritageLine.trim().toLowerCase() !== location.trim().toLowerCase();
 
   const isVerified = profile.verified === true || profile.verification_status === 'approved';
   const isLiked = likedUserIds.has(profile.id);

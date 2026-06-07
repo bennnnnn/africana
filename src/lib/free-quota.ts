@@ -73,7 +73,10 @@ export type QuotaGate = { allowed: true } | { allowed: false; cap: number };
 export async function getRemainingMessages(): Promise<{ remaining: number; cap: number } | null> {
   if (isProSync()) return null;
   const counts = await getCounts();
-  return { remaining: Math.max(0, FREE_DAILY_MESSAGES - counts.messages), cap: FREE_DAILY_MESSAGES };
+  return {
+    remaining: Math.max(0, FREE_DAILY_MESSAGES - counts.messages),
+    cap: FREE_DAILY_MESSAGES,
+  };
 }
 
 /** Call before inserting a message. If `allowed === false`, show the dialog and abort. */
@@ -81,7 +84,9 @@ export async function gateSendMessage(): Promise<QuotaGate> {
   if (isProSync()) return { allowed: true };
   let release: () => void;
   const prev = gateMutex;
-  gateMutex = new Promise<void>((r) => { release = r; });
+  gateMutex = new Promise<void>((r) => {
+    release = r;
+  });
   try {
     await prev;
     const counts = await getCounts();
@@ -99,7 +104,9 @@ export async function gateSendLike(): Promise<QuotaGate> {
   if (isProSync()) return { allowed: true };
   let release: () => void;
   const prev = gateMutex;
-  gateMutex = new Promise<void>((r) => { release = r; });
+  gateMutex = new Promise<void>((r) => {
+    release = r;
+  });
   try {
     await prev;
     const counts = await getCounts();

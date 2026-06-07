@@ -115,12 +115,7 @@ export default function DiscoverScreen() {
   useEffect(() => {
     if (!user) return;
     fetchUsers({ userId: user.id, interestedIn: user.interested_in, reset: true, agePref });
-  }, [
-    user?.id,
-    user?.interested_in,
-    agePref,
-    fetchUsers,
-  ]);
+  }, [user?.id, user?.interested_in, agePref, fetchUsers]);
 
   // Prime the image cache for the first screenful as soon as the page lands
   // so the grid never shows the cross-fade-from-blank flash.
@@ -404,143 +399,143 @@ export default function DiscoverScreen() {
 
   return (
     <OnlinePulseProvider>
-    <View style={s.screen}>
-      {/* ── Full-screen scrollable grid (stays under header in z-order) ── */}
-      <View style={[s.flex, s.listUnderHeader]}>
-        {Platform.OS === 'web' ? (
-          <ScrollView
-            style={s.flex}
-            contentContainerStyle={{
-              paddingTop: listPaddingTop,
-              paddingHorizontal: GRID_PADDING,
-              paddingBottom: tabBarHeight + 16,
-            }}
-            showsVerticalScrollIndicator={false}
-            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-              useNativeDriver: false,
-            })}
-            scrollEventThrottle={16}
-          >
-            {rowPairs.length > 0
-              ? rowPairs.map((pair) => (
-                  <React.Fragment key={`${pair[0].id}-${pair[1]?.id ?? 'none'}`}>
-                    {renderRow(pair)}
-                  </React.Fragment>
-                ))
-              : emptyContent}
-            {footerContent}
-          </ScrollView>
-        ) : (
-          <AnimatedFlashList
-            data={rowPairs}
-            keyExtractor={(pair) => `${pair[0].id}-${pair[1]?.id ?? 'none'}`}
-            style={s.flex}
-            contentContainerStyle={{
-              paddingTop: listPaddingTop,
-              paddingHorizontal: GRID_PADDING,
-              paddingBottom: tabBarHeight + 16,
-            }}
-            showsVerticalScrollIndicator={false}
-            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-              useNativeDriver: false,
-            })}
-            scrollEventThrottle={16}
-            onEndReached={handleLoadMore}
-            onEndReachedThreshold={0.3}
-            onViewableItemsChanged={handleViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                tintColor={COLORS.primary}
-                progressViewOffset={totalHeaderHeight + 8}
-              />
-            }
-            renderItem={({ item }) => renderRow(item)}
-            ListEmptyComponent={emptyContent}
-            ListFooterComponent={footerContent}
-          />
-        )}
-      </View>
-
-      {/* Safe top inset stays fixed; only the title row + chips parallax so nothing hides under the notch. */}
-      <View pointerEvents="box-none" style={s.headerWrap}>
-        <View style={[s.headerSafeTop, { height: insets.top }]} />
-        <Animated.View
-          style={[
-            s.headerBar,
-            { paddingTop: HEADER_BAR_TOP_PAD },
-            {
-              transform: [{ translateY: headerTranslateY }],
-              shadowOpacity: headerShadowOpacity,
-            },
-          ]}
-        >
-          <View style={s.headerRow}>
-            <View style={s.headerTitleWrap}>
-              <Text accessibilityRole="header" style={s.headerTitle} numberOfLines={1}>
-                Discover
-              </Text>
-            </View>
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel={
-                activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : 'Open filters'
-              }
-              onPress={() => setShowFilters(true)}
-              style={[s.filterBtn, activeFilterCount > 0 && s.filterBtnActive]}
-            >
-              <Ionicons
-                name="options-outline"
-                size={18}
-                color={activeFilterCount > 0 ? COLORS.primary : COLORS.earth}
-              />
-              <Text style={[s.filterTxt, activeFilterCount > 0 && { color: COLORS.primary }]}>
-                Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {activeFilterCount > 0 ? (
+      <View style={s.screen}>
+        {/* ── Full-screen scrollable grid (stays under header in z-order) ── */}
+        <View style={[s.flex, s.listUnderHeader]}>
+          {Platform.OS === 'web' ? (
             <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={s.chipsRow}
+              style={s.flex}
+              contentContainerStyle={{
+                paddingTop: listPaddingTop,
+                paddingHorizontal: GRID_PADDING,
+                paddingBottom: tabBarHeight + 16,
+              }}
+              showsVerticalScrollIndicator={false}
+              onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+                useNativeDriver: false,
+              })}
+              scrollEventThrottle={16}
             >
-              {activeFilterChips.map((chip) => (
-                <TouchableOpacity
-                  key={chip.key}
-                  onPress={() => handleChipClear(chip.clear)}
-                  style={s.chip}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-                >
-                  <Text style={s.chipTxt} numberOfLines={1}>
-                    {chip.label}
-                  </Text>
-                  <Ionicons name="close" size={13} color={COLORS.primary} />
-                </TouchableOpacity>
-              ))}
+              {rowPairs.length > 0
+                ? rowPairs.map((pair) => (
+                    <React.Fragment key={`${pair[0].id}-${pair[1]?.id ?? 'none'}`}>
+                      {renderRow(pair)}
+                    </React.Fragment>
+                  ))
+                : emptyContent}
+              {footerContent}
             </ScrollView>
-          ) : null}
-        </Animated.View>
+          ) : (
+            <AnimatedFlashList
+              data={rowPairs}
+              keyExtractor={(pair) => `${pair[0].id}-${pair[1]?.id ?? 'none'}`}
+              style={s.flex}
+              contentContainerStyle={{
+                paddingTop: listPaddingTop,
+                paddingHorizontal: GRID_PADDING,
+                paddingBottom: tabBarHeight + 16,
+              }}
+              showsVerticalScrollIndicator={false}
+              onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+                useNativeDriver: false,
+              })}
+              scrollEventThrottle={16}
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.3}
+              onViewableItemsChanged={handleViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={COLORS.primary}
+                  progressViewOffset={totalHeaderHeight + 8}
+                />
+              }
+              renderItem={({ item }) => renderRow(item)}
+              ListEmptyComponent={emptyContent}
+              ListFooterComponent={footerContent}
+            />
+          )}
+        </View>
+
+        {/* Safe top inset stays fixed; only the title row + chips parallax so nothing hides under the notch. */}
+        <View pointerEvents="box-none" style={s.headerWrap}>
+          <View style={[s.headerSafeTop, { height: insets.top }]} />
+          <Animated.View
+            style={[
+              s.headerBar,
+              { paddingTop: HEADER_BAR_TOP_PAD },
+              {
+                transform: [{ translateY: headerTranslateY }],
+                shadowOpacity: headerShadowOpacity,
+              },
+            ]}
+          >
+            <View style={s.headerRow}>
+              <View style={s.headerTitleWrap}>
+                <Text accessibilityRole="header" style={s.headerTitle} numberOfLines={1}>
+                  Discover
+                </Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={
+                  activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : 'Open filters'
+                }
+                onPress={() => setShowFilters(true)}
+                style={[s.filterBtn, activeFilterCount > 0 && s.filterBtnActive]}
+              >
+                <Ionicons
+                  name="options-outline"
+                  size={18}
+                  color={activeFilterCount > 0 ? COLORS.primary : COLORS.earth}
+                />
+                <Text style={[s.filterTxt, activeFilterCount > 0 && { color: COLORS.primary }]}>
+                  Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {activeFilterCount > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.chipsRow}
+              >
+                {activeFilterChips.map((chip) => (
+                  <TouchableOpacity
+                    key={chip.key}
+                    onPress={() => handleChipClear(chip.clear)}
+                    style={s.chip}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                  >
+                    <Text style={s.chipTxt} numberOfLines={1}>
+                      {chip.label}
+                    </Text>
+                    <Ionicons name="close" size={13} color={COLORS.primary} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : null}
+          </Animated.View>
+        </View>
+
+        <FilterSheet
+          visible={showFilters}
+          filters={filters}
+          onClose={() => setShowFilters(false)}
+          onApply={handleApplyFilters}
+          onReset={handleResetFilters}
+        />
+
+        <QuickPreviewModal
+          visible={showPreview}
+          users={users}
+          startIndex={previewStartIndex}
+          onClose={handleClosePreview}
+        />
       </View>
-
-      <FilterSheet
-        visible={showFilters}
-        filters={filters}
-        onClose={() => setShowFilters(false)}
-        onApply={handleApplyFilters}
-        onReset={handleResetFilters}
-      />
-
-      <QuickPreviewModal
-        visible={showPreview}
-        users={users}
-        startIndex={previewStartIndex}
-        onClose={handleClosePreview}
-      />
-    </View>
     </OnlinePulseProvider>
   );
 }

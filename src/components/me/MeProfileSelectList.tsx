@@ -52,7 +52,9 @@ export function MeProfileSelectList({
               onPress={() => onPick(on ? null : opt.value)}
               style={[em.option, on && em.optionOn]}
             >
-              {opt.emoji ? <Text style={{ fontSize: 18, marginRight: 10 }}>{opt.emoji}</Text> : null}
+              {opt.emoji ? (
+                <Text style={{ fontSize: 18, marginRight: 10 }}>{opt.emoji}</Text>
+              ) : null}
               <Text style={[em.optionTxt, on && em.optionTxtOn]}>{opt.label}</Text>
               {on ? (
                 <Ionicons

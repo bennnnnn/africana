@@ -93,8 +93,8 @@ function TermsContent() {
       </Section>
 
       <Section title="8. Disclaimers">
-        Africana is provided &quot;as is&quot; without warranties of any kind. We are not responsible
-        for the actions of other users on or off the platform.
+        Africana is provided &quot;as is&quot; without warranties of any kind. We are not
+        responsible for the actions of other users on or off the platform.
       </Section>
 
       <Section title="9. Contact">

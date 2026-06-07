@@ -251,14 +251,11 @@ export default function ProfileViewScreen() {
     }
   }, [routePhotoIndex, routeWantsPhotoViewer, id]);
 
-  const openPhotoViewer = useCallback(
-    (index: number) => {
-      setViewerPhotoIndex(index);
-      setPhotoViewerVisible(true);
-      router.setParams({ viewer: '1', photo: String(index) });
-    },
-    [],
-  );
+  const openPhotoViewer = useCallback((index: number) => {
+    setViewerPhotoIndex(index);
+    setPhotoViewerVisible(true);
+    router.setParams({ viewer: '1', photo: String(index) });
+  }, []);
 
   const closePhotoViewer = useCallback(() => {
     prevProfileIdInPhotoViewerRef.current = null;

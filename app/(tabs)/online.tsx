@@ -293,7 +293,10 @@ export default function OnlineScreen() {
         maxToRenderPerBatch={8}
         windowSize={9}
         removeClippedSubviews={Platform.OS === 'android'}
-        contentContainerStyle={{ padding: 16, flexGrow: visibleOnlineUsers.length === 0 ? 1 : undefined }}
+        contentContainerStyle={{
+          padding: 16,
+          flexGrow: visibleOnlineUsers.length === 0 ? 1 : undefined,
+        }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl

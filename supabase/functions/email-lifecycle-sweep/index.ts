@@ -6,7 +6,8 @@ import {
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-sweep-secret',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-sweep-secret',
 };
 
 const SWEEP_SECRET = Deno.env.get('SWEEP_SECRET');

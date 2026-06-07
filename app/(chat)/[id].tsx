@@ -1,14 +1,17 @@
-import React, {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useCallback,
-  useMemo,
-} from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
-import { View, Text, FlatList, ScrollView, TouchableOpacity, TextInput, Animated, Platform, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  FlatList,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Animated,
+  Platform,
+  StyleSheet,
+} from 'react-native';
 // Universal keyboard handling. `KeyboardAvoidingView` from
 // react-native-keyboard-controller reads keyboard insets from native
 // platform APIs (WindowInsetsCompat on Android, native observer on iOS),
@@ -282,8 +285,7 @@ export default function ChatScreen() {
   const invertedListItems = useMemo(() => [...listItems].reverse(), [listItems]);
   const latestMessageKey =
     convMessages.length > 0
-      ? (convMessages[convMessages.length - 1].listKey ??
-        convMessages[convMessages.length - 1].id)
+      ? (convMessages[convMessages.length - 1].listKey ?? convMessages[convMessages.length - 1].id)
       : undefined;
   const isLiked = peer ? likedUserIds.has(peer.id) : false;
   const avatarRaw = peer

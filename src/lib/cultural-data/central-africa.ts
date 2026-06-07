@@ -203,7 +203,7 @@ export const CENTRAL_AFRICA_CULTURE: Record<string, CountryCultureData> = {
     languages: ['Sango', 'French', 'Gbaya', 'Banda', 'Mandjia', 'Arabic'],
     subdivisionEthnicities: {
       Bangui: ['Yakoma', 'Banda', 'Gbaya', 'Mandjia'],
-      'Ombella-M\'Poko': ['Gbaya', 'Banda', 'Mandjia'],
+      "Ombella-M'Poko": ['Gbaya', 'Banda', 'Mandjia'],
       Lobaye: ['Pygmy (Aka)', 'Gbaya', 'Ngbaka'],
       Kémo: ['Banda', 'Gbaya'],
       'Nana-Mambéré': ['Gbaya', 'Mandjia'],
@@ -273,7 +273,7 @@ export const CENTRAL_AFRICA_CULTURE: Record<string, CountryCultureData> = {
     ],
     languages: ['Arabic', 'French', 'Sara', 'Gorane', 'Zaghawa', 'Kanembu'],
     subdivisionEthnicities: {
-      'N\'Djamena': ['Arab', 'Sara', 'Kanembu', 'Ouaddaï', 'Mixed / Other'],
+      "N'Djamena": ['Arab', 'Sara', 'Kanembu', 'Ouaddaï', 'Mixed / Other'],
       'Bahr el Gazel': ['Kanembu'],
       Batha: ['Arab', 'Ouaddaï', 'Maba'],
       Borkou: ['Toubou', 'Gorane'],
@@ -298,7 +298,7 @@ export const CENTRAL_AFRICA_CULTURE: Record<string, CountryCultureData> = {
       'Wadi Fira': ['Zaghawa', 'Maba', 'Massalit'],
     },
     cityEthnicities: {
-      'N\'Djamena': ['Arab', 'Sara', 'Kanembu', 'Ouaddaï', 'Mixed / Other'],
+      "N'Djamena": ['Arab', 'Sara', 'Kanembu', 'Ouaddaï', 'Mixed / Other'],
       Moundou: ['Sara', 'Moundang'],
       Sarh: ['Sara'],
       Abéché: ['Arab', 'Maba', 'Ouaddaï'],
@@ -329,7 +329,7 @@ export const CENTRAL_AFRICA_CULTURE: Record<string, CountryCultureData> = {
       'Mixed / Other': ['French', 'Arabic'],
     },
     subdivisionLanguages: {
-      'N\'Djamena': ['Arabic', 'French'],
+      "N'Djamena": ['Arabic', 'French'],
       Borkou: ['Toubou', 'Gorane', 'Arabic', 'French'],
       Tibesti: ['Toubou', 'Gorane', 'Arabic', 'French'],
       'Ennedi-Est': ['Toubou', 'Zaghawa', 'Arabic', 'French'],

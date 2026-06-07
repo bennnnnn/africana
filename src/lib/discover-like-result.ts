@@ -3,12 +3,7 @@ import { showFreeLimitDialog } from '@/lib/free-quota';
 import { UI_TOAST } from '@/constants/copy';
 import { track, EVENTS } from '@/lib/analytics';
 
-export type LikeToggleFailureReason =
-  | 'blocked'
-  | 'free_limit'
-  | 'rate_hour'
-  | 'rate_day'
-  | 'error';
+export type LikeToggleFailureReason = 'blocked' | 'free_limit' | 'rate_hour' | 'rate_day' | 'error';
 
 export type LikeToggleResult =
   | { ok: true; matched: boolean }

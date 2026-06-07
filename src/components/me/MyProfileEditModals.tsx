@@ -121,7 +121,9 @@ export function MyProfileEditModals({
         />
         <Text style={{ fontSize: 11, color: COLORS.textMuted, textAlign: 'right', marginTop: 6 }}>
           {editText.length}/300
-          {editText.trim().length > 0 && editText.trim().length < 20 && ' · Add at least 20 characters'}
+          {editText.trim().length > 0 &&
+            editText.trim().length < 20 &&
+            ' · Add at least 20 characters'}
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
           {[

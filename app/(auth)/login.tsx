@@ -72,7 +72,8 @@ export default function LoginScreen() {
     } catch {
       appDialog({
         title: 'Sign in issue',
-        message: 'Signed in but could not load your profile. Please check your connection and try again.',
+        message:
+          'Signed in but could not load your profile. Please check your connection and try again.',
         icon: 'alert-circle-outline',
       });
       setLoading(false);
@@ -94,7 +95,11 @@ export default function LoginScreen() {
         try {
           await hydrateUserFromServer(session.user.id);
         } catch {
-          appDialog({ title: 'Sign in issue', message: 'Could not load your profile. Please try again.', icon: 'alert-circle-outline' });
+          appDialog({
+            title: 'Sign in issue',
+            message: 'Could not load your profile. Please try again.',
+            icon: 'alert-circle-outline',
+          });
           return;
         }
         const { user } = useAuthStore.getState();
@@ -121,7 +126,11 @@ export default function LoginScreen() {
         try {
           await hydrateUserFromServer(session.user.id);
         } catch {
-          appDialog({ title: 'Sign in issue', message: 'Could not load your profile. Please try again.', icon: 'alert-circle-outline' });
+          appDialog({
+            title: 'Sign in issue',
+            message: 'Could not load your profile. Please try again.',
+            icon: 'alert-circle-outline',
+          });
           return;
         }
         const { user } = useAuthStore.getState();

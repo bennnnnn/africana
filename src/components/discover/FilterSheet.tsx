@@ -65,9 +65,7 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
         >
           <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 15 }}>Reset</Text>
         </TouchableOpacity>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>
-          Filter Members
-        </Text>
+        <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>Filter Members</Text>
         <TouchableOpacity onPress={onClose}>
           <Ionicons name="close" size={24} color={COLORS.text} />
         </TouchableOpacity>

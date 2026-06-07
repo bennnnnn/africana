@@ -697,7 +697,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     enqueueReplaceCachedMessages(conversationId, tailForCache(updatedMessages));
 
     // Server-side soft delete. (RPC verifies participant membership.)
-    const { error } = await supabase.rpc('soft_delete_message_for_self', { p_message_id: messageId });
+    const { error } = await supabase.rpc('soft_delete_message_for_self', {
+      p_message_id: messageId,
+    });
     if (error) {
       logError('[softDeleteMessageForSelf] RPC failed', error);
       set({

@@ -30,9 +30,7 @@ export function OnlinePulseProvider({ children }: { children: React.ReactNode })
     );
   }, [scale]);
 
-  return (
-    <OnlinePulseContext.Provider value={{ scale }}>{children}</OnlinePulseContext.Provider>
-  );
+  return <OnlinePulseContext.Provider value={{ scale }}>{children}</OnlinePulseContext.Provider>;
 }
 
 export function useOnlinePulseScale(): SharedValue<number> | null {
