@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { setActiveConversation } from '@/lib/active-chat';
 
 /** Refetch on foreground + mark active conversation while this screen is focused. */

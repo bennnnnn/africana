@@ -79,6 +79,10 @@
           "color": "#0E9F6E"
         }
       ],
+      "expo-font",
+      "expo-image",
+      "expo-sqlite",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true

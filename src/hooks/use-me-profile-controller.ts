@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions } from 'react-native';
 import type { ScrollView } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '@/store/auth.store';

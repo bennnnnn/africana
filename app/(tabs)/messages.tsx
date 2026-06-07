@@ -13,7 +13,7 @@ import {
 import { useDialog } from '@/components/ui/DialogProvider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { acquireTypingChannel } from '@/lib/typing-channel';
 import { useAuthStore } from '@/store/auth.store';
