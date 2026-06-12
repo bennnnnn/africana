@@ -3,7 +3,8 @@
  *
  * Enforces FREE_DAILY_LIKES / FREE_DAILY_MESSAGES client-side so users get a
  * friendly "you've used your free X for today" dialog with an Upgrade CTA
- * instead of silently hitting the DB anti-spam ceiling at 100/day.
+ * instead of silently hitting the DB anti-spam ceiling at 100/day. The DB
+ * trigger also enforces the same free cap (see migration free_tier_daily_caps).
  *
  * While PAYMENTS_ENABLED = false, EVERYONE is on Free and these caps apply.
  * Once PAYMENTS_ENABLED = true, Pro users skip the gate (the helper checks
@@ -29,14 +30,30 @@ function todayUtcKey(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function failClosedCounts(): Counts {
+  return { messages: FREE_DAILY_MESSAGES, likes: FREE_DAILY_LIKES };
+}
+
 async function fetchFromServer(): Promise<Counts> {
-  const { data } = await supabase.rpc('rate_limit_counts');
-  if (!data) return { messages: 0, likes: 0 };
-  const d = data as Record<string, number>;
+  const { data, error } = await supabase.rpc('rate_limit_counts');
+  if (error || !data) {
+    const today = todayUtcKey();
+    if (cached && cached.date === today) return cached.counts;
+    return failClosedCounts();
+  }
+  const d = data as Record<string, number | boolean>;
+  if (d.is_pro === true) return { messages: 0, likes: 0 };
   return {
-    messages: Number(d.messages_day_used) || 0,
-    likes: Number(d.likes_day_used) || 0,
+    messages: Number(d.messages_free_used ?? d.messages_day_used) || 0,
+    likes: Number(d.likes_free_used ?? d.likes_day_used) || 0,
   };
+}
+
+/** Force a server read (e.g. when opening chat). */
+export async function refreshQuotaCounts(): Promise<Counts> {
+  cached = null;
+  inFlight = null;
+  return getCounts();
 }
 
 async function getCounts(): Promise<Counts> {
@@ -69,14 +86,32 @@ export function noteSentLike(): void {
 
 export type QuotaGate = { allowed: true } | { allowed: false; cap: number };
 
-/** Returns the remaining free messages for the current user (null if Pro, so unlimited). */
-export async function getRemainingMessages(): Promise<{ remaining: number; cap: number } | null> {
-  if (isProSync()) return null;
-  const counts = await getCounts();
+function remainingFromCounts(counts: Counts): { remaining: number; cap: number } {
   return {
     remaining: Math.max(0, FREE_DAILY_MESSAGES - counts.messages),
     cap: FREE_DAILY_MESSAGES,
   };
+}
+
+/**
+ * Synchronous in-memory peek for today's quota — no network.
+ * `null` = Pro (unlimited), `undefined` = not cached yet for today.
+ */
+export function peekRemainingMessagesSync():
+  | { remaining: number; cap: number }
+  | null
+  | undefined {
+  if (isProSync()) return null;
+  const today = todayUtcKey();
+  if (!cached || cached.date !== today) return undefined;
+  return remainingFromCounts(cached.counts);
+}
+
+/** Returns the remaining free messages for the current user (null if Pro, so unlimited). */
+export async function getRemainingMessages(): Promise<{ remaining: number; cap: number } | null> {
+  if (isProSync()) return null;
+  const counts = await getCounts();
+  return remainingFromCounts(counts);
 }
 
 /** Call before inserting a message. If `allowed === false`, show the dialog and abort. */

@@ -19,6 +19,9 @@ import { useAuthStore } from '@/store/auth.store';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { AuthLegalConsentRow } from '@/components/auth/AuthLegalConsentRow';
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
+import { EmailAuthTriggerButton } from '@/components/auth/EmailAuthTriggerButton';
+import { AuthOrDivider } from '@/components/auth/AuthOrDivider';
 import { COLORS } from '@/constants';
 import {
   getValidationState,
@@ -42,6 +45,8 @@ export default function RegisterScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const socialBusy = googleLoading || appleLoading;
   const trimmedEmail = email.trim().toLowerCase();
   const emailValidation = validateEmail(email);
   const passwordValidation = validatePassword(password);
@@ -214,93 +219,99 @@ export default function RegisterScreen() {
             <Text style={s.title}>Create account</Text>
           </View>
 
-          <TouchableOpacity
-            style={s.googleBtn}
+          <GoogleSignInButton
+            label="Sign up with Google"
+            loading={googleLoading}
+            disabled={socialBusy}
             onPress={handleGoogle}
-            disabled={googleLoading}
-            activeOpacity={0.85}
-          >
-            {googleLoading ? (
-              <ActivityIndicator size="small" color="#4285F4" />
-            ) : (
-              <>
-                <Text style={{ fontSize: 22, fontWeight: '900', color: '#4285F4' }}>G</Text>
-                <Text style={s.googleBtnText}>Sign up with Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          />
+
+          <AuthOrDivider />
 
           {Platform.OS === 'ios' && (
-            <TouchableOpacity
-              style={s.appleBtn}
-              onPress={handleApple}
-              disabled={appleLoading}
-              activeOpacity={0.85}
-            >
-              {appleLoading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="logo-apple" size={22} color="#FFFFFF" />
-                  <Text style={s.appleBtnText}>Sign up with Apple</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={s.appleBtn}
+                onPress={handleApple}
+                disabled={socialBusy}
+                activeOpacity={0.85}
+              >
+                {appleLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="logo-apple" size={22} color="#FFFFFF" />
+                    <Text style={s.appleBtnText}>Sign up with Apple</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <AuthOrDivider />
+            </>
           )}
 
-          <View style={s.divider}>
-            <View style={s.dividerLine} />
-            <Text style={s.dividerText}>OR</Text>
-            <View style={s.dividerLine} />
-          </View>
-
-          <Input
-            label="Email"
-            value={email}
-            onChangeText={(value) => {
-              setEmail(value);
-              if (!touched.email) setTouched((current) => ({ ...current, email: true }));
-            }}
-            onBlur={() => setTouched((current) => ({ ...current, email: true }))}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            leftIcon="mail-outline"
-            placeholder="your@email.com"
-            validationState={getValidationState(
-              showEmailState,
-              emailValidation,
-              Boolean(trimmedEmail),
-            )}
-            error={showEmailState ? emailValidation.message : undefined}
-          />
-          <Input
-            label="Password"
-            value={password}
-            onChangeText={(value) => {
-              setPassword(value);
-              if (!touched.password) setTouched((current) => ({ ...current, password: true }));
-            }}
-            onBlur={() => setTouched((current) => ({ ...current, password: true }))}
-            isPassword
-            leftIcon="lock-closed-outline"
-            placeholder={`${MIN_PASSWORD_LENGTH}+ characters`}
-            validationState={getValidationState(
-              showPasswordState,
-              passwordValidation,
-              Boolean(password),
-            )}
-            error={showPasswordState ? passwordValidation.message : undefined}
-          />
+          {!showEmailForm ? (
+            <EmailAuthTriggerButton
+              label="Sign up with Email"
+              onPress={() => setShowEmailForm(true)}
+              disabled={socialBusy}
+            />
+          ) : (
+            <View style={s.emailFields}>
+              <Input
+                label="Email"
+                value={email}
+                onChangeText={(value) => {
+                  setEmail(value);
+                  if (!touched.email) setTouched((current) => ({ ...current, email: true }));
+                }}
+                onBlur={() => setTouched((current) => ({ ...current, email: true }))}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                leftIcon="mail-outline"
+                placeholder="your@email.com"
+                validationState={getValidationState(
+                  showEmailState,
+                  emailValidation,
+                  Boolean(trimmedEmail),
+                )}
+                error={showEmailState ? emailValidation.message : undefined}
+              />
+              <Input
+                label="Password"
+                value={password}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  if (!touched.password) setTouched((current) => ({ ...current, password: true }));
+                }}
+                onBlur={() => setTouched((current) => ({ ...current, password: true }))}
+                isPassword
+                leftIcon="lock-closed-outline"
+                placeholder={`${MIN_PASSWORD_LENGTH}+ characters`}
+                validationState={getValidationState(
+                  showPasswordState,
+                  passwordValidation,
+                  Boolean(password),
+                )}
+                error={showPasswordState ? passwordValidation.message : undefined}
+              />
+            </View>
+          )}
 
           <AuthLegalConsentRow
             checked={termsAccepted}
             onToggle={() => setTermsAccepted((v) => !v)}
-            style={{ marginTop: 4, marginBottom: 8 }}
+            style={{ marginTop: 8, marginBottom: 8 }}
           />
 
           <Button
             title="Create Account"
-            onPress={handleRegister}
+            onPress={() => {
+              if (!showEmailForm) {
+                setShowEmailForm(true);
+                return;
+              }
+              void handleRegister();
+            }}
             loading={loading}
             disabled={!termsAccepted}
             fullWidth
@@ -338,24 +349,6 @@ const s = StyleSheet.create({
   hero: { marginBottom: 20 },
   title: { fontSize: 32, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
   subtitle: { fontSize: 15, color: COLORS.textSecondary, lineHeight: 22, marginBottom: 24 },
-  googleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    height: 56,
-    borderWidth: 1,
-    borderColor: '#DADCE0',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  googleBtnText: { fontSize: 16, fontWeight: '600', color: '#3C4043' },
   appleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -364,16 +357,10 @@ const s = StyleSheet.create({
     backgroundColor: '#000000',
     borderRadius: 14,
     height: 56,
-    marginBottom: 12,
   },
   appleBtnText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+  emailFields: {
+    marginBottom: 4,
   },
-  dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
-  dividerText: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500' },
   signinRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
 });

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, ScrollView, Switch, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FilterOptions, Religion } from '@/types';
-import { COLORS, RELIGION_OPTIONS } from '@/constants';
+import { COLORS, RELIGION_OPTIONS, SHOW_VERIFIED_ONLY_FILTER } from '@/constants';
 import { Button } from '@/components/ui/Button';
 import { RangeSlider } from '@/components/ui/RangeSlider';
 import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
@@ -93,19 +93,20 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
           />
         </View>
 
-        {/* Verified Only */}
-        <View style={s.row}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.success} />
-            <Text style={s.rowLabel}>Verified Only</Text>
+        {SHOW_VERIFIED_ONLY_FILTER && (
+          <View style={s.row}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.success} />
+              <Text style={s.rowLabel}>Verified Only</Text>
+            </View>
+            <Switch
+              value={local.verified_only}
+              onValueChange={(v) => update('verified_only', v)}
+              trackColor={{ true: COLORS.primary, false: COLORS.border }}
+              thumbColor="#FFFFFF"
+            />
           </View>
-          <Switch
-            value={local.verified_only}
-            onValueChange={(v) => update('verified_only', v)}
-            trackColor={{ true: COLORS.primary, false: COLORS.border }}
-            thumbColor="#FFFFFF"
-          />
-        </View>
+        )}
 
         {/* Age Range */}
         <SectionLabel label={`Age Range: ${local.min_age} – ${local.max_age}`} />

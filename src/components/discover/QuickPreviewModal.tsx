@@ -10,7 +10,7 @@ import { User } from '@/types';
 import { COLORS, RADIUS, FONT, SHADOWS } from '@/constants';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
-import { getEffectivePresence, formatLastSeen } from '@/lib/utils';
+import { buildActivityLabel, getEffectivePresence } from '@/lib/utils';
 import { profileImageUrlForList, storagePublicObjectUrl } from '@/lib/storage-image-url';
 import { usePresenceStore } from '@/store/presence.store';
 import { useAuthStore } from '@/store/auth.store';
@@ -72,11 +72,11 @@ function CardContent({
       peerOnlineIds,
     ) === 'online';
   const location = [user.city, user.state, user.country].filter(Boolean).join(', ');
-  const activityLabel = isOnline
-    ? 'Online'
-    : user.online_visible === false
-      ? 'Offline'
-      : (formatLastSeen(user.last_seen) ?? 'Offline');
+  const activityLabel = buildActivityLabel({
+    isOnline,
+    lastSeen: user.last_seen,
+    onlineVisible: user.online_visible,
+  });
 
   return (
     <View
@@ -122,15 +122,27 @@ function CardContent({
             {user.full_name}
             {user.age ? `, ${user.age}` : ''}
           </Text>
+          <View style={cc.statusInline}>
+            <View
+              style={[
+                cc.onlineDot,
+                isOnline ? cc.onlineDotActive : cc.onlineDotInactive,
+              ]}
+            />
+            <Text style={[cc.metaText, isOnline && cc.metaTextOnline]} numberOfLines={1}>
+              {activityLabel}
+            </Text>
+          </View>
           {user.verified && <VerifiedBadge size={15} />}
         </View>
-        <View style={cc.metaRow}>
-          <View style={[cc.onlineDot, isOnline && cc.onlineDotActive]} />
-          <Text style={[cc.metaText, isOnline && cc.metaTextOnline]} numberOfLines={1}>
-            {activityLabel}
-            {location ? `  ·  ${location}` : ''}
-          </Text>
-        </View>
+        {location ? (
+          <View style={cc.locationRow}>
+            <Ionicons name="location-sharp" size={10} color="rgba(255,255,255,0.78)" />
+            <Text style={cc.locationText} numberOfLines={1}>
+              {location}
+            </Text>
+          </View>
+        ) : null}
       </LinearGradient>
     </View>
   );
@@ -171,7 +183,14 @@ const cc = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
+    flexWrap: 'wrap',
     marginBottom: 5,
+  },
+  statusInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 0,
   },
   name: {
     fontSize: 26,
@@ -182,19 +201,27 @@ const cc = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
-  metaRow: {
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 3,
+  },
+  locationText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.82)',
+    flexShrink: 1,
   },
   onlineDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.55)',
   },
   onlineDotActive: {
     backgroundColor: COLORS.green,
+  },
+  onlineDotInactive: {
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
   metaText: {
     fontSize: 13,

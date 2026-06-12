@@ -70,7 +70,11 @@ export function useChatRealtime(params: {
         },
         (payload) => {
           const updated = payload.new as Message;
-          getChatStoreState().applyMessageUpdate(conversationId, updated);
+          if ((updated.deleted_for ?? []).includes(userId)) {
+            getChatStoreState().removeMessage(conversationId, updated.id);
+          } else {
+            getChatStoreState().applyMessageUpdate(conversationId, updated);
+          }
         },
       )
       .on(

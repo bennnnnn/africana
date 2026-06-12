@@ -36,25 +36,48 @@ export function calculateAge(birthdate: string | null | undefined): number | und
   return age;
 }
 
+function localDayStartMs(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
 /**
- * Returns a human-readable "Last seen …" string for a user who is offline.
- * Returns null if last_seen is missing or unparseable (caller should fall back
- * to a generic label or hide the status line).
+ * Relative "Active …" label for an offline user with a known `last_seen`.
+ * Returns null when `last_seen` is missing or unparseable.
  */
-export function formatLastSeen(lastSeen: string | null | undefined): string | null {
+export function formatLastActiveLabel(lastSeen: string | null | undefined): string | null {
   if (!lastSeen) return null;
   const seenAt = new Date(lastSeen).getTime();
   if (Number.isNaN(seenAt)) return null;
-  const diffMs = Date.now() - seenAt;
+
+  const nowMs = Date.now();
+  const diffMs = Math.max(0, nowMs - seenAt);
   const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return 'seen just now';
-  if (diffMin < 60) return `seen ${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `seen ${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay === 1) return 'seen yesterday';
-  if (diffDay < 7) return `seen ${diffDay} days ago`;
-  return 'seen a while ago';
+
+  const dayDiff = Math.floor(
+    (localDayStartMs(new Date(nowMs)) - localDayStartMs(new Date(seenAt))) / 86_400_000,
+  );
+
+  if (diffMin < 1) return 'Active just now';
+  if (dayDiff === 0) {
+    if (diffMin < 60) return `Active ${diffMin}m ago`;
+    if (diffHr >= 6) return 'Active today';
+    return `Active ${diffHr}h ago`;
+  }
+  if (dayDiff === 1) return 'Active yesterday';
+  if (dayDiff < 30) return `Active ${dayDiff} days ago`;
+  return 'Active over a month ago';
+}
+
+/** Presence-aware activity line for profile, chat, and discover previews. */
+export function buildActivityLabel(args: {
+  isOnline: boolean;
+  lastSeen?: string | null;
+  onlineVisible?: boolean | null;
+}): string {
+  if (args.isOnline) return 'Active now';
+  if (args.onlineVisible === false) return 'Offline';
+  return formatLastActiveLabel(args.lastSeen) ?? 'Offline';
 }
 
 export function isUserEffectivelyOnline(

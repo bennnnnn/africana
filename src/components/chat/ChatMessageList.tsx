@@ -100,7 +100,7 @@ function ChatMessageListInner({
 
 export const ChatMessageList = memo(ChatMessageListInner, (prev, next) => {
   return (
-    prev.data.length === next.data.length &&
+    prev.data === next.data &&
     prev.extraData === next.extraData &&
     prev.isLoadingOlder === next.isLoadingOlder &&
     prev.showEmptyHint === next.showEmptyHint &&

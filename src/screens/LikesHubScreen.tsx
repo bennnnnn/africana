@@ -22,7 +22,9 @@ import { LikesHubHeader } from '@/components/likes/LikesHubHeader';
 import { useLikesHub } from '@/context/likes-hub-context';
 import type { LikesHubListItem } from '@/lib/likes-fetch-users';
 import { isLikesActivityNew } from '@/lib/utils';
-import { isProSync } from '@/lib/payments';
+import { isProSync, PAYMENTS_ENABLED } from '@/lib/payments';
+import { showProGateDialog } from '@/lib/pro-gate';
+import type { User } from '@/types';
 
 export default function LikesHubScreen() {
   const insets = useSafeAreaInsets();
@@ -50,6 +52,19 @@ export default function LikesHubScreen() {
   const screenTitle = LIKES_TAB_META[activeTab].label;
   const tabSeenAt = activitySeenAt?.[activeTab];
   const seenLoaded = activitySeenAt != null;
+  const viewersLocked =
+    PAYMENTS_ENABLED && activeTab === 'viewers' && !isProSync();
+
+  const handleListRowPress = (u: User) => {
+    if (viewersLocked) {
+      showProGateDialog({
+        title: 'See who viewed you',
+        message: 'Upgrade to Pro to reveal names, photos, and full profiles.',
+      });
+      return;
+    }
+    handleRowPress(u);
+  };
 
   const renderFooter = () => {
     if (!activeHasMore || activeList.length === 0) return null;
@@ -102,10 +117,13 @@ export default function LikesHubScreen() {
     );
   };
 
-  // Pro gate: the Views tab is Pro-only. We still show the tab strip so the
-  // user knows it exists (and the badge can still surface unseen counts —
-  // a great upsell trigger), but the body becomes an Upgrade card.
-  const showViewersUpsell = activeTab === 'viewers' && !isProSync();
+  // Pro gate (when PAYMENTS_ENABLED): free users see anonymous viewer teasers plus
+  // an upsell banner; Pro users see the full list. Data still loads for both so
+  // the teaser count is real. Pre-payments (PAYMENTS_ENABLED=false) shows all viewers.
+  const viewersUpsellHeader =
+    viewersLocked && activeList.length > 0 ? (
+      <ViewersUpsellBanner viewersCount={counts.viewers ?? activeList.length} />
+    ) : null;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.surface }}>
@@ -113,63 +131,71 @@ export default function LikesHubScreen() {
 
       <LikesHubTabStrip activeTab={activeTab} counts={counts} onTabPress={handleTabPress} />
 
-      {showViewersUpsell ? (
-        <ViewersUpsell viewersCount={counts.viewers ?? 0} />
-      ) : (
-        <FlashList<LikesHubListItem>
-          data={activeList}
-          keyExtractor={(item) => item.user.id}
-          extraData={{ activeTab, tabSeenAt, seenLoaded, matchIds }}
-          contentContainerStyle={{ paddingBottom: tabBarHeight + 16 }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={COLORS.primary}
+      <FlashList<LikesHubListItem>
+        data={activeList}
+        keyExtractor={(item) => item.user.id}
+        extraData={{ activeTab, tabSeenAt, seenLoaded, matchIds, viewersLocked }}
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 16 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+          />
+        }
+        ItemSeparatorComponent={() => <View style={s.sep} />}
+        ListHeaderComponent={viewersUpsellHeader}
+        ListEmptyComponent={
+          viewersLocked && !activeError && loadedTabs.has(activeTab) ? (
+            <ViewersUpsellEmpty viewersCount={counts.viewers ?? 0} />
+          ) : (
+            renderEmpty()
+          )
+        }
+        ListFooterComponent={renderFooter}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        renderItem={({ item }) => {
+          const u = item.user;
+          const isNew = isLikesActivityNew(item.activityAt, tabSeenAt, seenLoaded);
+          return (
+            <LikesRow
+              user={u}
+              isMutual={activeTab !== 'matches' && matchIds.has(u.id)}
+              isNew={isNew}
+              showMessageButton={showMessageButton}
+              locked={viewersLocked}
+              onPress={handleListRowPress}
+              onMessagePress={handleMessageStable}
             />
-          }
-          ItemSeparatorComponent={() => <View style={s.sep} />}
-          ListEmptyComponent={renderEmpty}
-          ListFooterComponent={renderFooter}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          renderItem={({ item }) => {
-            const u = item.user;
-            const isNew = isLikesActivityNew(item.activityAt, tabSeenAt, seenLoaded);
-            return (
-              <LikesRow
-                user={u}
-                isMutual={activeTab !== 'matches' && matchIds.has(u.id)}
-                isNew={isNew}
-                showMessageButton={showMessageButton}
-                onPress={handleRowPress}
-                onMessagePress={handleMessageStable}
-              />
-            );
-          }}
-        />
-      )}
+          );
+        }}
+      />
     </SafeAreaView>
   );
 }
 
-function ViewersUpsell({ viewersCount }: { viewersCount: number }) {
+function ViewersUpsellBanner({ viewersCount }: { viewersCount: number }) {
   const headline =
     viewersCount > 0
       ? `${viewersCount} ${viewersCount === 1 ? 'person' : 'people'} viewed you`
-      : 'See who viewed your profile';
+      : 'People are viewing your profile';
   return (
-    <View style={upsell.container}>
-      <View style={upsell.iconWrap}>
-        <Ionicons name="eye-outline" size={32} color={COLORS.primary} />
+    <View style={upsell.banner}>
+      <View style={upsell.bannerTextWrap}>
+        <Ionicons name="eye-outline" size={20} color={COLORS.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={upsell.bannerTitle}>{headline}</Text>
+          <Text style={upsell.bannerBody}>
+            {viewersCount > 0
+              ? 'Upgrade to see who they are — names and profiles stay hidden until then.'
+              : 'Upgrade to Pro to see who visits your profile.'}
+          </Text>
+        </View>
       </View>
-      <Text style={upsell.title}>{headline}</Text>
-      <Text style={upsell.body}>
-        Africana Pro reveals who viewed your profile. Unlimited likes and messages too.
-      </Text>
       <TouchableOpacity
-        style={upsell.cta}
+        style={upsell.ctaCompact}
         onPress={() => router.push('/(settings)/upgrade')}
         activeOpacity={0.85}
       >
@@ -179,47 +205,77 @@ function ViewersUpsell({ viewersCount }: { viewersCount: number }) {
   );
 }
 
+function ViewersUpsellEmpty({ viewersCount }: { viewersCount: number }) {
+  if (viewersCount > 0) {
+    return (
+      <View style={upsell.emptyWithCount}>
+        <ViewersUpsellBanner viewersCount={viewersCount} />
+        <Text style={upsell.emptyHint}>
+          Viewer previews load here. Names and profiles unlock with Pro.
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <EmptyState
+      icon={LIKES_EMPTY_STATES.viewers.icon}
+      title={LIKES_EMPTY_STATES.viewers.title}
+      description={LIKES_EMPTY_STATES.viewers.desc}
+    />
+  );
+}
+
 const upsell = StyleSheet.create({
-  container: {
-    flex: 1,
+  banner: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    paddingBottom: 80,
-  },
-  iconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.primarySurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: `${COLORS.primary}33`,
   },
-  title: {
-    fontSize: FONT.xl,
+  bannerTextWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bannerTitle: {
+    fontSize: FONT.sm,
     fontWeight: FONT.extrabold,
     color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: 10,
   },
-  body: {
-    fontSize: FONT.md,
+  bannerBody: {
+    fontSize: FONT.xs,
     color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
-    maxWidth: 320,
+    marginTop: 2,
   },
-  cta: {
+  ctaCompact: {
     backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 36,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: RADIUS.full,
   },
   ctaText: {
     color: COLORS.white,
-    fontSize: FONT.md,
+    fontSize: FONT.sm,
     fontWeight: FONT.extrabold,
+  },
+  emptyWithCount: {
+    paddingTop: 8,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  emptyHint: {
+    fontSize: FONT.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 16,
   },
 });

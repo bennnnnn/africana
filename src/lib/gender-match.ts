@@ -19,10 +19,34 @@ export function normalizeInterestedInFromDb(
   gender: Gender | null | undefined,
   raw: string | null | undefined,
 ): InterestedIn {
-  if (raw === 'men' || raw === 'women' || raw === 'everyone') return raw;
+  if (raw === 'men' || raw === 'women') return raw;
+  if (raw === 'everyone') {
+    if (gender === 'male') return 'women';
+    if (gender === 'female') return 'men';
+    return 'everyone';
+  }
   if (gender === 'male') return 'women';
   if (gender === 'female') return 'men';
   return 'everyone';
+}
+
+/** Initial picker value when editing gender (legacy nonbinary/other → force a new pick). */
+export function profileEditGenderInitial(
+  raw: Gender | string | null | undefined,
+): Gender | null {
+  if (raw === 'male' || raw === 'female') return raw;
+  return null;
+}
+
+/** Initial picker value when editing interested_in (legacy `everyone` → gender default). */
+export function profileEditInterestedInInitial(
+  raw: InterestedIn | string | null | undefined,
+  gender: Gender | null | undefined,
+): InterestedIn | null {
+  if (raw === 'men' || raw === 'women') return raw;
+  if (gender === 'male') return 'women';
+  if (gender === 'female') return 'men';
+  return null;
 }
 
 /** Check whether a gender/interested-in pair is internally consistent. */

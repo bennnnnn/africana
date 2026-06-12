@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { COLORS } from '@/constants';
 import { UI_TOAST } from '@/constants/copy';
 import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
 
 export type ChatComposerVariant =
   | 'active'
+  | 'loading'
   | 'outgoing-off'
   | 'blocked'
   | 'peer-off'
@@ -75,6 +77,14 @@ export function ChatComposerArea({
       </View>
     );
   }
+  if (variant === 'loading') {
+    return (
+      <View style={[s.inputRow, { paddingBottom: composerBottomPad }]} pointerEvents="none">
+        <View style={[s.input, { opacity: 0.45 }]} />
+        <View style={[s.sendBtn, { backgroundColor: COLORS.border, opacity: 0.45 }]} />
+      </View>
+    );
+  }
   if (variant === 'quota-exceeded') {
     return (
       <View style={[s.disabledBar, { paddingBottom: disabledBarBottomPad }]}>
@@ -84,6 +94,19 @@ export function ChatComposerArea({
           You&apos;ve used all {quotaCap ?? 10} free messages today. Upgrade to Africana Pro for
           unlimited.
         </Text>
+        <TouchableOpacity
+          onPress={() => router.push('/(settings)/upgrade')}
+          style={{
+            marginTop: 10,
+            alignSelf: 'center',
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderRadius: 16,
+            backgroundColor: COLORS.error,
+          }}
+        >
+          <Text style={{ fontSize: 13, fontWeight: '600', color: COLORS.white }}>Go Pro</Text>
+        </TouchableOpacity>
       </View>
     );
   }

@@ -1,3 +1,4 @@
+import { resolveCountryFromStored, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
 import { CountryCultureData } from './types';
 import { buildEthnicityOptions, buildLanguageOptions } from './utils';
 type CultureOptionSet = {
@@ -89,6 +90,60 @@ const languageLoaders: Record<CultureRegion, () => Promise<Record<string, readon
 
 export type { CountryCultureData } from './types';
 export type { CultureOptionSet };
+
+/** Resolved African heritage location for ethnicity/language option lists. */
+export type CultureLocationRef = {
+  countryCode: string;
+  countryName: string;
+  subdivision: string;
+  city: string;
+};
+
+/**
+ * Match onboarding `culturalLocation`: living country when in Africa, otherwise
+ * African origin when set (and distinct from living country).
+ */
+export function resolveCultureLocationFromProfile(user: {
+  country?: string | null;
+  state?: string | null;
+  city?: string | null;
+  origin_country?: string | null;
+  origin_state?: string | null;
+  origin_city?: string | null;
+}): CultureLocationRef | null {
+  const livingCountryData = resolveCountryFromStored(user.country ?? '');
+  const livesInAfrica = livingCountryData
+    ? AFRICAN_COUNTRY_CODES.has(livingCountryData.code)
+    : false;
+
+  if (livesInAfrica && livingCountryData) {
+    return {
+      countryCode: livingCountryData.code,
+      countryName: livingCountryData.name,
+      subdivision: user.state ?? '',
+      city: user.city ?? '',
+    };
+  }
+
+  const originData = resolveCountryFromStored(user.origin_country ?? '');
+  const hasAfricanOrigin = Boolean(
+    originData && AFRICAN_COUNTRY_CODES.has(originData.code),
+  );
+  const originMatchesLiving = Boolean(
+    originData && livingCountryData && originData.code === livingCountryData.code,
+  );
+
+  if (hasAfricanOrigin && originData && !originMatchesLiving) {
+    return {
+      countryCode: originData.code,
+      countryName: originData.name,
+      subdivision: user.origin_state ?? '',
+      city: user.origin_city ?? '',
+    };
+  }
+
+  return null;
+}
 
 export async function getCountryCultureData(countryCode: string | null | undefined) {
   if (!countryCode) return null;

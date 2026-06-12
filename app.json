@@ -95,7 +95,8 @@
     },
     "owner": "abebech",
     "updates": {
-      "url": "https://u.expo.dev/56908a4f-a73b-4237-b925-7b3e00446e53"
+      "url": "https://u.expo.dev/56908a4f-a73b-4237-b925-7b3e00446e53",
+      "checkAutomatically": "ON_ERROR_RECOVERY"
     }
   }
 }

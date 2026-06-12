@@ -1,6 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Modal,
+  Pressable,
+  StyleSheet,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +22,7 @@ import { useDialog } from '@/components/ui/DialogProvider';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { checkImageHasFace } from '@/lib/face-detection';
 import { track, EVENTS } from '@/lib/analytics';
+import { COLORS, RADIUS } from '@/constants';
 import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 
 export default function VerifyScreen() {
@@ -22,9 +31,11 @@ export default function VerifyScreen() {
     useShallow((s) => ({ user: s.user, updateProfile: s.updateProfile })),
   );
   const { showDialog, showToast } = useDialog();
+  const insets = useSafeAreaInsets();
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [selfieMime, setSelfieMime] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [pickerSheetVisible, setPickerSheetVisible] = useState(false);
 
   const status = user?.verification_status;
 
@@ -42,43 +53,30 @@ export default function VerifyScreen() {
     setSelfieMime(a.mimeType ?? null);
   };
 
-  const pickSelfie = () => {
-    showDialog({
-      title: 'Choose photo',
-      message: 'Choose a photo for verification.',
-      icon: 'camera-outline',
-      actions: [
-        {
-          label: 'Take a selfie',
-          style: 'primary',
-          onPress: async () => {
-            const result = await ImagePicker.launchCameraAsync({
-              mediaTypes: ['images'],
-              allowsEditing: false,
-              quality: 0.7,
-            });
-            if (!result.canceled && result.assets[0]) {
-              await acceptAssetIfFace(result.assets[0]);
-            }
-          },
-        },
-        {
-          label: 'Choose from library',
-          style: 'secondary',
-          onPress: async () => {
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ['images'],
-              allowsEditing: false,
-              quality: 0.7,
-            });
-            if (!result.canceled && result.assets[0]) {
-              await acceptAssetIfFace(result.assets[0]);
-            }
-          },
-        },
-        { label: UI_LABELS.cancel, style: 'cancel' },
-      ],
+  const pickSelfie = () => setPickerSheetVisible(true);
+
+  const takeSelfieFromCamera = async () => {
+    setPickerSheetVisible(false);
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.7,
     });
+    if (!result.canceled && result.assets[0]) {
+      await acceptAssetIfFace(result.assets[0]);
+    }
+  };
+
+  const chooseSelfieFromLibrary = async () => {
+    setPickerSheetVisible(false);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets[0]) {
+      await acceptAssetIfFace(result.assets[0]);
+    }
   };
 
   const handleSubmit = async () => {
@@ -302,7 +300,9 @@ export default function VerifyScreen() {
                 }}
               >
                 <Ionicons name="camera-outline" size={32} color="#111111" />
-                <Text style={{ marginTop: 8, fontSize: 14, color: '#111111' }}>Take a selfie</Text>
+                <Text style={{ marginTop: 8, fontSize: 14, color: '#111111' }}>
+                  Add verification photo
+                </Text>
               </TouchableOpacity>
             )}
 
@@ -321,6 +321,97 @@ export default function VerifyScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <Modal
+        visible={pickerSheetVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickerSheetVisible(false)}
+      >
+        <Pressable
+          style={pickerSheetStyles.backdrop}
+          onPress={() => setPickerSheetVisible(false)}
+        >
+          <View
+            style={[
+              pickerSheetStyles.sheet,
+              { paddingBottom: Math.max(insets.bottom + 12, 20) },
+            ]}
+          >
+            <View style={pickerSheetStyles.handle} />
+            <TouchableOpacity
+              onPress={() => void takeSelfieFromCamera()}
+              style={pickerSheetStyles.row}
+            >
+              <Ionicons name="camera-outline" size={22} color={COLORS.textStrong} />
+              <Text style={pickerSheetStyles.rowLabel}>Take a selfie</Text>
+            </TouchableOpacity>
+            <View style={pickerSheetStyles.divider} />
+            <TouchableOpacity
+              onPress={() => void chooseSelfieFromLibrary()}
+              style={pickerSheetStyles.row}
+            >
+              <Ionicons name="images-outline" size={22} color={COLORS.textStrong} />
+              <Text style={pickerSheetStyles.rowLabel}>Choose from library</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setPickerSheetVisible(false)}
+              style={pickerSheetStyles.cancelRow}
+            >
+              <Text style={pickerSheetStyles.cancelLabel}>{UI_LABELS.cancel}</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
+
+const pickerSheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    paddingTop: 8,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.border,
+    marginBottom: 8,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  rowLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textStrong,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: COLORS.border,
+    marginLeft: 20,
+  },
+  cancelRow: {
+    marginTop: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  cancelLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+});

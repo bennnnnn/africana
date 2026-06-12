@@ -23,9 +23,13 @@ export const pr = StyleSheet.create({
     gap: 6,
     flexWrap: 'wrap',
   },
-  identityNameWrap: {
+  identityNameCluster: {
     flex: 1,
-    minWidth: 140,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    minWidth: 0,
   },
   displayName: {
     fontSize: FONT.xxl,
@@ -148,7 +152,6 @@ export const pr = StyleSheet.create({
   collapsedStatus: {
     fontSize: 12,
     fontWeight: FONT.semibold,
-    marginTop: 1,
   },
   collapsedMenuBtn: {
     width: 40,

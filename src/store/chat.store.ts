@@ -23,6 +23,7 @@ import { hasSymmetricBlockBetween } from '@/lib/block-queries';
 import { moderateMessage } from '@/lib/moderation';
 import { maybeWarnMessageQuota } from '@/lib/rate-limit-warn';
 import { gateSendMessage, noteSentMessage, showFreeLimitDialog } from '@/lib/free-quota';
+import { FREE_DAILY_MESSAGES } from '@/lib/payments';
 import { track, EVENTS } from '@/lib/analytics';
 import { logError, logWarn } from '@/lib/logger';
 import {
@@ -32,6 +33,7 @@ import {
   ERROR_MESSAGE_FREE_LIMIT,
   ERROR_SENDER_MESSAGES_DISABLED,
 } from '@/lib/message-insert-errors';
+import { isUuidString } from '@/lib/utils';
 
 export {
   ERROR_RECIPIENT_MESSAGES_DISABLED,
@@ -194,8 +196,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                   const cached = await getCachedMessages(id);
                   if (cached.length === 0) continue;
                   if ((get().messages[id]?.length ?? 0) > 0) continue;
+                  const visible = userId
+                    ? cached.filter((m) => !(m.deleted_for ?? []).includes(userId))
+                    : cached;
                   set((state) => ({
-                    messages: { ...state.messages, [id]: cached },
+                    messages: { ...state.messages, [id]: visible },
                   }));
                 } catch {
                   // best-effort; tapping in will fall back to the cold path
@@ -234,12 +239,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       const cachedPromise = alreadyInMemory
         ? Promise.resolve<Message[]>([])
         : getCachedMessages(conversationId).then((cached) => {
-            if (cached.length > 0 && (get().messages[conversationId]?.length ?? 0) === 0) {
+            const userId = useAuthStore.getState().user?.id;
+            const visible = userId
+              ? cached.filter((m) => !(m.deleted_for ?? []).includes(userId))
+              : cached;
+            if (visible.length > 0 && (get().messages[conversationId]?.length ?? 0) === 0) {
               set((state) => ({
-                messages: { ...state.messages, [conversationId]: cached },
+                messages: { ...state.messages, [conversationId]: visible },
               }));
             }
-            return cached;
+            return visible;
           });
 
       // Pull only the most recent page from the server. For long-running
@@ -492,14 +501,26 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       });
       const mapped = mapMessagesInsertError(error);
       if (mapped) {
+        if (mapped === ERROR_MESSAGE_FREE_LIMIT) {
+          showFreeLimitDialog('messages', FREE_DAILY_MESSAGES);
+        }
         const isHour = mapped === ERROR_MESSAGE_RATE_LIMIT_HOUR;
-        track(EVENTS.RATE_LIMIT_HIT, { topic: 'messages', window: isHour ? 'hour' : 'day' });
+        if (mapped === ERROR_MESSAGE_RATE_LIMIT_HOUR || mapped === ERROR_MESSAGE_RATE_LIMIT_DAY) {
+          track(EVENTS.RATE_LIMIT_HIT, { topic: 'messages', window: isHour ? 'hour' : 'day' });
+        }
         return { error: mapped };
       }
       return { error: error?.message ?? 'Failed to send message' };
     }
 
     noteSentMessage();
+
+    const stillHasTemp = (get().messages[conversationId] ?? []).some((m) => m.id === tempId);
+    if (!stillHasTemp) {
+      // User deleted the optimistic bubble before insert completed; hide on server too.
+      void supabase.rpc('soft_delete_message_for_self', { p_message_id: data.id });
+      return { error: null };
+    }
 
     // Replace temp with confirmed message in-place; keep listKey so FlatList row does not remount.
     const confirmed: Message = { ...(data as Message), listKey: tempId };
@@ -695,6 +716,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
 
     enqueueReplaceCachedMessages(conversationId, tailForCache(updatedMessages));
+
+    // Optimistic temp ids have no server row yet (see sendMessage).
+    if (!isUuidString(messageId)) {
+      return;
+    }
 
     // Server-side soft delete. (RPC verifies participant membership.)
     const { error } = await supabase.rpc('soft_delete_message_for_self', {

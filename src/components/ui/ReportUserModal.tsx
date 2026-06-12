@@ -13,6 +13,8 @@ type Props = {
   reporterId: string;
   reportedUserId: string;
   reportedUserName: string;
+  alreadyReported?: boolean;
+  onReported?: () => void;
 };
 
 export function ReportUserModal({
@@ -21,6 +23,8 @@ export function ReportUserModal({
   reporterId,
   reportedUserId,
   reportedUserName,
+  alreadyReported = false,
+  onReported,
 }: Props) {
   const { showToast } = useDialog();
   const [selectedReason, setSelectedReason] = useState<UserReportReason | null>(null);
@@ -42,6 +46,10 @@ export function ReportUserModal({
   };
 
   const submit = async () => {
+    if (alreadyReported) {
+      close();
+      return;
+    }
     if (!selectedReason) {
       setShowValidation(true);
       return;
@@ -49,12 +57,15 @@ export function ReportUserModal({
     setSubmitting(true);
     try {
       const result = await reportUser(reporterId, reportedUserId, selectedReason);
-      close();
       if (result === 'exists') {
+        onReported?.();
+        close();
         showToast({ message: UI_TOAST.reportExists, icon: 'information-circle-outline' });
-      } else {
-        showToast({ message: UI_TOAST.reportSent, icon: 'checkmark-circle-outline' });
+        return;
       }
+      onReported?.();
+      close();
+      showToast({ message: UI_TOAST.reportSent, icon: 'checkmark-circle-outline' });
     } catch {
       close();
       showToast({ message: UI_TOAST.reportSendFailed, icon: 'alert-circle-outline' });
@@ -82,108 +93,125 @@ export function ReportUserModal({
               lineHeight: 28,
             }}
           >
-            Report {reportedUserName}
+            {alreadyReported ? UI_LABELS.alreadyReported : `Report ${reportedUserName}`}
           </Text>
           <Text
             style={{ marginTop: 8, fontSize: FONT.md, lineHeight: 22, color: COLORS.textSecondary }}
           >
-            Choose a reason. We{"'"}ll review it. {reportedUserName} will also be blocked from
-            contacting you.
+            {alreadyReported
+              ? UI_TOAST.reportExists
+              : "Choose a reason. We'll review it."}
           </Text>
-          <View style={{ marginTop: 18, gap: 10 }}>
-            {USER_REPORT_REASONS.map((reason) => {
-              const selected = selectedReason === reason;
-              return (
-                <TouchableOpacity
-                  key={reason}
-                  activeOpacity={0.85}
-                  onPress={() => {
-                    setSelectedReason(reason);
-                    setShowValidation(false);
-                  }}
+          {!alreadyReported ? (
+            <>
+              <View style={{ marginTop: 18, gap: 10 }}>
+                {USER_REPORT_REASONS.map((reason) => {
+                  const selected = selectedReason === reason;
+                  return (
+                    <TouchableOpacity
+                      key={reason}
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        setSelectedReason(reason);
+                        setShowValidation(false);
+                      }}
+                      disabled={submitting}
+                      style={{
+                        minHeight: 50,
+                        borderRadius: RADIUS.lg,
+                        paddingHorizontal: 14,
+                        paddingVertical: 13,
+                        backgroundColor: selected ? COLORS.successSurface : COLORS.white,
+                        borderWidth: 1,
+                        borderColor: selected ? COLORS.success : COLORS.border,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        opacity: submitting ? 0.7 : 1,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: FONT.md,
+                          fontWeight: FONT.bold,
+                          color: selected ? COLORS.success : COLORS.textStrong,
+                        }}
+                      >
+                        {reason}
+                      </Text>
+                      {selected ? (
+                        <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {showValidation ? (
+                <View
                   style={{
-                    minHeight: 50,
-                    borderRadius: RADIUS.lg,
-                    paddingHorizontal: 14,
-                    paddingVertical: 13,
-                    backgroundColor: selected ? COLORS.successSurface : COLORS.white,
-                    borderWidth: 1,
-                    borderColor: selected ? COLORS.success : COLORS.border,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
+                    marginTop: 12,
+                    borderRadius: RADIUS.md,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    backgroundColor: COLORS.savanna,
                   }}
                 >
-                  <Text
-                    style={{
-                      fontSize: FONT.md,
-                      fontWeight: FONT.bold,
-                      color: selected ? COLORS.success : COLORS.textStrong,
-                    }}
-                  >
-                    {reason}
+                  <Text style={{ fontSize: FONT.sm, fontWeight: FONT.bold, color: COLORS.earth }}>
+                    Choose a reason
                   </Text>
-                  {selected ? (
-                    <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />
-                  ) : null}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          {showValidation ? (
-            <View
-              style={{
-                marginTop: 12,
-                borderRadius: RADIUS.md,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                backgroundColor: COLORS.savanna,
-              }}
-            >
-              <Text style={{ fontSize: FONT.sm, fontWeight: FONT.bold, color: COLORS.earth }}>
-                Choose a reason
-              </Text>
-            </View>
+                </View>
+              ) : null}
+            </>
           ) : null}
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
+            {!alreadyReported ? (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={close}
+                disabled={submitting}
+                style={{
+                  flex: 1,
+                  minHeight: 50,
+                  borderRadius: RADIUS.lg,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: COLORS.white,
+                }}
+              >
+                <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.textStrong }}>
+                  {UI_LABELS.cancel}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={close}
+              onPress={() => (alreadyReported ? close() : void submit())}
               disabled={submitting}
               style={{
                 flex: 1,
                 minHeight: 50,
                 borderRadius: RADIUS.lg,
-                borderWidth: 1,
-                borderColor: COLORS.border,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: COLORS.white,
-              }}
-            >
-              <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.textStrong }}>
-                {UI_LABELS.cancel}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => void submit()}
-              disabled={submitting}
-              style={{
-                flex: 1,
-                minHeight: 50,
-                borderRadius: RADIUS.lg,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: COLORS.textStrong,
+                backgroundColor: alreadyReported ? COLORS.textStrong : COLORS.textStrong,
                 flexDirection: 'row',
                 gap: 8,
                 opacity: submitting ? 0.7 : 1,
               }}
             >
-              <Ionicons name="flag-outline" size={17} color={COLORS.white} />
-              <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.white }}>
-                Report
+              {!alreadyReported ? (
+                <Ionicons name="flag-outline" size={17} color={COLORS.white} />
+              ) : null}
+              <Text
+                style={{
+                  fontSize: FONT.md,
+                  fontWeight: FONT.bold,
+                  color: COLORS.white,
+                }}
+              >
+                {alreadyReported ? UI_LABELS.ok : UI_LABELS.report}
               </Text>
             </TouchableOpacity>
           </View>

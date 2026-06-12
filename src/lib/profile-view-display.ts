@@ -7,8 +7,7 @@ import {
   RELIGION_OPTIONS,
   WANT_CHILDREN_YES_NO,
 } from '@/constants';
-import { formatShortLastSeenLabel } from '@/lib/profile-view-format';
-import { getEffectivePresence, isUserEffectivelyOnline } from '@/lib/utils';
+import { buildActivityLabel, getEffectivePresence, isUserEffectivelyOnline } from '@/lib/utils';
 import type { User } from '@/types';
 
 export type ProfileDisplayModel = {
@@ -98,10 +97,11 @@ export function buildProfileDisplayModel(args: {
 
   const isActiveOnline = displayOnlineStatus === 'online';
 
-  const useLastActiveLabel =
-    !isActiveOnline && !isOwnProfile && profile.online_visible !== false && !!profile.last_seen;
-  const shortLastSeenLabel = formatShortLastSeenLabel(profile.last_seen, useLastActiveLabel);
-  const activityLabel = isActiveOnline ? 'Online' : (shortLastSeenLabel ?? 'Offline');
+  const activityLabel = buildActivityLabel({
+    isOnline: isActiveOnline,
+    lastSeen: profile.last_seen,
+    onlineVisible: isOwnProfile ? true : profile.online_visible,
+  });
 
   const recipientMessagesPaused = !isOwnProfile && profile.accepts_messages === false;
 

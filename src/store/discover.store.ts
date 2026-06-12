@@ -1,21 +1,20 @@
 import { create } from 'zustand';
-import type { PostgrestFilterBuilder } from '@supabase/postgrest-js';
 import { User, FilterOptions, InterestedIn } from '@/types';
-import { PROFILE_CARD_SELECT } from '@/constants/profile-select';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { notifyLifecycleEmail, notifyUser } from '@/lib/notifications';
 import type { LikeToggleResult } from '@/lib/discover-like-result';
 import { maybeWarnLikeQuota } from '@/lib/rate-limit-warn';
 import { gateSendLike, noteSentLike } from '@/lib/free-quota';
+import { FREE_DAILY_LIKES } from '@/lib/payments';
 import { track, EVENTS } from '@/lib/analytics';
 import { isBlockedRelationship } from '@/lib/social-actions';
 import { likesPathSegmentForNotifyType } from '@/constants/likes-routes';
 import { classifyLikesInsertError } from '@/lib/map-likes-insert-error';
-import { getOnlineFreshnessCutoffISO, getEffectivePresence } from '@/lib/utils';
-import { fetchSymmetricBlockedPeerIds } from '@/lib/block-queries';
+import { getEffectivePresence, getEffectiveAgePreferenceRange } from '@/lib/utils';
 import { usePresenceStore } from '@/store/presence.store';
 import { logWarn } from '@/lib/logger';
+import { effectiveVerifiedOnlyFilter } from '@/constants/discover-filters';
 /** Map discover preference to profile gender filter (undefined → no filter). */
 const interestedInToGender = (v: InterestedIn | undefined): string | null => {
   if (v === 'men') return 'male';
@@ -33,6 +32,20 @@ function sortByLastSeenThenId<T extends WithLastSeenMs>(rows: T[]): T[] {
   });
 }
 
+/** Liked profiles first; within each group online first, then offline by last_seen. */
+function sortDiscoverPage(users: User[], likedIds: ReadonlySet<string>): User[] {
+  const sortGroup = (group: User[]) => {
+    const online = group.filter((u) => u.online_status === 'online');
+    const offline = sortByLastSeenThenId(
+      withLastSeenMs(group.filter((u) => u.online_status !== 'online')),
+    );
+    return [...online, ...offline];
+  };
+  const liked = users.filter((u) => likedIds.has(u.id));
+  const notLiked = users.filter((u) => !likedIds.has(u.id));
+  return [...sortGroup(liked), ...sortGroup(notLiked)];
+}
+
 function withLastSeenMs<T extends { last_seen?: string | null; id: string }>(
   rows: T[],
 ): (T & WithLastSeenMs)[] {
@@ -40,38 +53,6 @@ function withLastSeenMs<T extends { last_seen?: string | null; id: string }>(
     ...row,
     last_seen_ms: row.last_seen ? new Date(row.last_seen).getTime() : 0,
   }));
-}
-
-// Postgrest-js v2.49+ adds Result / RelationName / Relationships / Method — use `any` so the chain stays assignable without generated DB types.
-type DiscoverQuery = PostgrestFilterBuilder<any, any, any, any, any, any, any>;
-
-/** Location, religion, online, birthdate presence, age, looking-for, language, and verified — all in SQL so pagination matches the grid. */
-function applyDiscoverSheetFilters(
-  query: DiscoverQuery,
-  params: { filters: FilterOptions; today: Date; effMin: number; effMax: number },
-): DiscoverQuery {
-  const { filters, today, effMin, effMax } = params;
-  if (filters.country) query = query.eq('country', filters.country);
-  if (filters.state) query = query.eq('state', filters.state);
-  if (filters.city) query = query.eq('city', filters.city);
-  if (filters.religion) query = query.eq('religion', filters.religion);
-  if (filters.online_only) {
-    query = query.eq('online_status', 'online').gte('last_seen', getOnlineFreshnessCutoffISO());
-  }
-  if (filters.verified_only) {
-    query = query.eq('verified', true);
-  }
-  query = query.not('birthdate', 'is', null);
-
-  if (effMin > 18) {
-    const d = new Date(today.getFullYear() - effMin, today.getMonth(), today.getDate());
-    query = query.lte('birthdate', d.toISOString().slice(0, 10));
-  }
-  if (effMax < 100) {
-    const d = new Date(today.getFullYear() - effMax - 1, today.getMonth(), today.getDate() + 1);
-    query = query.gte('birthdate', d.toISOString().slice(0, 10));
-  }
-  return query;
 }
 
 interface AgePref {
@@ -120,9 +101,8 @@ const PAGE_SIZE = 20;
 
 const fetchLikedUserIdsPending = new Map<string, Promise<void>>();
 
-// Cached per-user blocks + likes so pagination doesn't re-fetch them every page.
+// Cached per-user likes so pagination doesn't re-fetch them every page.
 // Invalidated on reset (filter change / pull-to-refresh) or user switch.
-let _cachedBlockedIds: string[] = [];
 let _cachedLikedIds: Set<string> = new Set();
 let _cachedForUserId: string | null = null;
 
@@ -162,28 +142,24 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
     try {
       const today = new Date();
 
-      // Liked IDs for heart UI + sparse-grid fallback; blocks only for fallback filter.
-      let blockedIds: string[];
+      // Liked IDs for heart UI and liked-first grid ordering.
       let likedIds: Set<string>;
 
       if (reset || _cachedForUserId !== userId) {
-        const [blockedIdsRes, likedRes] = await Promise.all([
-          fetchSymmetricBlockedPeerIds(userId),
-          supabase.from('likes').select('to_user_id').eq('from_user_id', userId),
-        ]);
+        const likedRes = await supabase
+          .from('likes')
+          .select('to_user_id')
+          .eq('from_user_id', userId);
         if (likedRes.error) {
           logWarn('discover/fetchUsers: failed to load liked IDs', {
             error: likedRes.error.message,
           });
         }
-        blockedIds = blockedIdsRes;
         likedIds = new Set<string>((likedRes.data ?? []).map((l) => l.to_user_id));
-        _cachedBlockedIds = blockedIds;
         _cachedLikedIds = likedIds;
         _cachedForUserId = userId;
         set({ likedUserIds: likedIds });
       } else {
-        blockedIds = _cachedBlockedIds;
         likedIds = _cachedLikedIds;
       }
 
@@ -191,8 +167,9 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
 
       const fMin = filters.min_age;
       const fMax = filters.max_age;
-      const pMin = agePref?.min ?? 18;
-      const pMax = agePref?.max ?? 100;
+      const resolvedPref = getEffectiveAgePreferenceRange(agePref?.min, agePref?.max);
+      const pMin = resolvedPref.min;
+      const pMax = resolvedPref.max;
       const effMin = Math.max(fMin, pMin);
       const effMax = Math.min(fMax, pMax);
 
@@ -201,7 +178,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         return;
       }
 
-      // Primary discover page: server-side block/like exclusion (no giant NOT IN).
+      // Primary discover page: server-side block exclusion; likes sorted first.
       const { data, error } = await supabase.rpc('fetch_discover_profiles_page', {
         p_viewer_id: userId,
         p_gender: genderFilter,
@@ -212,8 +189,8 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         p_city: filters.city,
         p_religion: filters.religion,
         p_online_only: filters.online_only,
-        p_verified_only: filters.verified_only,
-        p_exclude_liked: true,
+        p_verified_only: effectiveVerifiedOnlyFilter(filters.verified_only),
+        p_exclude_liked: false,
         p_limit: PAGE_SIZE,
         p_offset: currentPage * PAGE_SIZE,
       });
@@ -260,36 +237,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       const rows = (data ?? []) as Record<string, unknown>[];
 
       const processed = processRaw(rows);
-
-      // Online users first; offline keeps DB order (last_seen) so lists stay stable across refetches
-      const online = processed.filter((u) => u.online_status === 'online');
-      const offline = sortByLastSeenThenId(
-        withLastSeenMs(processed.filter((u) => u.online_status !== 'online')),
-      );
-      let result: User[] = [...online, ...offline];
-
-      // ── Fallback: pad with liked users if results are sparse ─────────────
-      if (currentPage === 0 && result.length < Math.ceil(PAGE_SIZE / 2) && likedIds.size > 0) {
-        const likedIdsArr = [...likedIds].filter((id) => !blockedIds.includes(id));
-        if (likedIdsArr.length > 0) {
-          const needed = PAGE_SIZE - result.length;
-          let likedQuery = supabase
-            .from('profiles')
-            .select(PROFILE_CARD_SELECT as '*')
-            .in('id', likedIdsArr)
-            .eq('show_in_discover', true)
-            .not('avatar_url', 'is', null);
-          if (genderFilter) likedQuery = likedQuery.eq('gender', genderFilter);
-          likedQuery = applyDiscoverSheetFilters(likedQuery, { filters, today, effMin, effMax });
-          likedQuery = likedQuery.order('last_seen', { ascending: false }).limit(needed);
-          const { data: likedData } = await likedQuery;
-          if (likedData) {
-            const likedProcessed = processRaw(likedData as Record<string, unknown>[]);
-            const likedUsers = sortByLastSeenThenId(withLastSeenMs(likedProcessed));
-            result = [...result, ...likedUsers];
-          }
-        }
-      }
+      const result = sortDiscoverPage(processed, likedIds);
 
       set((state) => ({
         users: reset || currentPage === 0 ? result : [...state.users, ...result],
@@ -376,6 +324,9 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       if (kind === 'rate_day') {
         return { ok: false, reason: 'rate_day' };
       }
+      if (kind === 'rate_free') {
+        return { ok: false, reason: 'free_limit', freeLimitCap: FREE_DAILY_LIKES };
+      }
       return {
         ok: false,
         reason: 'error',
@@ -438,14 +389,13 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
   },
 }));
 
-/** Invalidate module-level block/like cache so the next fetchUsers picks up changes from outside Discover (e.g. blocking from profile). */
+/** Invalidate module-level like cache so the next fetchUsers picks up changes from outside Discover. */
 export function invalidateDiscoverCache(): void {
   _cachedForUserId = null;
 }
 
 /** Tear down discover realtime + module caches on logout (avoids cross-user leakage). */
 export function resetDiscoverModuleState(): void {
-  _cachedBlockedIds = [];
   _cachedLikedIds = new Set();
   _cachedForUserId = null;
   fetchLikedUserIdsPending.clear();

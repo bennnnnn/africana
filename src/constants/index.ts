@@ -225,11 +225,21 @@ export const GENDER_OPTIONS = [
   { value: 'other', label: 'Other' },
 ];
 
+/** Male/Female only — onboarding + profile edit (legacy DB values use `GENDER_OPTIONS` for labels). */
+export const PROFILE_GENDER_OPTIONS = GENDER_OPTIONS.filter(
+  (o) => o.value === 'male' || o.value === 'female',
+);
+
 export const INTERESTED_IN_OPTIONS = [
   { value: 'women', label: 'Women' },
   { value: 'men', label: 'Men' },
   { value: 'everyone', label: 'Everyone' },
 ];
+
+/** Men/Women only — onboarding + profile edit (no "Everyone"). */
+export const PROFILE_INTERESTED_IN_OPTIONS = INTERESTED_IN_OPTIONS.filter(
+  (o) => o.value !== 'everyone',
+);
 
 export const HAS_CHILDREN_OPTIONS = [
   { value: 'true', label: 'Yes' },
@@ -359,3 +369,8 @@ export const DEFAULT_AVATAR =
 export const MAX_PROFILE_PHOTOS = 6;
 export const MIN_AGE = 18;
 export const MAX_AGE = 100;
+
+export {
+  SHOW_VERIFIED_ONLY_FILTER,
+  effectiveVerifiedOnlyFilter,
+} from './discover-filters';

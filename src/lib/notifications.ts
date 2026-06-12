@@ -67,7 +67,8 @@ async function setupAndroidChannels(n: NotificationsModule) {
     await n.setNotificationChannelAsync('message', {
       name: 'New Messages',
       importance: n.AndroidImportance.HIGH,
-      sound: 'default',
+      // Omit `sound` to use the system default. The string 'default' is treated
+      // as a bundled custom sound filename in expo-notifications SDK 56.
       vibrationPattern: [0, 200, 100, 200],
       enableVibrate: true,
       lightColor: '#0E9F6E',
@@ -75,7 +76,6 @@ async function setupAndroidChannels(n: NotificationsModule) {
     await n.setNotificationChannelAsync('like', {
       name: 'Likes',
       importance: n.AndroidImportance.DEFAULT,
-      sound: 'default',
       vibrationPattern: [0, 100],
       enableVibrate: true,
       lightColor: '#FF6B6B',
@@ -83,7 +83,6 @@ async function setupAndroidChannels(n: NotificationsModule) {
     await n.setNotificationChannelAsync('match', {
       name: 'Matches 🔥',
       importance: n.AndroidImportance.HIGH,
-      sound: 'default',
       vibrationPattern: [0, 300, 150, 300, 150, 300],
       enableVibrate: true,
       lightColor: '#0E9F6E',
@@ -97,7 +96,6 @@ async function setupAndroidChannels(n: NotificationsModule) {
     await n.setNotificationChannelAsync('favourite', {
       name: 'Stars',
       importance: n.AndroidImportance.DEFAULT,
-      sound: 'default',
       vibrationPattern: [0, 120],
       enableVibrate: true,
       lightColor: '#F6C458',
@@ -228,7 +226,7 @@ export async function sendLocalNotification(
       content: {
         title,
         body,
-        sound: 'default',
+        sound: true,
         data,
         ...(Platform.OS === 'android' ? { channelId } : {}),
       },

@@ -3,6 +3,8 @@ export const UI_LABELS = {
   cancel: 'Cancel',
   delete: 'Delete',
   block: 'Block',
+  report: 'Report',
+  alreadyReported: 'Already reported',
   signOut: 'Sign out',
 } as const;
 
@@ -14,7 +16,7 @@ export const UI_TOAST = {
   likeRemoved: 'Like removed',
   favouriteAdded: 'Added to favourites',
   favouriteRemoved: 'Removed from favourites',
-  reportSent: 'Report sent · Blocked',
+  reportSent: 'Report sent',
   reportExists: 'You already reported this user',
   refreshFailed: "Couldn't refresh. Try again.",
   copyFailed: "Couldn't copy. Try again.",

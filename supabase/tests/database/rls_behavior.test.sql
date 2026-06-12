@@ -5,7 +5,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 create extension if not exists pgcrypto with schema extensions;
 
-select plan(6);
+select plan(8);
 
 -- Fixed test user ids
 do $setup$
@@ -149,15 +149,28 @@ select is(
   'profiles with show_in_discover=false are excluded from discover RPC'
 );
 
--- Bob cannot SELECT hidden profile (blocked + not in discover, no social edge)
+-- Bob blocked Hidden: blocker can still read blocked profile for settings list
 select is(
   (
     select count(*)::bigint
     from public.profiles
     where id = 'c0000000-0000-4000-8000-000000000003'::uuid
   ),
+  1::bigint,
+  'blocker can SELECT profile they blocked'
+);
+
+-- Hidden cannot SELECT Bob after being blocked
+select pg_temp.test_auth_as('c0000000-0000-4000-8000-000000000003'::uuid);
+
+select is(
+  (
+    select count(*)::bigint
+    from public.profiles
+    where id = 'b0000000-0000-4000-8000-000000000002'::uuid
+  ),
   0::bigint,
-  'blocked hidden profile is not visible to viewer'
+  'blocked user cannot SELECT blocker profile'
 );
 
 select * from finish();

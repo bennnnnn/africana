@@ -12,7 +12,6 @@ import {
   FlatList,
   useWindowDimensions,
   StatusBar,
-  InteractionManager,
   RefreshControl,
   Platform,
 } from 'react-native';
@@ -35,6 +34,7 @@ import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, LOOKING_FOR_OPTIONS, RADIUS, SHADOWS } from '@/constants';
+import { UI_LABELS } from '@/constants/copy';
 import { Button } from '@/components/ui/Button';
 import { MatchModal } from '@/components/ui/MatchModal';
 import {
@@ -49,6 +49,7 @@ import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { SkeletonProfile } from '@/components/ui/Skeleton';
 import { normalizeRouteParam } from '@/lib/chat-route-utils';
 import { loadProfilePhotoList } from '@/lib/profile-gallery-cache';
+import { deferAfterPaint } from '@/lib/defer-after-paint';
 import { ProfilePhotoGalleryPage } from '@/components/profile/ProfilePhotoGalleryPage';
 import { ProfileReadOnlyFieldRow } from '@/components/profile/ProfileReadOnlyFieldRow';
 import { ProfileDiscoverGateModal } from '@/components/profile/ProfileDiscoverGateModal';
@@ -283,6 +284,7 @@ export default function ProfileViewScreen() {
     setMatchUser,
     isFavourite,
     relationshipBlocked,
+    hasReported,
     reportPromptVisible,
     setReportPromptVisible,
     photos,
@@ -294,6 +296,7 @@ export default function ProfileViewScreen() {
     handleFavourite,
     handleBlock,
     handleReport,
+    markReported,
     handleShareProfile,
   } = useProfileViewController(id, {
     showToast,
@@ -364,10 +367,10 @@ export default function ProfileViewScreen() {
   useEffect(() => {
     const idsToWarm = adjacentBrowse.pages.filter(Boolean);
     if (idsToWarm.length === 0) return;
-    const handle = InteractionManager.runAfterInteractions(() => {
+    const cancel = deferAfterPaint(() => {
       void Promise.allSettled(idsToWarm.map((uid) => loadProfilePhotoList(uid)));
     });
-    return () => handle.cancel();
+    return cancel;
   }, [adjacentBrowse.pages.join('|')]);
 
   const scrollToHeroPhoto = useCallback(
@@ -820,22 +823,32 @@ export default function ProfileViewScreen() {
             onPress={() => profileScrollRef.current?.scrollTo({ y: 0, animated: true })}
             style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <Text numberOfLines={1} style={[pr.collapsedName, { flexShrink: 1 }]}>
                 {profile.full_name}
                 {profile.age ? <Text style={pr.collapsedAge}>, {profile.age}</Text> : null}
               </Text>
+              {activityLabel ? (
+                <View style={pr.identityStatusInline}>
+                  <View
+                    style={[
+                      pr.onlineBadgeDot,
+                      { backgroundColor: isActiveOnline ? COLORS.online : COLORS.textMuted },
+                    ]}
+                  />
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      pr.collapsedStatus,
+                      { color: isActiveOnline ? COLORS.online : COLORS.textMuted },
+                    ]}
+                  >
+                    {activityLabel}
+                  </Text>
+                </View>
+              ) : null}
               {isVerified ? <VerifiedBadge size={14} /> : null}
             </View>
-            <Text
-              numberOfLines={1}
-              style={[
-                pr.collapsedStatus,
-                { color: isActiveOnline ? COLORS.online : COLORS.textMuted },
-              ]}
-            >
-              {activityLabel}
-            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1044,31 +1057,33 @@ export default function ProfileViewScreen() {
               <View style={pr.identityCard}>
                 <View style={pr.identityHeaderBlock}>
                   <View style={pr.identityTitleRow}>
-                    <View style={pr.identityNameWrap}>
+                    <View style={pr.identityNameCluster}>
                       <Text style={pr.displayName} numberOfLines={1}>
                         {profile.full_name}
                         {profile.age ? <Text style={pr.displayAge}>, {profile.age}</Text> : null}
                       </Text>
+                      {activityLabel ? (
+                        <View style={pr.identityStatusInline}>
+                          <View
+                            style={[
+                              pr.onlineBadgeDot,
+                              {
+                                backgroundColor: isActiveOnline ? COLORS.online : COLORS.textMuted,
+                              },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              pr.onlineBadgeText,
+                              { color: isActiveOnline ? COLORS.online : COLORS.textMuted },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {activityLabel}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
-                    {activityLabel ? (
-                      <View style={pr.identityStatusInline}>
-                        <View
-                          style={[
-                            pr.onlineBadgeDot,
-                            { backgroundColor: isActiveOnline ? COLORS.online : COLORS.textMuted },
-                          ]}
-                        />
-                        <Text
-                          style={[
-                            pr.onlineBadgeText,
-                            { color: isActiveOnline ? COLORS.online : COLORS.textMuted },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {activityLabel}
-                        </Text>
-                      </View>
-                    ) : null}
                     {isVerified ? (
                       <Ionicons
                         name="checkmark-circle"
@@ -1796,17 +1811,29 @@ export default function ProfileViewScreen() {
                     setProfileHeroMenuVisible(false);
                     void handleReport();
                   }}
+                  disabled={hasReported}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 14,
                     paddingVertical: 16,
                     paddingHorizontal: 20,
+                    opacity: hasReported ? 0.45 : 1,
                   }}
                 >
-                  <Ionicons name="flag-outline" size={22} color={COLORS.text} />
-                  <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.textStrong }}>
-                    Report
+                  <Ionicons
+                    name={hasReported ? 'checkmark-circle-outline' : 'flag-outline'}
+                    size={22}
+                    color={hasReported ? COLORS.textSecondary : COLORS.text}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: '600',
+                      color: hasReported ? COLORS.textSecondary : COLORS.textStrong,
+                    }}
+                  >
+                    {hasReported ? UI_LABELS.alreadyReported : UI_LABELS.report}
                   </Text>
                 </TouchableOpacity>
                 <View
@@ -1861,6 +1888,8 @@ export default function ProfileViewScreen() {
           reporterId={currentUser.id}
           reportedUserId={profile.id}
           reportedUserName={profile.full_name ?? 'User'}
+          alreadyReported={hasReported}
+          onReported={markReported}
         />
       ) : null}
 

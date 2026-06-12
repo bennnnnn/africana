@@ -9,6 +9,8 @@ import {
   StyleSheet,
   AppState,
   AppStateStatus,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useDialog } from '@/components/ui/DialogProvider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -140,6 +142,33 @@ const ConversationRow = memo(function ConversationRow({
   );
 });
 
+function ActionSheetConversationPreview({ conversation }: { conversation: Conversation }) {
+  const other = conversation.other_user;
+  const timeLabel = conversation.last_message_at
+    ? formatConversationTime(conversation.last_message_at)
+    : '';
+  return (
+    <View style={actionSheetStyles.preview}>
+      <Avatar
+        uri={primaryProfilePhotoUrl(other ?? undefined) ?? undefined}
+        name={other?.full_name ?? '?'}
+        size={52}
+      />
+      <View style={actionSheetStyles.previewBody}>
+        <View style={s.cardTop}>
+          <Text style={s.cardName} numberOfLines={1}>
+            {other?.full_name ?? 'Unknown'}
+          </Text>
+          {timeLabel ? <Text style={s.cardTime}>{timeLabel}</Text> : null}
+        </View>
+        <Text style={s.cardPreview} numberOfLines={1}>
+          {conversation.last_message ?? 'Start a conversation'}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 56 + insets.bottom;
@@ -152,10 +181,12 @@ export default function MessagesScreen() {
       deleteConversation: s.deleteConversation,
     })),
   );
-  const { showDialog, showToast } = useDialog();
+  const { showToast } = useDialog();
   const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [actionSheetConversation, setActionSheetConversation] = useState<Conversation | null>(null);
+  const [actionSheetStep, setActionSheetStep] = useState<'menu' | 'confirm'>('menu');
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   // ── Live typing indicator: subscribe to each visible conversation's
@@ -264,37 +295,37 @@ export default function MessagesScreen() {
     });
   }, []);
 
-  const handleRowLongPress = useCallback(
-    (item: Conversation) => {
-      haptics.tapMedium();
-      const otherName = item.other_user?.full_name ?? 'this user';
-      showDialog({
-        title: 'Delete chat',
-        message: `Delete your chat with ${otherName}? This can't be undone.`,
-        icon: 'trash-outline',
-        actions: [
-          { label: UI_LABELS.cancel, style: 'cancel' },
-          {
-            label: UI_LABELS.delete,
-            style: 'destructive',
-            onPress: async () => {
-              haptics.tapMedium();
-              try {
-                await deleteConversation(item.id);
-                showToast({ message: UI_TOAST.chatDeleted, icon: 'trash-outline' });
-              } catch {
-                showToast({
-                  message: 'Failed to delete chat. Please try again.',
-                  icon: 'alert-circle-outline',
-                });
-              }
-            },
-          },
-        ],
+  const closeActionSheet = useCallback(() => {
+    setActionSheetConversation(null);
+    setActionSheetStep('menu');
+  }, []);
+
+  const handleRowLongPress = useCallback((item: Conversation) => {
+    haptics.tapMedium();
+    setActionSheetStep('menu');
+    setActionSheetConversation(item);
+  }, []);
+
+  const handleDeleteFromSheet = useCallback(() => {
+    if (!actionSheetConversation) return;
+    haptics.tapMedium();
+    setActionSheetStep('confirm');
+  }, [actionSheetConversation]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!actionSheetConversation) return;
+    const item = actionSheetConversation;
+    closeActionSheet();
+    try {
+      await deleteConversation(item.id);
+      showToast({ message: UI_TOAST.chatDeleted, icon: 'trash-outline' });
+    } catch {
+      showToast({
+        message: 'Failed to delete chat. Please try again.',
+        icon: 'alert-circle-outline',
       });
-    },
-    [showDialog, showToast, deleteConversation],
-  );
+    }
+  }, [actionSheetConversation, closeActionSheet, deleteConversation, showToast]);
 
   const renderConversationRow = useCallback(
     ({ item }: { item: Conversation }) => (
@@ -384,6 +415,53 @@ export default function MessagesScreen() {
         }
         renderItem={renderConversationRow}
       />
+
+      <Modal
+        visible={actionSheetConversation != null}
+        transparent
+        animationType="slide"
+        onRequestClose={closeActionSheet}
+      >
+        <Pressable style={actionSheetStyles.backdrop} onPress={closeActionSheet}>
+          <View
+            style={[
+              actionSheetStyles.sheet,
+              { paddingBottom: Math.max(insets.bottom + 12, 20) },
+            ]}
+          >
+            <View style={actionSheetStyles.handle} />
+            {actionSheetConversation ? (
+              <ActionSheetConversationPreview conversation={actionSheetConversation} />
+            ) : null}
+            {actionSheetStep === 'menu' ? (
+              <>
+                <TouchableOpacity onPress={handleDeleteFromSheet} style={actionSheetStyles.row}>
+                  <Ionicons name="trash-outline" size={22} color={COLORS.error} />
+                  <Text style={actionSheetStyles.destructiveLabel}>Delete chat</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={closeActionSheet} style={actionSheetStyles.cancelRow}>
+                  <Text style={actionSheetStyles.cancelLabel}>{UI_LABELS.cancel}</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={actionSheetStyles.confirmMessage}>
+                  Delete your chat with{' '}
+                  {actionSheetConversation?.other_user?.full_name ?? 'this user'}? This can&apos;t be
+                  undone.
+                </Text>
+                <TouchableOpacity onPress={() => void handleConfirmDelete()} style={actionSheetStyles.row}>
+                  <Ionicons name="trash-outline" size={22} color={COLORS.error} />
+                  <Text style={actionSheetStyles.destructiveLabel}>{UI_LABELS.delete}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={closeActionSheet} style={actionSheetStyles.cancelRow}>
+                  <Text style={actionSheetStyles.cancelLabel}>{UI_LABELS.cancel}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -480,4 +558,69 @@ const s = StyleSheet.create({
     marginLeft: 8,
   },
   badgeText: { color: COLORS.white, fontSize: FONT.xs, fontWeight: FONT.bold },
+});
+
+const actionSheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    paddingTop: 8,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.border,
+    marginBottom: 8,
+  },
+  preview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+    marginBottom: 4,
+  },
+  previewBody: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  destructiveLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.error,
+  },
+  confirmMessage: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: COLORS.textSecondary,
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  cancelRow: {
+    marginTop: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  cancelLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
 });

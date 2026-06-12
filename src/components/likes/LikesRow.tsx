@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import type { User } from '@/types';
@@ -14,6 +14,7 @@ export const LikesRow = memo(function LikesRow({
   isMutual,
   isNew,
   showMessageButton,
+  locked = false,
   onPress,
   onMessagePress,
 }: {
@@ -21,6 +22,8 @@ export const LikesRow = memo(function LikesRow({
   isMutual: boolean;
   isNew?: boolean;
   showMessageButton: boolean;
+  /** Blur identity — used for free-tier Views tab teaser rows. */
+  locked?: boolean;
   onPress: (u: User) => void;
   onMessagePress: (id: string) => void;
 }) {
@@ -64,29 +67,50 @@ export const LikesRow = memo(function LikesRow({
       onPress={() => onPress(u)}
       style={[s.row, isNew ? s.rowNew : null]}
       activeOpacity={0.82}
+      accessibilityRole="button"
+      accessibilityLabel={
+        locked
+          ? 'Someone viewed your profile. Upgrade to Pro to see who.'
+          : `${u.full_name ?? 'Profile'}${age ? `, ${age}` : ''}`
+      }
     >
-      <View style={s.avatarWrap}>
-        <Image
-          source={{ uri: avatar }}
-          style={s.avatar}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          transition={0}
-          recyclingKey={u.id}
-        />
-        <View
-          style={[s.onlineDot, { backgroundColor: isOnline ? COLORS.online : COLORS.offline }]}
-        />
+      <View style={[s.avatarWrap, locked ? lockedStyles.avatarClip : null]}>
+        {locked ? (
+          <View style={[s.avatar, lockedStyles.placeholderAvatar]}>
+            <Ionicons name="person" size={22} color={COLORS.textMuted} />
+            <View style={lockedStyles.lockBadge}>
+              <Ionicons name="lock-closed" size={14} color={COLORS.white} />
+            </View>
+          </View>
+        ) : (
+          <>
+            <Image
+              source={{ uri: avatar }}
+              style={s.avatar}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={0}
+              recyclingKey={u.id}
+            />
+            <View
+              style={[s.onlineDot, { backgroundColor: isOnline ? COLORS.online : COLORS.offline }]}
+            />
+          </>
+        )}
       </View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text style={[s.rowName, isNew ? s.rowNameNew : null]} numberOfLines={1}>
-            {u.full_name}
-            {age ? `, ${age}` : ''}
+            {locked ? 'Someone' : u.full_name}
+            {!locked && age ? `, ${age}` : ''}
           </Text>
-          {isMutual ? <Text style={{ fontSize: 12 }}>💕</Text> : null}
+          {!locked && isMutual ? <Text style={{ fontSize: 12 }}>💕</Text> : null}
         </View>
-        {location ? (
+        {locked ? (
+          <Text style={[s.rowLoc, isNew ? s.rowLocNew : null, { marginTop: 2 }]} numberOfLines={1}>
+            Tap to unlock with Pro
+          </Text>
+        ) : location ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
             <Ionicons name="location-outline" size={11} color={COLORS.textSecondary} />
             <Text style={[s.rowLoc, isNew ? s.rowLocNew : null]} numberOfLines={1}>
@@ -112,10 +136,33 @@ export const LikesRow = memo(function LikesRow({
           >
             <Ionicons name="chatbubble-ellipses" size={20} color={COLORS.primary} />
           </TouchableOpacity>
+        ) : locked ? (
+          <Ionicons name="lock-closed" size={16} color={COLORS.textMuted} />
         ) : !isNew ? (
           <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
         ) : null}
       </View>
     </TouchableOpacity>
   );
+});
+
+const lockedStyles = StyleSheet.create({
+  avatarClip: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  placeholderAvatar: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.savanna,
+  },
+  lockBadge: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    borderRadius: 24,
+  },
 });

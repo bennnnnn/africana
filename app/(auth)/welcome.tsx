@@ -1,161 +1,155 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
-  ActivityIndicator,
+  FlatList,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { signInWithGoogle } from '@/lib/google-auth';
-import { signInWithApple } from '@/lib/apple-auth';
-import { useAuthStore } from '@/store/auth.store';
-import { redirectAfterAuth } from '@/lib/profile-completion';
-import { appDialog } from '@/lib/app-dialog';
-import { COLORS } from '@/constants';
+import { COLORS, FONT } from '@/constants';
 
-const { width } = Dimensions.get('window');
+const SLIDES = [
+  {
+    title: 'Where African\nHearts Connect',
+    desc: 'Meet Africans and the diaspora worldwide.\nReal people. Genuine connections.',
+  },
+  {
+    title: 'Built for\nYour Culture',
+    desc: 'Filter by country, language, and values.\nFind someone who truly gets you.',
+  },
+  {
+    title: 'Safe &\nAuthentic',
+    desc: 'Privacy controls, blocking, and a community\nthat respects your boundaries.',
+  },
+] as const;
+
+const AUTOPLAY_MS = 4500;
 
 export default function WelcomeScreen() {
-  const hydrateUserFromServer = useAuthStore((s) => s.hydrateUserFromServer);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [appleLoading, setAppleLoading] = useState(false);
+  const { width, height } = useWindowDimensions();
+  const [activeSlide, setActiveSlide] = useState(0);
+  const flatListRef = useRef<FlatList<(typeof SLIDES)[number]>>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const handleGoogle = async () => {
-    setGoogleLoading(true);
-    try {
-      const session = await signInWithGoogle();
-      if (session?.user) {
-        await hydrateUserFromServer(session.user.id);
-        const { user } = useAuthStore.getState();
-        redirectAfterAuth(router, user, session);
-      }
-    } catch (e: any) {
-      if (e?.message !== 'User cancelled') {
-        appDialog({
-          title: 'Sign in failed',
-          message: e?.message ?? 'Please try again.',
-          icon: 'logo-google',
-        });
-      }
-    } finally {
-      setGoogleLoading(false);
+  const stopAutoPlay = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
-  };
+  }, []);
 
-  const handleApple = async () => {
-    setAppleLoading(true);
-    try {
-      const session = await signInWithApple();
-      if (session?.user) {
-        await hydrateUserFromServer(session.user.id);
-        const { user } = useAuthStore.getState();
-        redirectAfterAuth(router, user, session);
-      }
-    } catch (e: any) {
-      if (e?.message !== 'User cancelled') {
-        appDialog({
-          title: 'Sign in failed',
-          message: e?.message ?? 'Please try again.',
-          icon: 'logo-apple',
-        });
-      }
-    } finally {
-      setAppleLoading(false);
-    }
-  };
+  const startAutoPlay = useCallback(() => {
+    stopAutoPlay();
+    timerRef.current = setInterval(() => {
+      setActiveSlide((prev) => {
+        const next = (prev + 1) % SLIDES.length;
+        flatListRef.current?.scrollToIndex({ index: next, animated: true });
+        return next;
+      });
+    }, AUTOPLAY_MS);
+  }, [stopAutoPlay]);
+
+  useEffect(() => {
+    startAutoPlay();
+    return () => stopAutoPlay();
+  }, [startAutoPlay, stopAutoPlay]);
+
+  const goToSlide = useCallback(
+    (index: number) => {
+      flatListRef.current?.scrollToIndex({ index, animated: true });
+      setActiveSlide(index);
+      startAutoPlay();
+    },
+    [startAutoPlay],
+  );
+
+  const onMomentumScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const index = Math.round(e.nativeEvent.contentOffset.x / width);
+      setActiveSlide(index);
+      startAutoPlay();
+    },
+    [width, startAutoPlay],
+  );
 
   return (
     <View style={s.root}>
-      {/* background circles */}
-      <View style={[s.circle, { top: -100, right: -60, width: 260, height: 260, opacity: 0.1 }]} />
-      <View style={[s.circle, { bottom: '32%', left: -80, width: 180, height: 180, opacity: 0.06 }]} />
+      <View
+        style={[s.circle, { top: -100, right: -70, width: 240, height: 240, opacity: 0.1 }]}
+      />
+      <View
+        style={[
+          s.circle,
+          { bottom: height * 0.22, left: -90, width: 180, height: 180, opacity: 0.06 },
+        ]}
+      />
 
       <SafeAreaView style={s.inner}>
-        {/* brand */}
-        <View style={s.brandSection}>
-          <View style={s.brandMark}>
-            <Ionicons name="globe-outline" size={28} color={COLORS.green} />
-          </View>
-          <Text style={s.brandName}>Africana</Text>
-        </View>
+        <Text style={s.brandName}>Africana</Text>
 
-        {/* hero */}
-        <View style={s.heroSection}>
-          <View style={s.heroVisual}>
-            {/* decorative african-inspired geometric motif */}
-            <View style={s.motifOuter}>
-              <View style={s.motifRing}>
-                <Ionicons name="heart" size={32} color="#FFFFFF" />
+        <View style={s.mainColumn}>
+          <View style={s.topSpacer} />
+
+          <View style={s.contentGroup}>
+            <View style={s.slidesWrapper}>
+              <FlatList
+                ref={flatListRef}
+                data={SLIDES}
+                horizontal
+                pagingEnabled
+                bounces={false}
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={onMomentumScrollEnd}
+                onScrollBeginDrag={stopAutoPlay}
+                keyExtractor={(_, i) => String(i)}
+                getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+                renderItem={({ item }) => (
+                  <View style={[s.slide, { width }]}>
+                    <Text style={s.slideTitle}>{item.title}</Text>
+                    <Text style={s.slideDesc}>{item.desc}</Text>
+                  </View>
+                )}
+              />
+
+              <View style={s.dots}>
+                {SLIDES.map((_, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Go to slide ${i + 1}`}
+                    accessibilityState={{ selected: activeSlide === i }}
+                    onPress={() => goToSlide(i)}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                    style={[s.dot, activeSlide === i && s.dotActive]}
+                  />
+                ))}
               </View>
             </View>
-            <View style={[s.motifDot, { top: 8, left: '44%' }]} />
-            <View style={[s.motifDot, { bottom: 8, right: '38%' }]} />
-            <View style={[s.motifDot, { bottom: 18, left: '36%' }]} />
-            <View style={[s.motifDot, { top: 18, right: '36%' }]} />
+
+            <View style={s.actionsSection}>
+              <TouchableOpacity
+                style={s.primaryBtn}
+                onPress={() => router.push('/(auth)/register')}
+                activeOpacity={0.9}
+              >
+                <Text style={s.primaryBtnText}>Get Started</Text>
+              </TouchableOpacity>
+
+              <View style={s.signinRow}>
+                <Text style={s.signinText}>Already have an account? </Text>
+                <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+                  <Text style={s.signinLink}>Sign In</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
 
-          <Text style={s.tagline}>Where African{'\n'}Hearts Connect</Text>
-          <Text style={s.subtitle}>
-            Meet Africans and the diaspora worldwide.{'\n'}Real people. Genuine connections.
-          </Text>
-        </View>
-
-        {/* actions */}
-        <View style={s.actionsSection}>
-          {/* google */}
-          <TouchableOpacity
-            style={s.googleBtn}
-            onPress={handleGoogle}
-            disabled={googleLoading || appleLoading}
-            activeOpacity={0.85}
-          >
-            {googleLoading ? (
-              <ActivityIndicator color="#3C4043" size="small" />
-            ) : (
-              <>
-                <Ionicons name="logo-google" size={20} color="#3C4043" />
-                <Text style={s.googleBtnText}>Continue with Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          {/* apple */}
-          <TouchableOpacity
-            style={s.appleBtn}
-            onPress={handleApple}
-            disabled={googleLoading || appleLoading}
-            activeOpacity={0.85}
-          >
-            {appleLoading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <>
-                <Ionicons name="logo-apple" size={22} color="#FFFFFF" />
-                <Text style={s.appleBtnText}>Continue with Apple</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          {/* email */}
-          <TouchableOpacity
-            style={s.emailBtn}
-            onPress={() => router.push('/(auth)/register')}
-            activeOpacity={0.7}
-          >
-            <Text style={s.emailBtnText}>Sign up with email</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* sign in */}
-        <View style={s.signinRow}>
-          <Text style={s.signinText}>Already a member? </Text>
-          <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-            <Text style={s.signinLink}>Sign in</Text>
-          </TouchableOpacity>
+          <View style={s.bottomSpacer} />
         </View>
       </SafeAreaView>
     </View>
@@ -175,150 +169,96 @@ const s = StyleSheet.create({
   inner: {
     flex: 1,
     paddingHorizontal: 28,
-    paddingBottom: 12,
-  },
-
-  // brand
-  brandSection: {
-    alignItems: 'center',
-    paddingTop: 16,
-    gap: 8,
-  },
-  brandMark: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
   brandName: {
-    fontSize: 36,
-    fontFamily: 'DMSerifDisplay_400Regular',
+    fontSize: 40,
+    fontFamily: FONT.displayFamily,
     color: '#FFFFFF',
-    letterSpacing: 0.3,
+    textAlign: 'center',
+    letterSpacing: 0.4,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
-
-  // hero
-  heroSection: {
+  mainColumn: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 12,
   },
-  heroVisual: {
-    width: 140,
-    height: 140,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
+  topSpacer: {
+    flex: 0.5,
   },
-  motifOuter: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.25)',
+  bottomSpacer: {
+    flex: 0.5,
+  },
+  contentGroup: {
+    alignItems: 'stretch',
+  },
+  slidesWrapper: {
+    alignItems: 'center',
+  },
+  slide: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 32,
   },
-  motifRing: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    alignItems: 'center',
+  slideTitle: {
+    fontSize: 30,
+    fontFamily: FONT.displayFamily,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 38,
+    marginBottom: 14,
+  },
+  slideDesc: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.82)',
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 320,
+  },
+  dots: {
+    flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 20,
+    paddingBottom: 4,
   },
-  motifDot: {
-    position: 'absolute',
+  dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: 'rgba(255,255,255,0.35)',
   },
-  tagline: {
-    fontSize: 34,
-    fontFamily: 'DMSerifDisplay_400Regular',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    lineHeight: 44,
-    marginBottom: 12,
+  dotActive: {
+    width: 22,
+    backgroundColor: '#FFFFFF',
   },
-  subtitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.78)',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-
-  // actions
   actionsSection: {
-    gap: 10,
-    paddingBottom: 4,
+    gap: 12,
+    marginTop: 36,
   },
-  googleBtn: {
-    flexDirection: 'row',
+  primaryBtn: {
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
     elevation: 2,
   },
-  googleBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#3C4043',
+  primaryBtnText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.green,
   },
-  appleBtn: {
-    flexDirection: 'row',
-    backgroundColor: '#000000',
-    borderRadius: 14,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  appleBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  emailBtn: {
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  emailBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.85)',
-  },
-
-  // sign in
   signinRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    paddingBottom: 4,
   },
   signinText: {
-    color: 'rgba(255,255,255,0.70)',
+    color: 'rgba(255,255,255,0.72)',
     fontSize: 14,
   },
   signinLink: {

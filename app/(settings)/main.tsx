@@ -32,8 +32,14 @@ export default function SettingsScreen() {
         <SettingsHubRow
           icon="sparkles-outline"
           iconColor={COLORS.primary}
-          label="Premium & Trust"
+          label="Premium"
           onPress={() => router.push('/(settings)/premium-trust')}
+        />
+        <SettingsHubRow
+          icon="shield-checkmark-outline"
+          iconColor={COLORS.success}
+          label="Trust"
+          onPress={() => router.push('/(settings)/verify')}
         />
         <SettingsHubRow
           icon="shield-checkmark-outline"

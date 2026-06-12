@@ -56,8 +56,10 @@ export function mapMessagesInsertError(err: PostgrestErrorFields | null): string
   const { code, key } = pgErrorDiscriminator(err);
   if (code === '23P01' && key === 'rate_limit:messages:hour') return ERROR_MESSAGE_RATE_LIMIT_HOUR;
   if (code === '23P01' && key === 'rate_limit:messages:day') return ERROR_MESSAGE_RATE_LIMIT_DAY;
+  if (code === '23P01' && key === 'rate_limit:messages:free') return ERROR_MESSAGE_FREE_LIMIT;
   const blob = pgErrorBlob(err);
   if (blob.includes('rate_limit:messages:hour')) return ERROR_MESSAGE_RATE_LIMIT_HOUR;
   if (blob.includes('rate_limit:messages:day')) return ERROR_MESSAGE_RATE_LIMIT_DAY;
+  if (blob.includes('rate_limit:messages:free')) return ERROR_MESSAGE_FREE_LIMIT;
   return null;
 }

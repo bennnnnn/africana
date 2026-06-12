@@ -10,8 +10,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import {
   COLORS,
-  GENDER_OPTIONS,
-  INTERESTED_IN_OPTIONS,
+  PROFILE_GENDER_OPTIONS,
+  PROFILE_INTERESTED_IN_OPTIONS,
   LOOKING_FOR_OPTIONS,
   RELIGION_OPTIONS,
   EDUCATION_OPTIONS,
@@ -25,9 +25,10 @@ import { SliderPicker } from '@/components/ui/SliderPicker';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { LocationPicker, type LocationValue } from '@/components/ui/LocationPicker';
 import { oppositeInterestedIn } from '@/lib/gender-match';
-import type { Gender, User } from '@/types';
+import type { InterestedIn, User } from '@/types';
 import { EditModal, HOBBY_OPTIONS, em } from '@/components/me/MyProfileEditPrimitives';
 import { MeProfileSelectList } from '@/components/me/MeProfileSelectList';
+import { SelectPicker } from '@/components/ui/SelectPicker';
 
 type CultureLanguageOpts = {
   suggested: string[];
@@ -63,6 +64,7 @@ export type MyProfileEditModalsProps = {
   needsOriginForData: boolean;
   openOriginLocation: () => void;
   cultureEthnicityOpts: string[];
+  cultureEthnicitySuggested: string[];
   cultureLanguageOpts: CultureLanguageOpts;
   cultureLoading: boolean;
 };
@@ -96,6 +98,7 @@ export function MyProfileEditModals({
   needsOriginForData,
   openOriginLocation,
   cultureEthnicityOpts,
+  cultureEthnicitySuggested,
   cultureLanguageOpts,
   cultureLoading,
 }: MyProfileEditModalsProps) {
@@ -246,14 +249,35 @@ export function MyProfileEditModals({
         {cultureLoading ? (
           <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
         ) : cultureEthnicityOpts.length > 0 ? (
-          <MeProfileSelectList
-            options={cultureEthnicityOpts.map((e) => ({ value: e, label: e }))}
-            current={editText || null}
-            onPick={(v) => setEditText(v ?? '')}
-            withSearch
-            listSearch={listSearch}
-            onListSearchChange={setListSearch}
-          />
+          <View>
+            <MeProfileSelectList
+              options={cultureEthnicityOpts.map((e) => ({ value: e, label: e }))}
+              current={editText || null}
+              onPick={(v) => setEditText(v ?? '')}
+              withSearch
+              listSearch={listSearch}
+              onListSearchChange={setListSearch}
+            />
+            {cultureEthnicitySuggested.length > 0 ? (
+              <View style={{ marginTop: 20 }}>
+                <Text style={em.groupLabel}>Common in your area</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                  {cultureEthnicitySuggested.map((eth) => {
+                    const on = editText === eth;
+                    return (
+                      <Pressable
+                        key={eth}
+                        onPress={() => setEditText(on ? '' : eth)}
+                        style={[em.chip, on && em.chipOn]}
+                      >
+                        <Text style={[em.chipTxt, on && em.chipTxtOn]}>{eth}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+          </View>
         ) : needsOriginForData ? (
           <TouchableOpacity
             onPress={() => {
@@ -321,9 +345,18 @@ export function MyProfileEditModals({
           <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
         ) : cultureLanguageOpts.suggested.length > 0 || cultureLanguageOpts.all.length > 0 ? (
           <View>
+            <SelectPicker
+              label="Languages you speak"
+              placeholder="Select languages you speak"
+              options={cultureLanguageOpts.all.map((o) => ({ value: o, label: o }))}
+              values={editMulti}
+              onChange={setEditMulti}
+              multiple
+              clearable
+            />
             {cultureLanguageOpts.suggested.length > 0 ? (
-              <View style={{ marginBottom: 20 }}>
-                <Text style={em.groupLabel}>Suggested languages</Text>
+              <View style={{ marginTop: 4 }}>
+                <Text style={em.groupLabel}>Common in your area</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                   {cultureLanguageOpts.suggested.map((lang) => {
                     const on = editMulti.includes(lang);
@@ -339,30 +372,6 @@ export function MyProfileEditModals({
                       </Pressable>
                     );
                   })}
-                </View>
-              </View>
-            ) : null}
-            {cultureLanguageOpts.all.filter((l) => !cultureLanguageOpts.suggested.includes(l))
-              .length > 0 ? (
-              <View>
-                <Text style={em.groupLabel}>More languages</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                  {cultureLanguageOpts.all
-                    .filter((l) => !cultureLanguageOpts.suggested.includes(l))
-                    .map((lang) => {
-                      const on = editMulti.includes(lang);
-                      return (
-                        <Pressable
-                          key={lang}
-                          onPress={() =>
-                            setEditMulti((p) => (on ? p.filter((v) => v !== lang) : [...p, lang]))
-                          }
-                          style={[em.chip, on && em.chipOn]}
-                        >
-                          <Text style={[em.chipTxt, on && em.chipTxtOn]}>{lang}</Text>
-                        </Pressable>
-                      );
-                    })}
                 </View>
               </View>
             ) : null}
@@ -452,15 +461,17 @@ export function MyProfileEditModals({
         title="I am a"
         onClose={close}
         saving={saving}
-        onSave={() =>
+        onSave={() => {
+          if (editSelect !== 'male' && editSelect !== 'female') return;
+          const gender = editSelect;
           save({
-            gender: editSelect,
-            interested_in: oppositeInterestedIn(editSelect as Gender),
-          })
-        }
+            gender,
+            interested_in: oppositeInterestedIn(gender),
+          });
+        }}
       >
         <MeProfileSelectList
-          options={GENDER_OPTIONS}
+          options={PROFILE_GENDER_OPTIONS}
           current={editSelect}
           onPick={setEditSelect}
           listSearch={listSearch}
@@ -473,10 +484,14 @@ export function MyProfileEditModals({
         title="Interested in"
         onClose={close}
         saving={saving}
-        onSave={() => save({ interested_in: editSelect })}
+        onSave={() => {
+          if (editSelect === 'men' || editSelect === 'women') {
+            save({ interested_in: editSelect });
+          }
+        }}
       >
         <MeProfileSelectList
-          options={INTERESTED_IN_OPTIONS}
+          options={PROFILE_INTERESTED_IN_OPTIONS}
           current={editSelect}
           onPick={setEditSelect}
           listSearch={listSearch}

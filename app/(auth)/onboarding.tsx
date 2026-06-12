@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,16 +11,20 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
-import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
 import { useAuthStore } from '@/store/auth.store';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { LocationPicker, type LocationValue } from '@/components/ui/LocationPicker';
+import { SelectPicker, type SelectOption } from '@/components/ui/SelectPicker';
 import { DatePicker } from '@/components/ui/DatePicker';
-import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
-import { SelectOption, SelectPicker } from '@/components/ui/SelectPicker';
+import { OnboardingPhotoGrid } from '@/components/onboarding/OnboardingPhotoGrid';
+import {
+  ALL_COUNTRIES,
+  AFRICAN_COUNTRY_CODES,
+  resolveCountryFromStored,
+} from '@/lib/country-data';
 import { COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
 import {
   ONBOARDING_TOTAL_STEPS as TOTAL_STEPS,
@@ -34,16 +38,20 @@ import { validateFirstName, getValidationState } from '@/lib/validation';
 import { saveOnboardingSkippedHints } from '@/lib/post-onboarding-nudges';
 import { appDialog } from '@/lib/app-dialog';
 import { track, EVENTS } from '@/lib/analytics';
-import { ALL_COUNTRIES, AFRICAN_COUNTRY_CODES } from '@/lib/country-data';
-import { CultureOptionSet, getEthnicityOptions, getLanguageOptions } from '@/lib/cultural-data';
-import { detectLocationFromIp } from '@/lib/geo-country';
+import {
+  type CultureOptionSet,
+  getEthnicityOptions,
+  getLanguageOptions,
+} from '@/lib/cultural-data';
 import { logWarn } from '@/lib/logger';
-import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
-import { isProfileCompleteForDiscover } from '@/lib/profile-completion';
-import { MultiChipSelect } from '@/components/onboarding/MultiChipSelect';
+import {
+  hasDiscoverBasics,
+  hasDiscoverPhoto,
+  isProfileCompleteForDiscover,
+} from '@/lib/profile-completion';
+import { primaryProfilePhotoUrl } from '@/lib/primary-profile-photo-url';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { OnboardingProgressBar } from '@/components/onboarding/OnboardingProgressBar';
-import { OnboardingPhotoGrid } from '@/components/onboarding/OnboardingPhotoGrid';
 import { AuthLegalConsentRow } from '@/components/auth/AuthLegalConsentRow';
 
 // Keep Dimensions import for downstream layout (step chip layouts) even when not directly used here.
@@ -109,6 +117,11 @@ export default function OnboardingScreen() {
   const [photoProgress, setPhotoProgress] = useState<{ uploaded: number; total: number } | null>(
     null,
   );
+  const [photoPickingProgress, setPhotoPickingProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
+  const pickPhotosInFlightRef = useRef(false);
 
   const firstNameValidation = validateFirstName(fullName);
   const showTermsConsent = !termsAccepted;
@@ -127,42 +140,89 @@ export default function OnboardingScreen() {
     };
   }, []);
 
+  // Returning users who skipped photos: land on the photo step with basics prefilled.
+  useEffect(() => {
+    if (!user || step !== 1 || isAuthLoading) return;
+    if (!hasDiscoverBasics(user) || hasDiscoverPhoto(user)) return;
+    setFullName(user.full_name ?? '');
+    setTermsAccepted(true);
+    if (user.birthdate) {
+      const d = new Date(user.birthdate);
+      setBirthdate(d);
+      setAgeYears((Date.now() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+    }
+    if (user.gender) setGender(user.gender);
+    if (user.interested_in) setInterestedIn(user.interested_in);
+    if (user.looking_for?.length) setLookingFor(user.looking_for);
+    if (user.country) {
+      const livingResolved = resolveCountryFromStored(user.country);
+      setLocation({
+        country: user.country,
+        countryCode: livingResolved?.code,
+        subdivision: user.state ?? undefined,
+        city: user.city ?? undefined,
+      });
+    }
+    if (user.origin_country) {
+      const originResolved = resolveCountryFromStored(user.origin_country);
+      setOriginLocation({
+        country: user.origin_country,
+        countryCode: originResolved?.code,
+        subdivision: user.origin_state ?? undefined,
+        city: user.origin_city ?? undefined,
+      });
+    }
+    const existingPhoto = primaryProfilePhotoUrl(user);
+    if (existingPhoto) setPhotoUris([existingPhoto]);
+    setStep(2);
+  }, [user, step, isAuthLoading]);
+
   // ── Cultural location derivations ──────────────────────────────────────────
-  const livesInAfrica = location.countryCode
-    ? AFRICAN_COUNTRY_CODES.has(location.countryCode)
-    : false;
-  const needsOriginCountry = Boolean(location.countryCode) && !livesInAfrica;
+  const africanCountryCodes = AFRICAN_COUNTRY_CODES;
+  const livingCountry = useMemo(
+    () =>
+      (location.countryCode ? resolveCountryFromStored(location.countryCode) : undefined) ??
+      resolveCountryFromStored(location.country),
+    [location.country, location.countryCode],
+  );
+  const livesInAfrica = livingCountry ? africanCountryCodes.has(livingCountry.code) : false;
+  const needsOriginCountry = Boolean(livingCountry) && !livesInAfrica;
   const originMatchesLiving =
-    Boolean(originLocation.countryCode) && originLocation.countryCode === location.countryCode;
+    Boolean(originLocation.countryCode) &&
+    originLocation.countryCode === (location.countryCode ?? livingCountry?.code);
   const culturalLocation = livesInAfrica
     ? location
     : needsOriginCountry &&
         originLocation.countryCode &&
-        AFRICAN_COUNTRY_CODES.has(originLocation.countryCode) &&
+        africanCountryCodes.has(originLocation.countryCode) &&
         !originMatchesLiving
       ? originLocation
       : null;
   const locationPathComplete = Boolean(
     culturalLocation?.country && culturalLocation?.subdivision && culturalLocation?.city,
   );
-  /** “Your roots” (step 6) only when we have a full cultural location; otherwise finish after location. */
-  const showRootsStep = locationPathComplete;
+  /** Step 6 when cultural data is available, or diaspora users can still add roots manually. */
+  const showRootsStep = livesInAfrica ? locationPathComplete : Boolean(livingCountry);
   const progressDenominator =
     step <= 4 ? TOTAL_STEPS : step === 5 && !showRootsStep ? 5 : TOTAL_STEPS;
 
   useEffect(() => {
-    if (step !== 6 || locationPathComplete) return;
+    if (step !== 6 || locationPathComplete || needsOriginCountry) return;
     const t = setTimeout(() => setStep(5), 0);
     return () => clearTimeout(t);
-  }, [step, locationPathComplete]);
+  }, [step, locationPathComplete, needsOriginCountry]);
 
   const suggestedLanguages = cultureLanguageOptions?.suggested ?? [];
   const allLanguages = cultureLanguageOptions?.all ?? [];
 
-  const originCountryOptions: SelectOption[] = ALL_COUNTRIES.map((c) => ({
-    value: c.code,
-    label: c.name,
-  }));
+  const originCountryOptions: SelectOption[] = useMemo(
+    () =>
+      ALL_COUNTRIES.map((c) => ({
+        value: c.code,
+        label: c.name,
+      })),
+    [],
+  );
 
   // Load ethnicity & language options whenever location path is complete
   useEffect(() => {
@@ -253,6 +313,7 @@ export default function OnboardingScreen() {
     let cancelled = false;
     (async () => {
       try {
+        const { detectLocationFromIp } = await import('@/lib/geo-country');
         const detected = await detectLocationFromIp();
         if (cancelled || !detected) return;
         setLocation((cur) => {
@@ -275,19 +336,39 @@ export default function OnboardingScreen() {
   }, [step, location.country, location.countryCode]);
 
   const pickPhotos = async () => {
+    if (pickPhotosInFlightRef.current) return;
     try {
       const remaining = MAX_PROFILE_PHOTOS - photoUris.length;
       if (remaining <= 0) return;
+      const ImagePicker = await import('expo-image-picker');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsMultipleSelection: true,
         quality: 0.8,
       });
       if (result.canceled) return;
-      const newUris = result.assets.map((a) => a.uri);
+      const newUris = result.assets.map((a) => a.uri).slice(0, remaining);
+      if (newUris.length === 0) return;
 
-      const { approved, rejected } = await validateFacesInPhotos(newUris);
-      if (approved.length === 0) {
+      if (!params.userId) {
+        appDialog({
+          title: 'Session error',
+          message: 'Please go back and try again.',
+          icon: 'alert-circle-outline',
+        });
+        return;
+      }
+
+      pickPhotosInFlightRef.current = true;
+
+      const { validateFacesInPhotos, faceRejectionMessage } = await import('@/lib/face-detection');
+      const { uploadToAvatarsBucket } = await import('@/lib/storage-image-upload');
+      setPhotoPickingProgress({ current: 0, total: newUris.length });
+      const { approved: approvedLocalUris, rejected } = await validateFacesInPhotos(newUris);
+      const rejectedCount = rejected.length;
+      setPhotoPickingProgress(null);
+
+      if (approvedLocalUris.length === 0) {
         appDialog({
           title: 'No faces detected',
           message:
@@ -296,12 +377,35 @@ export default function OnboardingScreen() {
         });
         return;
       }
-      if (rejected.length > 0) {
-        const { title, message } = faceRejectionMessage(rejected.length, approved.length);
+
+      setPhotoProgress({ uploaded: 0, total: approvedLocalUris.length });
+      let uploadedCount = 0;
+      for (let i = 0; i < approvedLocalUris.length; i++) {
+        const out = await uploadToAvatarsBucket(params.userId, approvedLocalUris[i]);
+        if (!('error' in out)) {
+          uploadedCount += 1;
+          setPhotoUris((prev) =>
+            prev.length >= MAX_PROFILE_PHOTOS
+              ? prev
+              : [...prev, out.publicUrl].slice(0, MAX_PROFILE_PHOTOS),
+          );
+        }
+        setPhotoProgress({ uploaded: i + 1, total: approvedLocalUris.length });
+      }
+      setPhotoProgress(null);
+
+      if (uploadedCount === 0) {
+        appDialog({
+          title: 'Photo upload failed',
+          message: 'We could not upload your photos. Check your connection and try again.',
+          icon: 'cloud-offline-outline',
+        });
+        return;
+      }
+      if (rejectedCount > 0) {
+        const { title, message } = faceRejectionMessage(rejectedCount, uploadedCount);
         appDialog({ title, message, icon: 'happy-outline' });
       }
-
-      setPhotoUris((prev) => [...prev, ...approved].slice(0, MAX_PROFILE_PHOTOS));
     } catch (e) {
       console.error('Image picker failed', e);
       appDialog({
@@ -309,6 +413,10 @@ export default function OnboardingScreen() {
         message: 'We could not open your photo library. Check permissions and try again.',
         icon: 'images-outline',
       });
+    } finally {
+      pickPhotosInFlightRef.current = false;
+      setPhotoPickingProgress(null);
+      setPhotoProgress(null);
     }
   };
 
@@ -337,6 +445,7 @@ export default function OnboardingScreen() {
       return;
     }
     if (!birthdate || !gender || !interestedIn) {
+      setStep(3);
       setStep3Errors({
         birthdate: !birthdate,
         gender: !gender,
@@ -365,6 +474,7 @@ export default function OnboardingScreen() {
       return;
     }
     if (!location.country) {
+      setStep(5);
       appDialog({
         title: 'Missing location',
         message: 'Please select your country.',
@@ -373,6 +483,7 @@ export default function OnboardingScreen() {
       return;
     }
     if (lookingFor.length === 0) {
+      setStep(4);
       appDialog({
         title: 'Almost there',
         message: 'Please choose at least one option for what you’re looking for.',
@@ -406,25 +517,18 @@ export default function OnboardingScreen() {
           ? meta.terms_accepted_at
           : new Date().toISOString();
 
-      let uploadedUrls: string[] = [];
-      if (photoUris.length > 0) {
-        setPhotoProgress({ uploaded: 0, total: photoUris.length });
-        const results: ({ publicUrl: string } | { error: string })[] = [];
-        for (let i = 0; i < photoUris.length; i++) {
-          results.push(await uploadToAvatarsBucket(params.userId!, photoUris[i]));
-          setPhotoProgress({ uploaded: i + 1, total: photoUris.length });
-        }
-        uploadedUrls = results.flatMap((out) => ('error' in out ? [] : [out.publicUrl]));
-        setPhotoProgress(null);
-        if (uploadedUrls.length === 0) {
-          appDialog({
-            title: 'Photo upload failed',
-            message: 'We could not upload your photos. You can add them later from your profile.',
-            icon: 'cloud-offline-outline',
-          });
-        }
-      }
+      const uploadedUrls = photoUris.filter((uri) => uri.startsWith('http'));
       const avatarUrl = uploadedUrls[0] ?? null;
+      if (uploadedUrls.length === 0) {
+        setStep(2);
+        appDialog({
+          title: 'Add a profile photo',
+          message:
+            'A photo is required before you can appear in Discover or browse other members.',
+          icon: 'camera-outline',
+        });
+        return;
+      }
 
       const savedEthnicity = skipCultureFields ? null : ethnicity.trim() || null;
       const savedLanguages = skipCultureFields ? [] : languages;
@@ -483,9 +587,9 @@ export default function OnboardingScreen() {
         moreDetails: skipCultureFields || !(savedEthnicity || savedLanguages.length > 0),
       });
 
+      setStep(7); // celebration — before hydrate so complete-profile guard doesn't skip it
       await hydrateUserFromServer(params.userId);
       track(EVENTS.AUTH_SIGNUP_COMPLETE);
-      setStep(7); // celebration
     } catch (e) {
       console.error('Onboarding save failed', e);
       appDialog({
@@ -499,15 +603,23 @@ export default function OnboardingScreen() {
     }
   };
 
+  const birthdateAgeYears = birthdate
+    ? (Date.now() - birthdate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+    : null;
+
   const canProceed = () => {
     if (step === 1) return firstNameValidation.valid && termsAccepted;
-    if (step === 2) return true;
+    if (step === 2) return photoUris.length > 0 && !photoPickingProgress && !photoProgress;
     if (step === 3) {
       if (!birthdate || !gender || !interestedIn) return false;
-      return (ageYears ?? 0) >= 18 && (ageYears ?? 0) <= 120;
+      const years = birthdateAgeYears ?? ageYears ?? 0;
+      return years >= 18 && years <= 120;
     }
     if (step === 4) return lookingFor.length > 0;
-    if (step === 5) return !!location.country;
+    if (step === 5) {
+      if (livesInAfrica) return locationPathComplete;
+      return !!location.country;
+    }
     return true; // steps 6 & 7 always ok
   };
 
@@ -527,17 +639,16 @@ export default function OnboardingScreen() {
     setStep(step + 1);
   };
 
-  // Only auto-redirect before the user has entered anything (step 1).
-  // At step 7 the user just finished onboarding and the celebration screen
-  // must be shown — do NOT redirect here or it gets skipped.
+  // Redirect already-complete users unless they're on the celebration screen (step 7).
   useEffect(() => {
-    if (step !== 1) return;
+    if (step === 7) return;
     if (!isAuthLoading && isProfileCompleteForDiscover(user)) {
       router.replace('/(tabs)/discover');
     }
   }, [isAuthLoading, user, step]);
 
-  if (isAuthLoading) {
+  // Step 1 only needs route params — don't block the name field on profile hydration.
+  if (isAuthLoading && step !== 1) {
     return (
       <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator size="large" color={COLORS.primary} />
@@ -602,12 +713,6 @@ export default function OnboardingScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* ── Step hero (decorative emoji) — only on “Your roots” (step 6) ── */}
-          {step === 6 ? (
-            <View style={[s.stepHero, { backgroundColor: cur.bg }]}>
-              <Text style={{ fontSize: 40 }}>{cur.emoji}</Text>
-            </View>
-          ) : null}
           <Text
             style={[
               s.stepTitle,
@@ -651,32 +756,67 @@ export default function OnboardingScreen() {
 
           {/* ════ STEP 2 — Photos ════ */}
           {step === 2 && (
-            <OnboardingPhotoGrid
-              photoUris={photoUris}
-              onAdd={() => {
-                void pickPhotos().catch((e: unknown) => {
-                  const msg = e instanceof Error ? e.message : '';
-                  if (msg !== 'User cancelled' && !msg.includes('cancel')) {
-                    appDialog({
-                      title: 'Could not add photo',
-                      message: 'Please try again or pick a different photo.',
-                      icon: 'image-outline',
-                    });
-                  }
-                });
-              }}
-              onRemoveAt={(i) => setPhotoUris((p) => p.filter((_, idx) => idx !== i))}
-            />
+            <View>
+              <OnboardingPhotoGrid
+                photoUris={photoUris}
+                onAdd={() => {
+                  if (photoPickingProgress) return;
+                  void pickPhotos().catch((e: unknown) => {
+                    const msg = e instanceof Error ? e.message : '';
+                    if (msg !== 'User cancelled' && !msg.includes('cancel')) {
+                      appDialog({
+                        title: 'Could not add photo',
+                        message: 'Please try again or pick a different photo.',
+                        icon: 'image-outline',
+                      });
+                    }
+                  });
+                }}
+                onRemoveAt={(i) => setPhotoUris((p) => p.filter((_, idx) => idx !== i))}
+              />
+              {photoPickingProgress && (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    marginTop: 12,
+                  }}
+                >
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                  <Text style={{ fontSize: 13, color: COLORS.textSecondary }}>
+                    Checking photo {photoPickingProgress.current} of {photoPickingProgress.total}…
+                  </Text>
+                </View>
+              )}
+              {photoProgress && (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    marginTop: 12,
+                  }}
+                >
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                  <Text style={{ fontSize: 13, color: COLORS.textSecondary }}>
+                    Uploading photo {photoProgress.uploaded} of {photoProgress.total}…
+                  </Text>
+                </View>
+              )}
+            </View>
           )}
 
           {/* ════ STEP 3 — Birthday · Gender · Interested In ════ */}
           {step === 3 && (
             <View>
               <DatePicker
-                label="Date of Birth"
-                value={birthdate}
-                onChange={handleBirthdateChange}
-                placeholder="Tap to select"
+                  label="Date of Birth"
+                  value={birthdate}
+                  onChange={handleBirthdateChange}
+                  placeholder="Tap to select"
               />
               {step3Errors.birthdate && (
                 <Text style={s.fieldError}>Please select your date of birth</Text>
@@ -761,32 +901,38 @@ export default function OnboardingScreen() {
               <LocationPicker value={location} onChange={handleLivingLocationChange} />
 
               {needsOriginCountry && (
-                <SelectPicker
-                  label="Origin (optional)"
-                  placeholder="Select origin country..."
-                  options={originCountryOptions}
-                  value={originLocation.countryCode ?? null}
-                  onChange={(code) => {
-                    const found = ALL_COUNTRIES.find((c) => c.code === code);
-                    setOriginLocation(
-                      found
-                        ? {
-                            country: found.name,
-                            countryCode: found.code,
-                            subdivision: '',
-                            city: '',
-                          }
-                        : {},
-                    );
-                    setEthnicity('');
-                    setLanguages([]);
-                  }}
-                  clearable
-                />
+                <>
+                  <Text style={[s.hint, { marginBottom: 10, lineHeight: 18 }]}>
+                    Add an African origin to unlock ethnicity and language options for your
+                    heritage.
+                  </Text>
+                  <SelectPicker
+                    label="Origin country"
+                    placeholder="Select origin country..."
+                    options={originCountryOptions}
+                    value={originLocation.countryCode ?? null}
+                    onChange={(code) => {
+                      const found = ALL_COUNTRIES.find((c) => c.code === code);
+                      setOriginLocation(
+                        found
+                          ? {
+                              country: found.name,
+                              countryCode: found.code,
+                              subdivision: '',
+                              city: '',
+                            }
+                          : {},
+                      );
+                      setEthnicity('');
+                      setLanguages([]);
+                    }}
+                    clearable
+                  />
+                </>
               )}
 
               {originLocation.countryCode &&
-                AFRICAN_COUNTRY_CODES.has(originLocation.countryCode) &&
+                africanCountryCodes.has(originLocation.countryCode) &&
                 !originMatchesLiving && (
                   <LocationPicker
                     value={originLocation}
@@ -806,15 +952,38 @@ export default function OnboardingScreen() {
 
               {/* Ethnicity */}
               {locationPathComplete && culturalLocation?.country && cultureEthnicityOptions ? (
-                <SelectPicker
-                  label="Ethnicity"
-                  placeholder="Select your ethnicity"
-                  options={cultureEthnicityOptions.all.map((o) => ({ value: o, label: o }))}
-                  value={ethnicity || null}
-                  onChange={(v) => setEthnicity(v ?? '')}
-                  clearable
-                />
-              ) : locationPathComplete && !cultureOptionsLoading ? (
+                <>
+                  <SelectPicker
+                    label="Ethnicity"
+                    placeholder="Select your ethnicity"
+                    options={cultureEthnicityOptions.all.map((o) => ({ value: o, label: o }))}
+                    value={ethnicity || null}
+                    onChange={(v) => setEthnicity(v ?? '')}
+                    clearable
+                  />
+                  {cultureEthnicityOptions.suggested.length > 0 ? (
+                    <View style={{ marginTop: 16 }}>
+                      <Text style={s.label}>
+                        Common in {culturalLocation.subdivision || culturalLocation.city || culturalLocation.country}
+                      </Text>
+                      <View style={s.row}>
+                        {cultureEthnicityOptions.suggested.map((opt) => {
+                          const on = ethnicity === opt;
+                          return (
+                            <Pressable
+                              key={opt}
+                              onPress={() => setEthnicity(on ? '' : opt)}
+                              style={[s.chip, on && s.chipOn]}
+                            >
+                              <Text style={[s.chipTxt, on && s.chipTxtOn]}>{opt}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ) : null}
+                </>
+              ) : (locationPathComplete || needsOriginCountry) && !cultureOptionsLoading ? (
                 <Input
                   label="Ethnicity"
                   value={ethnicity}
@@ -827,20 +996,41 @@ export default function OnboardingScreen() {
               {/* Languages */}
               {locationPathComplete && cultureLanguageOptions ? (
                 <>
-                  <MultiChipSelect
+                  <SelectPicker
                     label="Languages you speak"
-                    options={suggestedLanguages}
+                    placeholder="Select languages you speak"
+                    options={allLanguages.map((o) => ({ value: o, label: o }))}
                     values={languages}
-                    onToggle={toggleLanguage}
+                    onChange={setLanguages}
+                    multiple
+                    clearable
                   />
-                  <MultiChipSelect
-                    label={`More languages in ${culturalLocation?.country ?? 'your region'}`}
-                    options={allLanguages.filter((l) => !suggestedLanguages.includes(l))}
-                    values={languages}
-                    onToggle={toggleLanguage}
-                  />
+                  {suggestedLanguages.length > 0 ? (
+                    <View style={{ marginTop: 16 }}>
+                      <Text style={s.label}>
+                        Common in{' '}
+                        {culturalLocation?.subdivision ||
+                          culturalLocation?.city ||
+                          culturalLocation?.country}
+                      </Text>
+                      <View style={s.row}>
+                        {suggestedLanguages.map((opt) => {
+                          const on = languages.includes(opt);
+                          return (
+                            <Pressable
+                              key={opt}
+                              onPress={() => toggleLanguage(opt)}
+                              style={[s.chip, on && s.chipOn]}
+                            >
+                              <Text style={[s.chipTxt, on && s.chipTxtOn]}>{opt}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ) : null}
                 </>
-              ) : locationPathComplete && !cultureOptionsLoading ? (
+              ) : (locationPathComplete || needsOriginCountry) && !cultureOptionsLoading ? (
                 <Input
                   label="Languages spoken"
                   value={languages.join(', ')}
@@ -857,29 +1047,17 @@ export default function OnboardingScreen() {
                 />
               ) : null}
 
-              {!locationPathComplete && (
+              {!locationPathComplete && needsOriginCountry && (
+                <Text style={[s.hint, { textAlign: 'center', marginTop: 8 }]}>
+                  Set an African origin on the previous step for local suggestions, or enter your
+                  roots manually above.
+                </Text>
+              )}
+              {!locationPathComplete && !needsOriginCountry && (
                 <Text style={[s.hint, { textAlign: 'center', marginTop: 8 }]}>
                   Complete your country, region, and city in the previous step to see local options.
                 </Text>
               )}
-            </View>
-          )}
-
-          {/* ── Photo upload progress (visible during save) ── */}
-          {photoProgress && (
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                paddingVertical: 12,
-              }}
-            >
-              <ActivityIndicator size="small" color={COLORS.primary} />
-              <Text style={{ fontSize: 13, color: COLORS.textSecondary }}>
-                Uploading photo {photoProgress.uploaded} of {photoProgress.total}…
-              </Text>
             </View>
           )}
 
@@ -895,14 +1073,6 @@ export default function OnboardingScreen() {
               disabled={!canProceed()}
               style={s.ctaPrimary}
             />
-            {step === 2 && photoUris.length === 0 && (
-              <Button
-                title="Skip — add photos later"
-                variant="ghost"
-                onPress={() => setStep(step + 1)}
-                fullWidth
-              />
-            )}
             {step === 6 && (
               <Button
                 title="Skip for now"
@@ -924,15 +1094,6 @@ export default function OnboardingScreen() {
 }
 
 const s = StyleSheet.create({
-  stepHero: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    alignSelf: 'center',
-  },
   stepTitle: {
     fontSize: 24,
     fontWeight: '800',

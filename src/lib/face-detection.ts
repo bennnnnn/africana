@@ -1,5 +1,4 @@
-import { NativeModules } from 'react-native';
-import FaceDetection from '@react-native-ml-kit/face-detection';
+import { NativeModules, TurboModuleRegistry } from 'react-native';
 
 /**
  * On-device face detection via Google ML Kit (free, offline, ~100-300ms per image).
@@ -12,11 +11,38 @@ import FaceDetection from '@react-native-ml-kit/face-detection';
  * or hasn't rebuilt the dev client since installing the package), we fail *open* —
  * meaning we let the photo through rather than blocking the user. A warning is
  * logged in dev so it's discoverable.
+ *
+ * We resolve the native module at runtime via TurboModuleRegistry (bridgeless/new-arch)
+ * with a NativeModules fallback, instead of importing the package wrapper which caches a
+ * failure proxy at import time under lazy module loading.
  */
 
-const IS_AVAILABLE = NativeModules.FaceDetection != null;
+type FaceDetectionOptions = {
+  performanceMode?: 'fast' | 'accurate';
+  landmarkMode?: 'none' | 'all';
+  contourMode?: 'none' | 'all';
+  classificationMode?: 'none' | 'all';
+  minFaceSize?: number;
+};
 
-if (!IS_AVAILABLE && __DEV__) {
+type FaceDetectionNativeModule = {
+  detect: (uri: string, options: FaceDetectionOptions) => Promise<unknown[]>;
+};
+
+let warnedUnavailable = false;
+
+function getFaceDetectionModule(): FaceDetectionNativeModule | null {
+  // Bridgeless/new-arch resolves legacy modules via TurboModuleRegistry first.
+  return (
+    TurboModuleRegistry.get<FaceDetectionNativeModule>('FaceDetection') ??
+    NativeModules.FaceDetection ??
+    null
+  );
+}
+
+function warnIfUnavailableOnce() {
+  if (!__DEV__ || warnedUnavailable || getFaceDetectionModule()) return;
+  warnedUnavailable = true;
   console.warn(
     '[face-detection] Native module not linked. Face checks are disabled. ' +
       'Rebuild the dev client (npx expo prebuild && pod install for iOS) to enable.',
@@ -29,6 +55,14 @@ export type FaceCheckResult =
   | { ok: true; faceCount: number }
   | { ok: false; reason: FaceCheckReason };
 
+const DETECT_OPTIONS: FaceDetectionOptions = {
+  performanceMode: 'fast',
+  landmarkMode: 'none',
+  contourMode: 'none',
+  classificationMode: 'none',
+  minFaceSize: 0.1,
+};
+
 /**
  * Check whether an image contains a single clear human face.
  *
@@ -39,16 +73,14 @@ export type FaceCheckResult =
  *   (Can switch to 'multiple_faces' rejection later if policy tightens.)
  */
 export async function checkImageHasFace(uri: string): Promise<FaceCheckResult> {
-  if (!IS_AVAILABLE) return { ok: true, faceCount: 0 };
+  const module = getFaceDetectionModule();
+  if (!module?.detect) {
+    warnIfUnavailableOnce();
+    return { ok: true, faceCount: 0 };
+  }
 
   try {
-    const faces = await FaceDetection.detect(uri, {
-      performanceMode: 'fast',
-      landmarkMode: 'none',
-      contourMode: 'none',
-      classificationMode: 'none',
-      minFaceSize: 0.1,
-    });
+    const faces = await module.detect(uri, DETECT_OPTIONS);
 
     if (!faces || faces.length === 0) {
       return { ok: false, reason: 'no_face' };
@@ -72,7 +104,12 @@ export async function validateFacesInPhotos(uris: string[]): Promise<{
   approved: string[];
   rejected: { uri: string; reason: FaceCheckReason }[];
 }> {
-  if (!IS_AVAILABLE || uris.length === 0) {
+  if (uris.length === 0) {
+    return { approved: uris, rejected: [] };
+  }
+
+  if (!getFaceDetectionModule()?.detect) {
+    warnIfUnavailableOnce();
     return { approved: uris, rejected: [] };
   }
 

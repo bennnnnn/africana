@@ -19,7 +19,7 @@ import {
 // per-OEM math needed.
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import {
@@ -42,7 +42,7 @@ import { ChatComposerArea, type ChatComposerVariant } from '@/components/chat/Ch
 import { ChatPeerOverflowMenu } from '@/components/chat/ChatPeerOverflowMenu';
 import { ChatReactionPickerOverlay } from '@/components/chat/ChatReactionPickerOverlay';
 import { ChatScreenHeaderChrome } from '@/components/chat/ChatScreenHeaderChrome';
-import { addFavourite, blockUser } from '@/lib/social-actions';
+import { addFavourite, blockUser, hasReportedUser } from '@/lib/social-actions';
 import { User } from '@/types';
 import { COLORS, DEFAULT_AVATAR, RADIUS } from '@/constants';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,7 +53,7 @@ import {
 } from '@/constants/chat-reactions';
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { UI_LABELS, UI_TOAST } from '@/constants/copy';
-import { getEffectivePresence } from '@/lib/utils';
+import { getEffectivePresence, isUuidString } from '@/lib/utils';
 import { usePresenceStore } from '@/store/presence.store';
 import { primaryProfilePhotoUrl } from '@/lib/primary-profile-photo-url';
 import { profileImageUrlForList } from '@/lib/storage-image-url';
@@ -72,14 +72,30 @@ import {
   setLastChatRouteKey,
 } from '@/lib/chat-peer-session';
 import { buildChatListItems, type ChatListItem } from '@/lib/chat-list-build';
+import {
+  loadChatVerificationNudgeSeen,
+  markChatVerificationNudgeSeen,
+} from '@/lib/chat-verification-nudge';
 import { logError, logWarn } from '@/lib/logger';
+import {
+  getRemainingMessages,
+  peekRemainingMessagesSync,
+  refreshQuotaCounts,
+} from '@/lib/free-quota';
+import { isProSync } from '@/lib/payments';
 
 export default function ChatScreen() {
   const { id: rawConversationId, otherUserId: otherUserIdRaw } = useLocalSearchParams<{
     id: string | string[];
     otherUserId?: string | string[];
   }>();
-  const conversationId = normalizeRouteParam(rawConversationId);
+  const conversationIdCandidate = normalizeRouteParam(rawConversationId);
+  const conversationId =
+    conversationIdCandidate && isUuidString(conversationIdCandidate)
+      ? conversationIdCandidate
+      : undefined;
+  const invalidConversationRoute =
+    Boolean(conversationIdCandidate) && !conversationId;
   const otherUserIdParam = normalizeRouteParam(otherUserIdRaw);
   /**
    * Expo Router often drops `otherUserId` from params after the first paint (e.g. when the keyboard opens).
@@ -158,6 +174,7 @@ export default function ChatScreen() {
   const [blockRelationshipActive, setBlockRelationshipActive] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [hasReported, setHasReported] = useState(false);
   const [isFavourite, setIsFavourite] = useState(false);
   const menuAnim = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -167,6 +184,15 @@ export default function ChatScreen() {
   const prevMessageCountRef = useRef(0);
   const prevLatestMessageKeyRef = useRef<string | undefined>(undefined);
   const [inputFocused, setInputFocused] = useState(false);
+  const [verificationNudgeSeen, setVerificationNudgeSeen] = useState<boolean | null>(null);
+  const [verificationNudgeChatId, setVerificationNudgeChatId] = useState<string | null>(null);
+  const [messageQuota, setMessageQuota] = useState<{ remaining: number; cap: number } | null>(
+    () => peekRemainingMessagesSync() ?? null,
+  );
+  const [quotaLoaded, setQuotaLoaded] = useState(() => {
+    if (isProSync()) return true;
+    return peekRemainingMessagesSync() !== undefined;
+  });
   // Unified overlay — one at a time. Own messages get Copy + Delete in the
   // header; other users' messages get emoji reactions (no delete).
   const [selectedMessages, setSelectedMessages] = useState<
@@ -226,6 +252,44 @@ export default function ChatScreen() {
     () => (user && peer && myMessagesSent === 0 ? generateIcebreakers(user, peer) : []),
     [user, peer, myMessagesSent],
   );
+
+  const isUserVerified =
+    user?.verified === true || user?.verification_status === 'approved';
+
+  useEffect(() => {
+    loadChatVerificationNudgeSeen().then(setVerificationNudgeSeen);
+  }, []);
+
+  const refreshMessageQuota = useCallback(async (options?: { force?: boolean }) => {
+    if (isProSync()) {
+      setMessageQuota(null);
+      setQuotaLoaded(true);
+      return;
+    }
+    const peek = peekRemainingMessagesSync();
+    if (peek !== undefined) {
+      setMessageQuota(peek);
+      setQuotaLoaded(true);
+    }
+    if (options?.force) {
+      await refreshQuotaCounts();
+    }
+    const quota = await getRemainingMessages();
+    setMessageQuota(quota);
+    setQuotaLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    void refreshMessageQuota();
+  }, [refreshMessageQuota, conversationId]);
+
+  useEffect(() => {
+    return () => setVerificationNudgeChatId(null);
+  }, [conversationId]);
+
+  const dismissVerificationNudge = useCallback(() => {
+    setVerificationNudgeChatId(null);
+  }, []);
 
   // Keep the id set in sync with the rendered message list so the realtime
   // reactions handler can quickly tell whether an inbound row is for us.
@@ -441,6 +505,25 @@ export default function ChatScreen() {
       .then(({ data }) => setIsFavourite(!!data));
   }, [user?.id, peer?.id]);
 
+  // ── Report status ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user || !peer) {
+      setHasReported(false);
+      return;
+    }
+    let cancelled = false;
+    void hasReportedUser(user.id, peer.id)
+      .then((reported) => {
+        if (!cancelled) setHasReported(reported);
+      })
+      .catch(() => {
+        if (!cancelled) setHasReported(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, peer?.id]);
+
   // ── Chat init — load / refresh peer + messages (layout effect already seeded header when possible).
   useEffect(() => {
     if (!conversationId || !user) return;
@@ -574,6 +657,7 @@ export default function ChatScreen() {
   const handleSend = async () => {
     if (!text.trim() || !user || !conversationId) return;
     if (outgoingMessagingDisabled || messagingDisabled || blockRelationshipActive) return;
+    if (!quotaLoaded || messageQuota?.remaining === 0) return;
     const content = text.trim();
     const cid = conversationId;
     setText('');
@@ -586,7 +670,10 @@ export default function ChatScreen() {
       setText((prev) => (prev.trim() ? prev : content));
       // Free-tier daily cap — the store already showed the Pro upsell dialog,
       // so don't show a duplicate error toast on top of it.
-      if (error === ERROR_MESSAGE_FREE_LIMIT) return;
+      if (error === ERROR_MESSAGE_FREE_LIMIT) {
+        void refreshMessageQuota({ force: true });
+        return;
+      }
       haptics.error();
       let toastMessage: string;
       if (
@@ -606,6 +693,8 @@ export default function ChatScreen() {
       }
       showToast({ message: toastMessage });
       logError('[Chat] send error', error);
+    } else {
+      void refreshMessageQuota();
     }
   };
 
@@ -778,22 +867,26 @@ export default function ChatScreen() {
           label: UI_LABELS.delete,
           style: 'destructive',
           onPress: async () => {
-            if (!deleteForEveryoneRef.current) {
-              showToast({
-                message: 'Check "Delete for everyone" to confirm.',
-                icon: 'information-circle-outline',
-              });
-              return;
-            }
             try {
-              await Promise.all(msgs.map(([messageId]) => deleteMessage(cid, messageId)));
-              showToast({
-                message:
-                  msgs.length > 1
-                    ? 'Messages deleted for everyone'
-                    : 'Message deleted for everyone',
-                icon: 'trash-outline',
-              });
+              if (deleteForEveryoneRef.current) {
+                await Promise.all(msgs.map(([messageId]) => deleteMessage(cid, messageId)));
+                showToast({
+                  message:
+                    msgs.length > 1
+                      ? 'Messages deleted for everyone'
+                      : 'Message deleted for everyone',
+                  icon: 'trash-outline',
+                });
+              } else {
+                await Promise.all(
+                  msgs.map(([messageId]) => softDeleteMessageForSelf(cid, messageId)),
+                );
+                showToast({
+                  message:
+                    msgs.length > 1 ? 'Messages deleted for you' : 'Message deleted for you',
+                  icon: 'trash-outline',
+                });
+              }
             } catch {
               showToast({
                 message: 'Failed to delete some messages.',
@@ -865,7 +958,7 @@ export default function ChatScreen() {
 
   const handleReport = () => {
     closeMenu();
-    if (!user || !peer) return;
+    if (!user || !peer || hasReported) return;
     setReportModalVisible(true);
   };
 
@@ -933,7 +1026,29 @@ export default function ChatScreen() {
       ? 'blocked'
       : messagingDisabled
         ? 'peer-off'
-        : 'active';
+        : !quotaLoaded
+          ? 'loading'
+          : messageQuota?.remaining === 0
+            ? 'quota-exceeded'
+            : 'active';
+
+  useEffect(() => {
+    if (verificationNudgeSeen !== false || !conversationId) return;
+    if (isUserVerified || myMessagesSent < 1 || composerVariant !== 'active') return;
+    setVerificationNudgeChatId(conversationId);
+    void markChatVerificationNudgeSeen().then(() => setVerificationNudgeSeen(true));
+  }, [
+    verificationNudgeSeen,
+    conversationId,
+    isUserVerified,
+    myMessagesSent,
+    composerVariant,
+  ]);
+
+  const showVerificationNudge =
+    verificationNudgeChatId === conversationId &&
+    !isUserVerified &&
+    composerVariant === 'active';
 
   const handleComposerChange = useCallback(
     (v: string) => {
@@ -968,36 +1083,46 @@ export default function ChatScreen() {
         showEmptyHint={!loading && convMessages.length === 0 && !conversationHasMessages}
       />
 
-      {/* Verification upsell — one-time nudge after first message */}
-      {myMessagesSent === 1 && !user?.verified && composerVariant === 'active' && (
+      {/* Verification upsell — one-time nudge after first outbound message */}
+      {showVerificationNudge && (
         <View
           style={{
             marginHorizontal: 16,
             marginBottom: 4,
             padding: 10,
             borderRadius: RADIUS.lg,
-            backgroundColor: COLORS.successSurface,
+            backgroundColor: COLORS.warningSurface,
             borderWidth: 1,
-            borderColor: COLORS.success,
+            borderColor: COLORS.warningBorder,
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
           }}
         >
-          <Ionicons name="shield-checkmark-outline" size={18} color={COLORS.success} />
+          <Ionicons name="information-circle-outline" size={18} color={COLORS.warning} />
           <Text style={{ flex: 1, fontSize: 12, color: COLORS.textSecondary }}>
             Verified profiles get 2× more replies. Add yours — takes 30 seconds.
           </Text>
           <TouchableOpacity
-            onPress={() => router.push('/(settings)/premium-trust')}
+            onPress={() => {
+              dismissVerificationNudge();
+              router.push('/(settings)/premium-trust');
+            }}
             style={{
               paddingHorizontal: 10,
               paddingVertical: 5,
               borderRadius: 12,
-              backgroundColor: COLORS.success,
+              backgroundColor: COLORS.warning,
             }}
           >
             <Text style={{ fontSize: 11, fontWeight: '600', color: COLORS.white }}>Verify</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={dismissVerificationNudge}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Dismiss verification reminder"
+          >
+            <Ionicons name="close" size={16} color={COLORS.textMuted} />
           </TouchableOpacity>
         </View>
       )}
@@ -1042,9 +1167,15 @@ export default function ChatScreen() {
         onInputBlur={() => setInputFocused(false)}
         composerBottomPad={composerBottomPad}
         disabledBarBottomPad={disabledBarBottomPad}
+        quotaRemaining={messageQuota?.remaining ?? null}
+        quotaCap={messageQuota?.cap}
       />
     </>
   );
+
+  if (invalidConversationRoute) {
+    return <Redirect href="/" />;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
@@ -1099,6 +1230,7 @@ export default function ChatScreen() {
           menuAnim={menuAnim}
           isLiked={isLiked}
           isFavourite={isFavourite}
+          hasReported={hasReported}
           onBackdropPress={closeMenu}
           onLike={handleLike}
           onFavourite={handleFavourite}
@@ -1125,6 +1257,8 @@ export default function ChatScreen() {
           reporterId={user.id}
           reportedUserId={peer.id}
           reportedUserName={peer.full_name ?? 'User'}
+          alreadyReported={hasReported}
+          onReported={() => setHasReported(true)}
         />
       ) : null}
     </View>

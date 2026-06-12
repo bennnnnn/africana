@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { AppState, type AppStateStatus, InteractionManager } from 'react-native';
+import { AppState, type AppStateStatus } from 'react-native';
+import { deferAfterPaint } from '@/lib/defer-after-paint';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -118,7 +119,7 @@ export function useRootLayoutBootstrap(params: {
             bootHydratedUserId.current = uid;
             await hydrateUserFromServer(uid);
             useAuthStore.getState().patchUser({ online_status: 'online' });
-            InteractionManager.runAfterInteractions(() => {
+            deferAfterPaint(() => {
               flushOnlineStatusWrite();
               void setOnlineStatus(uid, 'online').catch(() => {});
               void joinAppPresenceChannel(uid).catch((e) =>
@@ -212,7 +213,7 @@ export function useRootLayoutBootstrap(params: {
           return;
         }
         void hydrateUserFromServer(uid, { continueOnPartialFailure: true });
-        InteractionManager.runAfterInteractions(() => {
+        deferAfterPaint(() => {
           queueWelcomeEmail(uid);
           void registerForPushNotifications(uid).then((r) => {
             if (!r.ok && r.reason !== 'expo_go') {

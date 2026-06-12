@@ -1,5 +1,5 @@
 import React, { useEffect, memo, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { OnlinePulseRing } from '@/components/discover/OnlinePulseProvider';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -81,52 +81,54 @@ function UserCardInner({
   const profileLabel = `View profile: ${user.full_name ?? 'Member'}${user.age ? `, ${user.age}` : ''}`;
 
   return (
-    <TouchableOpacity
-      accessibilityRole="button"
-      accessibilityLabel={profileLabel}
-      onPress={() => {
-        setProfileSeed(user);
-        const photos = (user.profile_photos ?? []).filter(Boolean).slice(0, 3);
-        if (photos.length > 0) {
-          void Image.prefetch(photos.map((u) => profileImageUrlForList(u) ?? u));
-        }
-        beforeNavigate?.();
-        router.push(`/(profile)/${user.id}`);
-      }}
-      onLongPress={() => {
-        haptics.tapMedium();
-        onLongPress?.(user);
-      }}
-      delayLongPress={350}
-      activeOpacity={0.92}
-      style={[s.card, { width: cardWidth, height: cardHeight }]}
-    >
-      {/* ── Photo or placeholder — fills the card ── */}
-      {hasPhoto && displayPhoto ? (
-        <Image
-          source={{ uri: displayPhoto }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          contentPosition="center"
-          transition={0}
-          cachePolicy="memory-disk"
-          recyclingKey={`${user.id}:${photoUrl}`}
-          onError={() => {
-            setDisplayPhoto((current) =>
-              directPhoto && current !== directPhoto ? directPhoto : null,
-            );
-          }}
-        />
-      ) : (
-        <View style={StyleSheet.absoluteFill}>
+    <View style={[s.shadowWrap, { width: cardWidth, height: cardHeight }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={profileLabel}
+        onPress={() => {
+          setProfileSeed(user);
+          const photos = (user.profile_photos ?? []).filter(Boolean).slice(0, 3);
+          if (photos.length > 0) {
+            void Image.prefetch(photos.map((u) => profileImageUrlForList(u) ?? u));
+          }
+          beforeNavigate?.();
+          router.push(`/(profile)/${user.id}`);
+        }}
+        onLongPress={() => {
+          haptics.tapMedium();
+          onLongPress?.(user);
+        }}
+        delayLongPress={350}
+        android_ripple={{ color: 'rgba(0,0,0,0.08)' }}
+        style={({ pressed }) => [
+          s.card,
+          { width: cardWidth, height: cardHeight },
+          pressed && s.cardPressed,
+        ]}
+      >
+        {/* Match QuickPreviewModal: absoluteFill cover inside overflow-hidden clip (no contentPosition — Android expo-image bug). */}
+        {hasPhoto && displayPhoto ? (
+          <Image
+            source={{ uri: displayPhoto }}
+            style={s.photo}
+            contentFit="cover"
+            transition={0}
+            cachePolicy="memory-disk"
+            recyclingKey={`${user.id}:${photoUrl}`}
+            onError={() => {
+              setDisplayPhoto((current) =>
+                directPhoto && current !== directPhoto ? directPhoto : null,
+              );
+            }}
+          />
+        ) : (
           <HeroPlaceholder
             name={user.full_name}
             width={cardWidth}
             height={cardHeight}
             hint={null}
           />
-        </View>
-      )}
+        )}
 
       {/* ── NEW badge — top-left ── */}
       {isNew && (
@@ -165,22 +167,38 @@ function UserCardInner({
           </View>
         ) : null}
       </LinearGradient>
-    </TouchableOpacity>
+      </Pressable>
+    </View>
   );
 }
 
 export const UserCard = memo(UserCardInner);
 
 const s = StyleSheet.create({
-  card: {
+  /** Shadow/elevation on outer shell — Android mis-renders clipped images when elevation shares the clip view. */
+  shadowWrap: {
     borderRadius: RADIUS.xl,
-    overflow: 'hidden',
     backgroundColor: COLORS.savanna,
     shadowColor: '#3A2A1E',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
-    elevation: 4,
+    ...Platform.select({
+      android: { elevation: 4 },
+      default: {},
+    }),
+  },
+  card: {
+    borderRadius: RADIUS.xl,
+    overflow: 'hidden',
+    backgroundColor: COLORS.savanna,
+  },
+  cardPressed: {
+    opacity: 0.92,
+  },
+  photo: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: COLORS.savanna,
   },
   newBadge: {
     position: 'absolute',

@@ -1,11 +1,12 @@
 import type { Href } from 'expo-router';
 import type { User, Gender } from '@/types';
 import { isInterestedInProvided } from '@/lib/gender-match';
+import { primaryProfilePhotoUrl } from '@/lib/primary-profile-photo-url';
 
 const VALID_GENDERS: ReadonlySet<Gender> = new Set(['male', 'female', 'nonbinary', 'other']);
 
-/** Minimum profile needed before main app (Discover). Optional fields (bio, photo, work, etc.) do not block. */
-export function isProfileCompleteForDiscover(user: User | null | undefined): boolean {
+/** Text/location fields required before Discover (photo checked separately). */
+export function hasDiscoverBasics(user: User | null | undefined): boolean {
   if (!user) return false;
   const nameOk = Boolean(user.full_name?.trim());
   const birthOk = Boolean(user.birthdate && String(user.birthdate).trim());
@@ -13,6 +14,16 @@ export function isProfileCompleteForDiscover(user: User | null | undefined): boo
   const interestedOk = isInterestedInProvided(user.interested_in);
   const countryOk = Boolean(user.country?.trim());
   return nameOk && birthOk && genderOk && interestedOk && countryOk;
+}
+
+/** Discover feed RPC requires a profile photo (`avatar_url` or gallery). */
+export function hasDiscoverPhoto(user: User | null | undefined): boolean {
+  return Boolean(primaryProfilePhotoUrl(user));
+}
+
+/** Minimum profile needed before main app (Discover). */
+export function isProfileCompleteForDiscover(user: User | null | undefined): boolean {
+  return hasDiscoverBasics(user) && hasDiscoverPhoto(user);
 }
 
 export type ProfileStrengthItem = { key: string; label: string; done: boolean };

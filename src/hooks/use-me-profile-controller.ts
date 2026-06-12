@@ -12,6 +12,7 @@ import { resolveCountryFromStored } from '@/lib/country-data';
 import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
 import { uploadToAvatarsBucket } from '@/lib/storage-image-upload';
 import { buildMeProfileDisplayModel } from '@/lib/me-profile-display';
+import { profileEditGenderInitial, profileEditInterestedInInitial } from '@/lib/gender-match';
 import { useMeProfileCultureData } from '@/hooks/use-me-profile-culture-data';
 import type { LocationValue } from '@/components/ui/LocationPicker';
 
@@ -121,11 +122,20 @@ export function useMeProfileController() {
     setListSearch('');
   }, []);
 
-  const openSelect = useCallback((k: string, v: string | null | undefined) => {
-    setEditing(k);
-    setEditSelect(v ?? null);
-    setListSearch('');
-  }, []);
+  const openSelect = useCallback(
+    (k: string, v: string | null | undefined) => {
+      setEditing(k);
+      setEditSelect(
+        k === 'interested_in'
+          ? profileEditInterestedInInitial(v, user?.gender ?? null)
+          : k === 'gender'
+            ? profileEditGenderInitial(v)
+            : (v ?? null),
+      );
+      setListSearch('');
+    },
+    [user?.gender],
+  );
 
   const openMulti = useCallback((k: string, v: string[]) => {
     setEditing(k);
@@ -326,6 +336,7 @@ export function useMeProfileController() {
     openLanguages,
     openHeight,
     openWeight,
+    cultureEthnicitySuggested: culture.cultureEthnicitySuggested,
     cultureEthnicityOpts: culture.cultureEthnicityOpts,
     cultureLanguageOpts: culture.cultureLanguageOpts,
     cultureLoading: culture.cultureLoading,

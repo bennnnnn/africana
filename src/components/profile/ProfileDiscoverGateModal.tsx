@@ -27,8 +27,8 @@ export function ProfileDiscoverGateModal({ visible, onContinueSetup }: Props) {
             Finish your profile
           </Text>
           <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 22, color: '#555555' }}>
-            Add your basics (name, birthday, gender, and country) before browsing others. Who you
-            see is based on your gender.
+            Add your basics (name, photo, birthday, gender, and country) before browsing others.
+            Who you see depends on who you&apos;re interested in.
           </Text>
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
             <TouchableOpacity

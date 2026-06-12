@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { User } from '@/types';
 import { COLORS } from '@/constants';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
-import { formatLastSeen, getEffectivePresence } from '@/lib/utils';
+import { buildActivityLabel, getEffectivePresence } from '@/lib/utils';
 import { usePresenceStore } from '@/store/presence.store';
 import { storagePublicObjectUrlFromRender } from '@/lib/storage-image-url';
 import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
@@ -154,11 +154,11 @@ function ChatScreenHeaderPeerChrome({
             >
               {peerTyping
                 ? 'Typing…'
-                : displayOnline
-                  ? 'Online'
-                  : peer.online_visible === false
-                    ? 'Offline'
-                    : (formatLastSeen(peer.last_seen) ?? 'Offline')}
+                : buildActivityLabel({
+                    isOnline: !!displayOnline,
+                    lastSeen: peer.last_seen,
+                    onlineVisible: peer.online_visible,
+                  })}
             </Text>
           </View>
         </TouchableOpacity>

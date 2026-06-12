@@ -118,6 +118,7 @@ export default function MyProfileScreen() {
     openLanguages,
     openHeight,
     openWeight,
+    cultureEthnicitySuggested,
     cultureEthnicityOpts,
     cultureLanguageOpts,
     cultureLoading,
@@ -747,6 +748,7 @@ export default function MyProfileScreen() {
         setListSearch={setListSearch}
         needsOriginForData={needsOriginForData}
         openOriginLocation={openOriginLocation}
+        cultureEthnicitySuggested={cultureEthnicitySuggested}
         cultureEthnicityOpts={cultureEthnicityOpts}
         cultureLanguageOpts={cultureLanguageOpts}
         cultureLoading={cultureLoading}

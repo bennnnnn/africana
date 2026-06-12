@@ -1,5 +1,6 @@
 import React, { memo, useCallback, useEffect, useState } from 'react';
 import { View, Text, FlatList, Platform } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { supabase } from '@/lib/supabase';
@@ -132,6 +133,13 @@ export default function BlockedUsersScreen() {
     setIsLoading(true);
     fetchBlockedUsers().finally(() => setIsLoading(false));
   }, [user, fetchBlockedUsers]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      void fetchBlockedUsers();
+    }, [user, fetchBlockedUsers]),
+  );
 
   const unblock = useCallback((blockId: string, name: string) => {
     appDialog({

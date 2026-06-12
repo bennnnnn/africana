@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@/constants';
+import { UI_LABELS } from '@/constants/copy';
 import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
 
 type Props = {
@@ -9,6 +10,7 @@ type Props = {
   menuAnim: Animated.Value;
   isLiked: boolean;
   isFavourite: boolean;
+  hasReported: boolean;
   onBackdropPress: () => void;
   onLike: () => void;
   onFavourite: () => void;
@@ -21,6 +23,7 @@ export function ChatPeerOverflowMenu({
   menuAnim,
   isLiked,
   isFavourite,
+  hasReported,
   onBackdropPress,
   onLike,
   onFavourite,
@@ -65,11 +68,26 @@ export function ChatPeerOverflowMenu({
           <Text style={s.menuLabel}>{isFavourite ? 'Unfavourite' : 'Favourite'}</Text>
         </TouchableOpacity>
         <View style={{ height: 1, backgroundColor: COLORS.border, marginHorizontal: 14 }} />
-        <TouchableOpacity style={s.menuItem} onPress={onReport}>
+        <TouchableOpacity
+          style={[s.menuItem, hasReported ? { opacity: 0.45 } : null]}
+          onPress={onReport}
+          disabled={hasReported}
+        >
           <View style={s.menuIcon}>
-            <Ionicons name="flag-outline" size={17} color={COLORS.textStrong} />
+            <Ionicons
+              name={hasReported ? 'checkmark-circle-outline' : 'flag-outline'}
+              size={17}
+              color={hasReported ? COLORS.textSecondary : COLORS.textStrong}
+            />
           </View>
-          <Text style={s.menuLabel}>Report</Text>
+          <Text
+            style={[
+              s.menuLabel,
+              hasReported ? { color: COLORS.textSecondary } : null,
+            ]}
+          >
+            {hasReported ? UI_LABELS.alreadyReported : UI_LABELS.report}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.menuItem} onPress={onBlock}>
           <View style={s.menuIcon}>

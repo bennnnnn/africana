@@ -1,10 +1,21 @@
 import { supabase } from '@/lib/supabase';
 import { logWarn } from '@/lib/logger';
+import { pgErrorBlob, type PostgrestErrorFields } from '@/lib/postgrest-error-blob';
 import { isUuidString } from '@/lib/utils';
 
-export function isDuplicateSocialError(message?: string | null) {
+export function isDuplicateSocialError(err: PostgrestErrorFields | string | null | undefined) {
+  if (!err) return false;
+  if (typeof err === 'string') {
+    const blob = err.toLowerCase();
+    return blob.includes('duplicate key') || blob.includes('23505');
+  }
+  if (err.code === '23505') return true;
+  const blob = pgErrorBlob(err);
   return (
-    typeof message === 'string' && (message.includes('duplicate key') || message.includes('23505'))
+    blob.includes('duplicate key') ||
+    blob.includes('23505') ||
+    blob.includes('reports_reporter_reported_unique') ||
+    blob.includes('reports_reporter_id_reported_id_key')
   );
 }
 
@@ -55,7 +66,7 @@ export async function addFavourite(userId: string, favouritedId: string) {
     .insert({ user_id: userId, favourited_id: favouritedId });
 
   if (!error) return 'inserted' as const;
-  if (isDuplicateSocialError(error.message)) return 'exists' as const;
+  if (isDuplicateSocialError(error)) return 'exists' as const;
   throw error;
 }
 
@@ -81,8 +92,22 @@ export async function reportUser(reporterId: string, reportedId: string, reason:
   });
 
   if (!error) return 'inserted' as const;
-  if (isDuplicateSocialError(error.message)) return 'exists' as const;
+  if (isDuplicateSocialError(error)) return 'exists' as const;
   throw error;
+}
+
+export async function hasReportedUser(reporterId: string, reportedId: string) {
+  if (!isUuidString(reporterId) || !isUuidString(reportedId)) return false;
+
+  const { data, error } = await supabase
+    .from('reports')
+    .select('id')
+    .eq('reporter_id', reporterId)
+    .eq('reported_id', reportedId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return !!data;
 }
 
 export async function blockUser(blockerId: string, blockedId: string) {
@@ -99,7 +124,7 @@ export async function blockUser(blockerId: string, blockedId: string) {
     await hideSharedConversationsForBlock(blockerId, blockedId);
     return 'inserted' as const;
   }
-  if (isDuplicateSocialError(error.message)) {
+  if (isDuplicateSocialError(error)) {
     await hideSharedConversationsForBlock(blockerId, blockedId);
     return 'exists' as const;
   }

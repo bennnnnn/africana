@@ -1,6 +1,11 @@
 import { pgErrorDiscriminator, type PostgrestErrorFields } from '@/lib/postgrest-error-blob';
 
-export type LikesInsertErrorKind = 'interaction_blocked' | 'rate_hour' | 'rate_day' | 'unknown';
+export type LikesInsertErrorKind =
+  | 'interaction_blocked'
+  | 'rate_hour'
+  | 'rate_day'
+  | 'rate_free'
+  | 'unknown';
 
 /** Classify `likes` insert failures (blocks + rate limits) from DB / PostgREST errors. */
 export function classifyLikesInsertError(err: PostgrestErrorFields | null): LikesInsertErrorKind {
@@ -10,10 +15,12 @@ export function classifyLikesInsertError(err: PostgrestErrorFields | null): Like
     return 'interaction_blocked';
   if (code === '23P01' && key === 'rate_limit:likes:hour') return 'rate_hour';
   if (code === '23P01' && key === 'rate_limit:likes:day') return 'rate_day';
+  if (code === '23P01' && key === 'rate_limit:likes:free') return 'rate_free';
 
   // Back-compat for older DB versions that only embed machine keys in message text.
   if (key.includes('interaction blocked between participants')) return 'interaction_blocked';
   if (key.includes('rate_limit:likes:hour')) return 'rate_hour';
   if (key.includes('rate_limit:likes:day')) return 'rate_day';
+  if (key.includes('rate_limit:likes:free')) return 'rate_free';
   return 'unknown';
 }

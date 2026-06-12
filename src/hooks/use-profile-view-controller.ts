@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager, Share } from 'react-native';
+import { Share } from 'react-native';
+import { deferAfterPaint } from '@/lib/defer-after-paint';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useShallow } from 'zustand/react/shallow';
@@ -12,7 +13,7 @@ import { usePresenceStore } from '@/store/presence.store';
 import haptics from '@/lib/haptics';
 import { showLikeToggleFailure } from '@/lib/discover-like-result';
 import { buildProfileDisplayModel, type ProfileDisplayModel } from '@/lib/profile-view-display';
-import { addFavourite, blockUser, isBlockedRelationship } from '@/lib/social-actions';
+import { addFavourite, blockUser, hasReportedUser, isBlockedRelationship } from '@/lib/social-actions';
 import { recordProfileShareEvent, SHARE_REWARD_TOAST } from '@/lib/share-reward';
 import { getProfileShareUrl } from '@/lib/share-profile-url';
 import { getProfileSeed } from '@/lib/profile-seed-cache';
@@ -70,6 +71,7 @@ export function useProfileViewController(
   const [matchUser, setMatchUser] = useState<User | null>(null);
   const [isFavourite, setIsFavourite] = useState(false);
   const [relationshipBlocked, setRelationshipBlocked] = useState(false);
+  const [hasReported, setHasReported] = useState(false);
   const likeInFlightRef = useRef(false);
   const [reportPromptVisible, setReportPromptVisible] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -87,6 +89,7 @@ export function useProfileViewController(
 
   useEffect(() => {
     setIsFavourite(false);
+    setHasReported(false);
     setReportPromptVisible(false);
     setLoadError(null);
     const seed = getProfileSeed(profileId);
@@ -228,6 +231,24 @@ export function useProfileViewController(
   }, [currentUser?.id, profile?.id]);
 
   useEffect(() => {
+    if (!currentUser || !profile || currentUser.id === profile.id) {
+      setHasReported(false);
+      return;
+    }
+    let cancelled = false;
+    void hasReportedUser(currentUser.id, profile.id)
+      .then((reported) => {
+        if (!cancelled) setHasReported(reported);
+      })
+      .catch(() => {
+        if (!cancelled) setHasReported(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, profile?.id]);
+
+  useEffect(() => {
     if (!profile) return;
     const safePhotos = profile.profile_photos ?? [];
     const photosToWarm =
@@ -322,10 +343,11 @@ export function useProfileViewController(
       router.push({ pathname: '/(chat)/[id]', params: { id: convId, otherUserId: peerId } });
     };
     if (wasInViewer) {
-      setTimeout(() => InteractionManager.runAfterInteractions(navigate), 220);
+      // Wait for photo viewer dismiss animation before navigating.
+      setTimeout(navigate, 220);
       return;
     }
-    InteractionManager.runAfterInteractions(navigate);
+    deferAfterPaint(navigate);
   }, [
     currentUser,
     profile,
@@ -404,9 +426,13 @@ export function useProfileViewController(
   }, [profile, showDialog, confirmBlockUser]);
 
   const handleReport = useCallback(() => {
-    if (!currentUser || !profile) return;
+    if (!currentUser || !profile || hasReported) return;
     setReportPromptVisible(true);
-  }, [currentUser, profile]);
+  }, [currentUser, profile, hasReported]);
+
+  const markReported = useCallback(() => {
+    setHasReported(true);
+  }, []);
 
   // eslint-disable-next-line react-hooks/preserve-manual-memoization -- stable toast + profile id
   const handleShareProfile = useCallback(async () => {
@@ -438,6 +464,7 @@ export function useProfileViewController(
     setMatchUser,
     isFavourite,
     relationshipBlocked,
+    hasReported,
     reportPromptVisible,
     setReportPromptVisible,
     photos,
@@ -449,6 +476,7 @@ export function useProfileViewController(
     handleFavourite,
     handleBlock,
     handleReport,
+    markReported,
     handleShareProfile,
     confirmBlockUser,
   };

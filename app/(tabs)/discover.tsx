@@ -37,7 +37,14 @@ import { SkeletonCard } from '@/components/ui/Skeleton';
 import { Image } from 'expo-image';
 import haptics from '@/lib/haptics';
 import { profileImageUrlForList } from '@/lib/storage-image-url';
-import { COLORS, RADIUS, FONT, RELIGION_OPTIONS } from '@/constants';
+import {
+  COLORS,
+  RADIUS,
+  FONT,
+  RELIGION_OPTIONS,
+  SHOW_VERIFIED_ONLY_FILTER,
+} from '@/constants';
+import { getEffectiveAgePreferenceRange } from '@/lib/utils';
 import { FilterOptions, User } from '@/types';
 
 /** Discover title row height (excludes status bar + filter chips). */
@@ -104,13 +111,10 @@ export default function DiscoverScreen() {
   );
 
   /** Must be referentially stable — a fresh `{ min, max }` every render re-ran `fetchUsers` in a loop. */
-  const minAgePref = user?.min_age_pref;
-  const maxAgePref = user?.max_age_pref;
-  const agePref = useMemo(
-    () =>
-      minAgePref != null && maxAgePref != null ? { min: minAgePref, max: maxAgePref } : undefined,
-    [minAgePref, maxAgePref],
-  );
+  const agePref = useMemo(() => {
+    const { min, max } = getEffectiveAgePreferenceRange(user?.min_age_pref, user?.max_age_pref);
+    return { min, max };
+  }, [user?.min_age_pref, user?.max_age_pref]);
 
   useEffect(() => {
     if (!user) return;
@@ -152,7 +156,17 @@ export default function DiscoverScreen() {
   }, [setProfileBrowseOrder, browseOrderIds]);
 
   const activeFilterChips = useMemo(() => {
-    const chips: { key: string; label: string; clear: () => void }[] = [];
+    const chips: { key: string; label: string; clear?: () => void }[] = [];
+    const prefRange = getEffectiveAgePreferenceRange(user?.min_age_pref, user?.max_age_pref);
+    if (
+      !prefRange.isImplicit &&
+      (prefRange.min !== 18 || prefRange.max !== 100)
+    ) {
+      chips.push({
+        key: 'pref-age',
+        label: `Your age pref ${prefRange.min}–${prefRange.max}`,
+      });
+    }
     if (filters.online_only) {
       chips.push({
         key: 'online',
@@ -181,7 +195,7 @@ export default function DiscoverScreen() {
         clear: () => setFilters({ min_age: 18, max_age: 100 }),
       });
     }
-    if (filters.verified_only) {
+    if (SHOW_VERIFIED_ONLY_FILTER && filters.verified_only) {
       chips.push({
         key: 'verified',
         label: 'Verified',
@@ -189,8 +203,12 @@ export default function DiscoverScreen() {
       });
     }
     return chips;
-  }, [filters, setFilters]);
-  const activeFilterCount = activeFilterChips.length;
+  }, [filters, setFilters, user?.min_age_pref, user?.max_age_pref]);
+  const sheetFilterChipCount = useMemo(
+    () => activeFilterChips.filter((c) => c.clear).length,
+    [activeFilterChips],
+  );
+  const activeFilterCount = sheetFilterChipCount;
 
   const handleApplyFilters = useCallback(
     (next: FilterOptions) => {
@@ -263,7 +281,7 @@ export default function DiscoverScreen() {
     minimumViewTime: 80,
   }).current;
 
-  const filterChipsHeight = activeFilterCount > 0 ? 44 : 0;
+  const filterChipsHeight = activeFilterChips.length > 0 ? 44 : 0;
   const totalHeaderHeight = insets.top + HEADER_BAR_TOP_PAD + HEADER_ROW + filterChipsHeight;
   const listPaddingTop = insets.top + HEADER_BAR_TOP_PAD + filterChipsHeight + 10 + HEADER_ROW;
 
@@ -496,7 +514,7 @@ export default function DiscoverScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-            {activeFilterCount > 0 ? (
+            {activeFilterChips.length > 0 ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -505,15 +523,18 @@ export default function DiscoverScreen() {
                 {activeFilterChips.map((chip) => (
                   <TouchableOpacity
                     key={chip.key}
-                    onPress={() => handleChipClear(chip.clear)}
+                    onPress={chip.clear ? () => handleChipClear(chip.clear!) : undefined}
                     style={s.chip}
-                    activeOpacity={0.7}
+                    activeOpacity={chip.clear ? 0.7 : 1}
+                    disabled={!chip.clear}
                     hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                   >
                     <Text style={s.chipTxt} numberOfLines={1}>
                       {chip.label}
                     </Text>
-                    <Ionicons name="close" size={13} color={COLORS.primary} />
+                    {chip.clear ? (
+                      <Ionicons name="close" size={13} color={COLORS.primary} />
+                    ) : null}
                   </TouchableOpacity>
                 ))}
               </ScrollView>
