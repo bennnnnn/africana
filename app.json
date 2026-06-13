@@ -6,13 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "scheme": "africana",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0E9F6E"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.africana.dating",
@@ -27,7 +21,6 @@
         "backgroundColor": "#0E9F6E"
       },
       "package": "com.africana.dating",
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [],

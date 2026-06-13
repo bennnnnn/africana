@@ -88,5 +88,16 @@
     "ts-jest": "^29.2.6",
     "typescript": "~6.0.3"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "@react-native-ml-kit/face-detection",
+          "expo-modules-jsi"
+        ],
+        "listUnknownPackages": false
+      }
+    }
+  }
 }
