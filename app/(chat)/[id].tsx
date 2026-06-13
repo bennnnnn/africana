@@ -333,12 +333,9 @@ export default function ChatScreen() {
    * "two people both reacted ❤️" shows a single ❤️ pill (matches iMessage),
    * but distinct emojis stack so you can see "peer 😂, you ❤️".
    */
-  const reactionsRef = useRef(reactions);
-  reactionsRef.current = reactions;
   const reactionEmojiArrays = useMemo<Record<string, string[]>>(() => {
-    const r = reactionsRef.current;
     const out: Record<string, string[]> = {};
-    for (const [msgId, byUser] of Object.entries(r)) {
+    for (const [msgId, byUser] of Object.entries(reactions)) {
       const seen = new Set<string>();
       const list: string[] = [];
       for (const emoji of Object.values(byUser)) {
@@ -349,9 +346,9 @@ export default function ChatScreen() {
       if (list.length > 0) out[msgId] = list;
     }
     return out;
-  }, [reactionsVersion]);
+  }, [reactions, reactionsVersion]);
   /**
-   * If the conversation list says there's a `last_message`, we know messages
+    * If the conversation list says there's a `last_message`, we know messages
    * exist — don't flash "No messages yet" while the cache/network is still
    * loading them in. Keeps the screen calm during the brief seed window.
    * Uses reactive `conversations` from the store (not a non-reactive snapshot)
@@ -364,7 +361,9 @@ export default function ChatScreen() {
   }, [conversationId, conversations]);
 
   const selectedMessagesRef = useRef(selectedMessages);
-  selectedMessagesRef.current = selectedMessages;
+  useEffect(() => {
+    selectedMessagesRef.current = selectedMessages;
+  }, [selectedMessages]);
   /** Stable object so FlatList doesn't see a new extraData reference every render. */
   const flatListExtraData = useMemo(
     () => ({ reactionEmojiArrays, selectionVersion }),
@@ -749,15 +748,17 @@ export default function ChatScreen() {
         }
         return next;
       });
+      bumpSelection();
     },
-    [reactionAnim],
+    [reactionAnim, bumpSelection],
   );
 
   const closeMsgSheet = useCallback(() => {
-    Animated.timing(reactionAnim, { toValue: 0, ...SNAP_OUT }).start(() =>
-      setSelectedMessages(new Map()),
-    );
-  }, [reactionAnim]);
+    Animated.timing(reactionAnim, { toValue: 0, ...SNAP_OUT }).start(() => {
+      setSelectedMessages(new Map());
+      bumpSelection();
+    });
+  }, [reactionAnim, bumpSelection]);
 
   /**
    * Toggle a reaction. iMessage-style: each user can only have ONE reaction
@@ -820,7 +821,7 @@ export default function ChatScreen() {
         });
       }
     },
-    [user, reactions, closeMsgSheet],
+    [user, reactions, setReactionsAndBump, closeMsgSheet],
   );
 
   const handleCopyMessage = async () => {

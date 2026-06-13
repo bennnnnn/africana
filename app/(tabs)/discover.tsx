@@ -5,7 +5,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Dimensions,
   ActivityIndicator,
   RefreshControl,
   StyleSheet,
@@ -97,15 +96,6 @@ export default function DiscoverScreen() {
       scrollY.interpolate({
         inputRange: [-40, 0, HEADER_PARALLAX_SCROLL_RANGE],
         outputRange: [HEADER_OVERSCROLL_DOWN, 0, -HEADER_PARALLAX_MAX_UP],
-        extrapolate: 'clamp',
-      }),
-    [scrollY],
-  );
-  const headerShadowOpacity = useMemo(
-    () =>
-      scrollY.interpolate({
-        inputRange: [0, 36],
-        outputRange: [0.12, 0.22],
         extrapolate: 'clamp',
       }),
     [scrollY],
