@@ -14,7 +14,7 @@ import { COLORS } from '@/constants';
 
 type Extra = {
   reactionEmojiArrays: Record<string, string[]>;
-  selectedMessages: Map<string, { isOwn: boolean; content: string }>;
+  selectionVersion: number;
 };
 
 type Props = {

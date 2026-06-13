@@ -29,6 +29,7 @@ import { logError, logWarn } from '@/lib/logger';
 import {
   mapMessagesInsertError,
   ERROR_MESSAGE_RATE_LIMIT_HOUR,
+  ERROR_MESSAGE_RATE_LIMIT_DAY,
   ERROR_MESSAGE_MODERATION,
   ERROR_MESSAGE_FREE_LIMIT,
   ERROR_SENDER_MESSAGES_DISABLED,

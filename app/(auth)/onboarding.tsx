@@ -603,9 +603,12 @@ export default function OnboardingScreen() {
     }
   };
 
-  const birthdateAgeYears = birthdate
-    ? (Date.now() - birthdate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
-    : null;
+  const [now] = useState(Date.now);
+  const birthdateAgeYears = useMemo(() => {
+    return birthdate
+      ? (now - birthdate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+      : null;
+  }, [birthdate]);
 
   const canProceed = () => {
     if (step === 1) return firstNameValidation.valid && termsAccepted;

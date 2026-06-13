@@ -7,9 +7,12 @@ CREATE INDEX IF NOT EXISTS idx_profiles_discover_listing
 
 -- Chat: speed up message fetch for a conversation excluding soft-deleted rows
 -- Used by the messages read-path: WHERE conversation_id = ? AND NOT hidden_by @> ARRAY[?]
--- `hidden_by` is a jsonb column, so a GIN index supports containment operators.
-CREATE INDEX IF NOT EXISTS idx_messages_conversation_hidden
-  ON messages USING GIN (conversation_id uuid_ops, hidden_by);
+-- `hidden_by` is a jsonb column for soft-delete. The index was added later
+-- in 20260525160000_messages_soft_delete.sql alongside the column itself.
+
+-- Speed up messages conversation_id lookups (the hot path query condition)
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id
+  ON messages (conversation_id);
 
 -- Speed up RLS sub-selects and joins on likes for mutual-match checks
 CREATE INDEX IF NOT EXISTS idx_likes_bidirectional

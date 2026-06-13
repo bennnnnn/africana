@@ -47,22 +47,25 @@ export function SelectPicker(props: SelectPickerProps) {
     placeholder = 'Select...',
     options,
     clearable = true,
-    multiple = false,
   } = props;
   const [open, setOpen] = useState(false);
 
-  const hasSelection = multiple ? props.values.length > 0 : !!props.value;
-  const triggerLabel = multiple
+  const hasSelection = props.multiple
+    ? props.values.length > 0
+    : !!props.value;
+  const triggerLabel = props.multiple
     ? formatTriggerLabel(options, props.values)
     : (() => {
-        const selected = options.find((o) => o.value === props.value);
+        const selected = options.find(
+          (o) => o.value === props.value,
+        );
         return selected
           ? `${selected.emoji ? selected.emoji + '  ' : ''}${selected.label}`
           : '';
       })();
 
   const toggleMulti = (itemValue: string) => {
-    if (!multiple) return;
+    if (!props.multiple) return;
     props.onChange(
       props.values.includes(itemValue)
         ? props.values.filter((v) => v !== itemValue)
@@ -71,10 +74,10 @@ export function SelectPicker(props: SelectPickerProps) {
   };
 
   const clearSelection = () => {
-    if (multiple) {
-      props.onChange([]);
+    if (props.multiple) {
+      (props.onChange as SelectPickerMultiProps['onChange'])([]);
     } else {
-      props.onChange(null);
+      (props.onChange as SelectPickerSingleProps['onChange'])(null);
       setOpen(false);
     }
   };
@@ -114,7 +117,7 @@ export function SelectPicker(props: SelectPickerProps) {
           <View style={s.modalHeader}>
             <Text style={s.modalTitle}>{label ?? 'Select'}</Text>
             <View style={s.modalHeaderActions}>
-              {multiple ? (
+              {props.multiple ? (
                 <TouchableOpacity onPress={() => setOpen(false)} style={s.doneBtn}>
                   <Text style={s.doneBtnText}>Done</Text>
                 </TouchableOpacity>
@@ -136,23 +139,23 @@ export function SelectPicker(props: SelectPickerProps) {
                   <Text
                     style={{ fontSize: 14, color: COLORS.error, fontWeight: '600', marginLeft: 8 }}
                   >
-                    {multiple ? 'Clear all' : 'Clear selection'}
+                    {props.multiple ? 'Clear all' : 'Clear selection'}
                   </Text>
                 </TouchableOpacity>
               ) : null
             }
             renderItem={({ item }) => {
-              const isSelected = multiple
+              const isSelected = props.multiple
                 ? props.values.includes(item.value)
                 : item.value === props.value;
               return (
                 <TouchableOpacity
                   style={[s.option, isSelected && s.optionOn]}
                   onPress={() => {
-                    if (multiple) {
+                    if (props.multiple) {
                       toggleMulti(item.value);
                     } else {
-                      props.onChange(item.value);
+                      (props.onChange as SelectPickerSingleProps['onChange'])(item.value);
                       setOpen(false);
                     }
                   }}

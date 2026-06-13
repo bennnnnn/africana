@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { resetRateLimitWarnings } from '@/lib/rate-limit-warn';
 import { resetFreeQuotaCache } from '@/lib/free-quota';
 import { teardownPayments } from '@/lib/payments';
+import { logError, logWarn } from '@/lib/logger';
 import {
   fetchOrCreateSettingsRow,
   fetchProfileRow,
@@ -79,10 +80,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await Promise.all([
           get()
             .fetchProfile(userId)
-            .catch((e) => console.error('fetchProfile (auth change)', e)),
+            .catch((e) => logError('fetchProfile (auth change)', e)),
           get()
             .fetchSettings(userId)
-            .catch((e) => console.error('fetchSettings (auth change)', e)),
+            .catch((e) => logError('fetchSettings (auth change)', e)),
         ]);
         return;
       }
@@ -141,7 +142,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .single();
 
       if (error) {
-        console.error('[updateSettings]', error.message);
+        logError('[updateSettings]', error.message);
         set({ settings: previous });
         await get().fetchSettings(user.id);
         return { ok: false as const, message: error.message || 'Could not save settings' };
@@ -174,16 +175,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       ]);
       for (const r of results) {
         if (r.status === 'rejected') {
-          console.warn('[signOut] best-effort profile/settings update failed', r.reason);
+          logWarn('[signOut] best-effort profile/settings update failed', r.reason);
         } else if (r.value.error) {
-          console.warn('[signOut]', r.value.error.message);
+          logWarn('[signOut]', r.value.error.message);
         }
       }
     }
     try {
       await supabase.auth.signOut();
     } catch (e) {
-      console.warn('[signOut] auth.signOut failed', e);
+      logWarn('[signOut] auth.signOut failed', e);
     } finally {
       resetRateLimitWarnings();
       resetFreeQuotaCache();

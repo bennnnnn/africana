@@ -33,11 +33,10 @@ let warnedUnavailable = false;
 
 function getFaceDetectionModule(): FaceDetectionNativeModule | null {
   // Bridgeless/new-arch resolves legacy modules via TurboModuleRegistry first.
-  return (
-    TurboModuleRegistry.get<FaceDetectionNativeModule>('FaceDetection') ??
-    NativeModules.FaceDetection ??
-    null
-  );
+  // We use a type-cast through `unknown` because TS' TurboModule constraint
+  // is stricter than what our runtime module provides.
+  const tm = TurboModuleRegistry.get('FaceDetection') as unknown;
+  return (tm as FaceDetectionNativeModule) ?? NativeModules.FaceDetection ?? null;
 }
 
 function warnIfUnavailableOnce() {

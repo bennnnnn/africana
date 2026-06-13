@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, TouchableOpacity, ScrollView, Switch, Dimensions } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ScrollView, Switch, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FilterOptions, Religion } from '@/types';
 import { COLORS, RELIGION_OPTIONS, SHOW_VERIFIED_ONLY_FILTER } from '@/constants';
@@ -7,9 +7,6 @@ import { Button } from '@/components/ui/Button';
 import { RangeSlider } from '@/components/ui/RangeSlider';
 import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
 import { SelectPicker } from '@/components/ui/SelectPicker';
-
-const { width } = Dimensions.get('window');
-const SLIDER_WIDTH = width - 80;
 
 interface FilterSheetProps {
   visible: boolean;
@@ -20,6 +17,8 @@ interface FilterSheetProps {
 }
 
 export function FilterSheet({ visible, filters, onClose, onApply, onReset }: FilterSheetProps) {
+  const { width: windowWidth } = useWindowDimensions();
+  const SLIDER_WIDTH = windowWidth - 80;
   const [local, setLocal] = useState<FilterOptions>(filters);
   const [locationFilter, setLocationFilter] = useState<Partial<LocationValue>>({
     country: filters.country ?? undefined,
@@ -34,7 +33,8 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
         city: filters.city ?? undefined,
       });
     }
-  }, [visible, filters]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   const update = <K extends keyof FilterOptions>(key: K, value: FilterOptions[K]) =>
     setLocal((prev) => ({ ...prev, [key]: value }));

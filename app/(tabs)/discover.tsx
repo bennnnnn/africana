@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { useWindowDimensions } from 'react-native';
 import {
   View,
   Text,
@@ -285,7 +286,7 @@ export default function DiscoverScreen() {
   const totalHeaderHeight = insets.top + HEADER_BAR_TOP_PAD + HEADER_ROW + filterChipsHeight;
   const listPaddingTop = insets.top + HEADER_BAR_TOP_PAD + filterChipsHeight + 10 + HEADER_ROW;
 
-  const screenWidth = Dimensions.get('window').width;
+  const { width: screenWidth } = useWindowDimensions();
   const GRID_PADDING = 16; // padding on each side of the list
   const GRID_GUTTER = 16; // gap between the two columns
   const CARD_WIDTH = Math.floor((screenWidth - GRID_PADDING * 2 - GRID_GUTTER) / 2);
@@ -430,7 +431,7 @@ export default function DiscoverScreen() {
               }}
               showsVerticalScrollIndicator={false}
               onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-                useNativeDriver: false,
+                useNativeDriver: true,
               })}
               scrollEventThrottle={16}
             >
@@ -455,7 +456,7 @@ export default function DiscoverScreen() {
               }}
               showsVerticalScrollIndicator={false}
               onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-                useNativeDriver: false,
+                useNativeDriver: true,
               })}
               scrollEventThrottle={16}
               onEndReached={handleLoadMore}
@@ -486,7 +487,6 @@ export default function DiscoverScreen() {
               { paddingTop: HEADER_BAR_TOP_PAD },
               {
                 transform: [{ translateY: headerTranslateY }],
-                shadowOpacity: headerShadowOpacity,
               },
             ]}
           >

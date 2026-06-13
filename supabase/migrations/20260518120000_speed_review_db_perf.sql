@@ -167,7 +167,7 @@ begin
 end;
 $$;
 
--- ── Discover covering index: drop JSONB/array bloat from INCLUDE ─────────────
+-- ── Discover covering index: drop then recreate (schema may differ) ──────────
 drop index if exists public.idx_profiles_discover_listing;
 
 create index if not exists idx_profiles_discover_listing

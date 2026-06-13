@@ -10,9 +10,9 @@ import { COLORS, RADIUS, FONT } from '@/constants';
 import { HeroPlaceholder } from '@/components/ui/HeroPlaceholder';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
+import { usePeerOnline } from '@/store/presence.store';
 import { getEffectivePresence } from '@/lib/utils';
 import { profileImageUrlForList, storagePublicObjectUrl } from '@/lib/storage-image-url';
-import { usePresenceStore } from '@/store/presence.store';
 import haptics from '@/lib/haptics';
 
 interface UserCardProps {
@@ -52,7 +52,7 @@ function UserCardInner({
   const hasPhoto = !!photoUrl;
   const shortLocation = user.city || user.state || user.country || '';
 
-  const peerOnlineIds = usePresenceStore((s) => s.peerOnlineIds);
+  const isPeerOnline = usePeerOnline(user.id);
   const isOnline =
     getEffectivePresence(
       {
@@ -61,7 +61,7 @@ function UserCardInner({
         online_status: user.online_status,
         last_seen: user.last_seen,
       },
-      peerOnlineIds,
+      isPeerOnline ? new Set([user.id]) : new Set(),
     ) === 'online';
 
   const [isNew, setIsNew] = useState(false);

@@ -159,7 +159,7 @@ const lockedStyles = StyleSheet.create({
     backgroundColor: COLORS.savanna,
   },
   lockBadge: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.18)',

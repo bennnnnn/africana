@@ -13,3 +13,8 @@ export const usePresenceStore = create<PresenceState>((set) => ({
   peerOnlineIds: new Set<string>(),
   setPeerOnlineIds: (ids) => set({ peerOnlineIds: ids }),
 }));
+
+/** Subscribe to whether a specific user is online — stable boolean, no list re-render. */
+export function usePeerOnline(userId: string): boolean {
+  return usePresenceStore((s) => s.peerOnlineIds.has(userId));
+}

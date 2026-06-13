@@ -198,11 +198,36 @@ export default function ChatScreen() {
   const [selectedMessages, setSelectedMessages] = useState<
     Map<string, { isOwn: boolean; content: string }>
   >(new Map());
+  // Stable counter that increments on every selection change — used in deps
+  // instead of `selectedMessages` itself to avoid invalidating FlatList rows
+  // on every selection toggle (new Map reference = new renderItem).
+  const selectionVersionRef = useRef(0);
+  const [selectionVersion, setSelectionVersion] = useState(0);
+  const bumpSelection = useCallback(() => {
+    selectionVersionRef.current += 1;
+    setSelectionVersion(selectionVersionRef.current);
+  }, []);
   const reactionAnim = useRef(new Animated.Value(0)).current;
   // Reactions are persisted in `message_reactions` and synced via realtime.
   // Shape: messageId → { userId → emoji }. PK in DB is (message_id, user_id),
   // so each user can only have ONE active reaction per message (iMessage style).
   const [reactions, setReactions] = useState<ReactionsMap>({});
+  // Stable counter for reaction changes — avoids cascading full re-render
+  // through reactionEmojiArrays → flatListExtraData → renderItem on every toggle.
+  const reactionsVersionRef = useRef(0);
+  const [reactionsVersion, setReactionsVersion] = useState(0);
+  const bumpReactions = useCallback(() => {
+    reactionsVersionRef.current += 1;
+    setReactionsVersion(reactionsVersionRef.current);
+  }, []);
+  // Wrapped setter that also bumps the version counter.
+  const setReactionsAndBump = useCallback(
+    (value: React.SetStateAction<ReactionsMap>) => {
+      setReactions(value);
+      bumpReactions();
+    },
+    [bumpReactions],
+  );
   /**
    * Set of message ids currently rendered in this conversation. Used by the
    * realtime `message_reactions` listener as a cheap O(1) discriminator —
@@ -308,9 +333,12 @@ export default function ChatScreen() {
    * "two people both reacted ❤️" shows a single ❤️ pill (matches iMessage),
    * but distinct emojis stack so you can see "peer 😂, you ❤️".
    */
+  const reactionsRef = useRef(reactions);
+  reactionsRef.current = reactions;
   const reactionEmojiArrays = useMemo<Record<string, string[]>>(() => {
+    const r = reactionsRef.current;
     const out: Record<string, string[]> = {};
-    for (const [msgId, byUser] of Object.entries(reactions)) {
+    for (const [msgId, byUser] of Object.entries(r)) {
       const seen = new Set<string>();
       const list: string[] = [];
       for (const emoji of Object.values(byUser)) {
@@ -321,7 +349,7 @@ export default function ChatScreen() {
       if (list.length > 0) out[msgId] = list;
     }
     return out;
-  }, [reactions]);
+  }, [reactionsVersion]);
   /**
    * If the conversation list says there's a `last_message`, we know messages
    * exist — don't flash "No messages yet" while the cache/network is still
@@ -335,10 +363,12 @@ export default function ChatScreen() {
     return !!(conv?.last_message || conv?.last_message_at);
   }, [conversationId, conversations]);
 
+  const selectedMessagesRef = useRef(selectedMessages);
+  selectedMessagesRef.current = selectedMessages;
   /** Stable object so FlatList doesn't see a new extraData reference every render. */
   const flatListExtraData = useMemo(
-    () => ({ reactionEmojiArrays, selectedMessages }),
-    [reactionEmojiArrays, selectedMessages],
+    () => ({ reactionEmojiArrays, selectionVersion }),
+    [reactionEmojiArrays, selectionVersion],
   );
 
   const listData = convMessages;
@@ -640,7 +670,7 @@ export default function ChatScreen() {
     peerTypingTimerRef,
     typingChannelRef,
     setPeerTyping,
-    setReactions,
+    setReactions: setReactionsAndBump,
   });
 
   useChatVisibilitySync(conversationId, user?.id, fetchMessages, markMessagesRead);
@@ -747,7 +777,7 @@ export default function ChatScreen() {
       const myCurrent = currentForMessage[user.id];
       const isRemoval = myCurrent === emoji;
 
-      setReactions((prev) => {
+      setReactionsAndBump((prev) => {
         const next = { ...(prev[messageId] ?? {}) };
         if (isRemoval) {
           delete next[user.id];
@@ -779,7 +809,7 @@ export default function ChatScreen() {
       } catch (err) {
         logWarn('[Chat] reaction write failed', err);
         // Roll back on failure.
-        setReactions((prev) => {
+        setReactionsAndBump((prev) => {
           const next = { ...(prev[messageId] ?? {}) };
           if (myCurrent) {
             next[user.id] = myCurrent;
