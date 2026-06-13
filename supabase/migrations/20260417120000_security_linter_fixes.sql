@@ -9,8 +9,15 @@
 -- Mutable search_path is a privilege-escalation vector for SECURITY DEFINER
 -- functions. Pinning it to `public, pg_temp` removes the risk without
 -- changing behaviour (these functions only touch public schema anyway).
-alter function public.handle_new_user()    set search_path = public, pg_temp;
-alter function public.handle_updated_at()  set search_path = public, pg_temp;
+do $$
+begin
+  if exists (select 1 from pg_proc where proname = 'handle_new_user' and pronamespace = 'public'::regnamespace) then
+    alter function public.handle_new_user() set search_path = public, pg_temp;
+  end if;
+  if exists (select 1 from pg_proc where proname = 'handle_updated_at' and pronamespace = 'public'::regnamespace) then
+    alter function public.handle_updated_at() set search_path = public, pg_temp;
+  end if;
+end $$;
 
 -- ── 2. Drop broad SELECT policies on public buckets ──────────────────────
 -- Public buckets serve object URLs via a short-circuit that does NOT consult
