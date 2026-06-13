@@ -252,7 +252,7 @@ export const pr = StyleSheet.create({
   },
   heroDotActive: {
     width: 22,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
   },
   quickFactsBlock: {
     marginTop: 16,

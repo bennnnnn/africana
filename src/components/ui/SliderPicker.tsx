@@ -97,7 +97,7 @@ export function SliderPicker({
               borderRadius: thumbSize / 2,
               borderWidth: 2.5,
               borderColor: COLORS.primary,
-              backgroundColor: '#FFF',
+              backgroundColor: COLORS.surface,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 1 },
               shadowOpacity: 0.14,

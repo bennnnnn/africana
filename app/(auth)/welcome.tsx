@@ -164,7 +164,7 @@ const s = StyleSheet.create({
   circle: {
     position: 'absolute',
     borderRadius: 999,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
   },
   inner: {
     flex: 1,
@@ -230,14 +230,14 @@ const s = StyleSheet.create({
   },
   dotActive: {
     width: 22,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
   },
   actionsSection: {
     gap: 12,
     marginTop: 36,
   },
   primaryBtn: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
     borderRadius: 14,
     height: 52,
     alignItems: 'center',

@@ -34,6 +34,7 @@ import { usePresenceStore } from '@/store/presence.store';
 import { useInboxTypingStore } from '@/store/inbox-typing.store';
 import { primaryProfilePhotoUrl } from '@/lib/primary-profile-photo-url';
 import { TIMINGS } from '@/lib/timings';
+import { logWarn } from '@/lib/logger';
 import dayjs from 'dayjs';
 
 const ROW_HEIGHT = 76;
@@ -267,7 +268,8 @@ export default function MessagesScreen() {
     setRefreshing(true);
     try {
       await fetchConversations(user.id, { force: true });
-    } catch {
+    } catch (e) {
+      logWarn('[messages] refresh failed', e);
       showToast({ icon: 'alert-circle-outline', message: UI_TOAST.refreshFailed });
     } finally {
       setRefreshing(false);
@@ -319,7 +321,8 @@ export default function MessagesScreen() {
     try {
       await deleteConversation(item.id);
       showToast({ message: UI_TOAST.chatDeleted, icon: 'trash-outline' });
-    } catch {
+    } catch (e) {
+      logWarn('[messages] delete conversation failed', e);
       showToast({
         message: 'Failed to delete chat. Please try again.',
         icon: 'alert-circle-outline',
@@ -384,7 +387,7 @@ export default function MessagesScreen() {
         contentContainerStyle={{ paddingBottom: tabBarHeight + 16, backgroundColor: COLORS.white }}
         style={{ backgroundColor: COLORS.white }}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={conversations.length > 0 ? ListHeader : null}
+        ListHeaderComponent={ListHeader}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl

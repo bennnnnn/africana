@@ -168,7 +168,7 @@ function PrivacyContent() {
 const s = StyleSheet.create({
   tabs: {
     flexDirection: 'row',
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },

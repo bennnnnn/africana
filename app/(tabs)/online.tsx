@@ -58,7 +58,7 @@ const OnlineRow = memo(function OnlineRow({
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: COLORS.surface,
         borderRadius: 14,
         padding: 14,
         marginBottom: 10,
@@ -88,7 +88,7 @@ const OnlineRow = memo(function OnlineRow({
             borderRadius: 7,
             backgroundColor: COLORS.online,
             borderWidth: 2,
-            borderColor: '#FFFFFF',
+            borderColor: COLORS.surface,
           }}
         />
       </View>
@@ -108,6 +108,7 @@ const OnlineRow = memo(function OnlineRow({
 
       <TouchableOpacity
         onPress={() => onMessage(item.id)}
+        accessibilityLabel={`Start a conversation with ${item.full_name}`}
         style={{
           width: 40,
           height: 40,
@@ -272,7 +273,7 @@ export default function OnlineScreen() {
           paddingVertical: 14,
           borderBottomWidth: 1,
           borderBottomColor: COLORS.border,
-          backgroundColor: '#FFFFFF',
+          backgroundColor: COLORS.surface,
         }}
       >
         <Text style={{ fontSize: 24, fontWeight: '800', color: COLORS.text }}>Online Now</Text>

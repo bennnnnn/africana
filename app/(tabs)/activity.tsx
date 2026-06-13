@@ -18,6 +18,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { COLORS, DEFAULT_AVATAR } from '@/constants';
 import { TIMINGS } from '@/lib/timings';
+import { EmptyState } from '@/components/ui/EmptyState';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -309,20 +310,11 @@ export default function ActivityScreen() {
           />
         }
         ListEmptyComponent={
-          <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
-            <Ionicons name="notifications-outline" size={52} color={COLORS.border} />
-            <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>Nothing yet</Text>
-            <Text
-              style={{
-                fontSize: 14,
-                color: COLORS.textSecondary,
-                textAlign: 'center',
-                lineHeight: 20,
-              }}
-            >
-              When someone likes or views your profile,{'\n'}it will appear here.
-            </Text>
-          </View>
+          <EmptyState
+            icon="notifications-outline"
+            title="Nothing yet"
+            description="When someone likes or views your profile, it will appear here."
+          />
         }
       />
     </SafeAreaView>
@@ -334,7 +326,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 14,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -343,7 +335,7 @@ const s = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 14,
     marginBottom: 8,

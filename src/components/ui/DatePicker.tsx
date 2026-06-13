@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: COLORS.border,
     borderRadius: 12,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 14,
     height: 50,
   },
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheet: {
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 40,

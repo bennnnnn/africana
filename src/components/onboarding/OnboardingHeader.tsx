@@ -13,7 +13,7 @@ export function OnboardingHeader(props: {
   return (
     <View style={s.header}>
       {canGoBack ? (
-        <TouchableOpacity onPress={onBack} style={s.backBtn}>
+        <TouchableOpacity onPress={onBack} style={s.backBtn} accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={20} color={COLORS.text} />
         </TouchableOpacity>
       ) : (

@@ -11,7 +11,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: COLORS.border,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
   },
   chipOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
   chipTxt: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '500' },

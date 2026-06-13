@@ -152,10 +152,11 @@ export default function MyProfileScreen() {
               if (user?.id) router.push({ pathname: '/(profile)/[id]', params: { id: user.id } });
             }}
             style={s.iconBtn}
+            accessibilityLabel="View profile as others see it"
           >
             <Ionicons name="eye-outline" size={20} color={COLORS.textStrong} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/(settings)/main')} style={s.iconBtn}>
+          <TouchableOpacity onPress={() => router.push('/(settings)/main')} style={s.iconBtn} accessibilityLabel="Settings">
             <Ionicons name="settings-outline" size={20} color={COLORS.textStrong} />
           </TouchableOpacity>
         </View>
@@ -198,6 +199,7 @@ export default function MyProfileScreen() {
             <TouchableOpacity
               onPress={() => Linking.openURL('mailto:support@africana.app')}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Contact support"
             >
               <Ionicons name="mail-outline" size={20} color={COLORS.earth} />
             </TouchableOpacity>
@@ -272,6 +274,7 @@ export default function MyProfileScreen() {
               style={s.cameraBtn}
               onPress={pickAndUploadPhoto}
               disabled={photoUploading}
+              accessibilityLabel="Add a photo"
             >
               <Ionicons
                 name={photoUploading ? 'hourglass-outline' : 'camera'}

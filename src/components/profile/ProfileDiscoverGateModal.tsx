@@ -22,7 +22,7 @@ export function ProfileDiscoverGateModal({ visible, onContinueSetup }: Props) {
           padding: 24,
         }}
       >
-        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22 }}>
+        <View style={{ backgroundColor: COLORS.surface, borderRadius: 24, padding: 22 }}>
           <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', lineHeight: 27 }}>
             Finish your profile
           </Text>
@@ -42,7 +42,7 @@ export function ProfileDiscoverGateModal({ visible, onContinueSetup }: Props) {
                 borderColor: '#E7E1DC',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: '#FFFFFF',
+                backgroundColor: COLORS.surface,
               }}
             >
               <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>Go back</Text>

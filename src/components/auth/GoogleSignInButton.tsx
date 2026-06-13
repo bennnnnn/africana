@@ -6,6 +6,7 @@ import {
   StyleSheet,
   type ViewStyle,
 } from 'react-native';
+import { COLORS } from '@/constants';
 import Svg, { Path } from 'react-native-svg';
 
 type Props = {
@@ -66,7 +67,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
     borderRadius: 14,
     height: 56,
     borderWidth: 1,

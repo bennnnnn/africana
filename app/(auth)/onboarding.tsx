@@ -1132,7 +1132,7 @@ const s = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: COLORS.border,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
   },
   bigChip: {
     flex: 1,
@@ -1141,7 +1141,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: COLORS.border,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
     alignItems: 'center',
   },
   ctaPrimary: {
@@ -1162,7 +1162,7 @@ const s = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1.5,
     borderColor: COLORS.border,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
     gap: 14,
   },
   cardOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },

@@ -67,7 +67,7 @@ export const Avatar = React.memo(function Avatar({
             borderRadius: (size * 0.27) / 2,
             backgroundColor: statusColor,
             borderWidth: 2,
-            borderColor: '#FFFFFF',
+            borderColor: COLORS.surface,
           }}
         />
       )}

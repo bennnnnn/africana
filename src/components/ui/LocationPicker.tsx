@@ -444,7 +444,7 @@ const s = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 13,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
   },
   textInput: { flex: 1, fontSize: 15, color: COLORS.text },
   dropdownBtn: {
@@ -455,7 +455,7 @@ const s = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
   },
   dropdownBtnOn: {
     borderColor: ACTIVE_COLOR,
@@ -470,7 +470,7 @@ const s = StyleSheet.create({
     padding: 18,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
   },
   modalTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   searchBar: {

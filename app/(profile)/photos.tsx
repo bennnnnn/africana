@@ -143,17 +143,17 @@ export default function PhotosScreen() {
           justifyContent: 'space-between',
           paddingHorizontal: 20,
           paddingVertical: 14,
-          backgroundColor: '#FFFFFF',
+          backgroundColor: COLORS.surface,
           borderBottomWidth: 1,
           borderBottomColor: COLORS.border,
         }}
       >
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>My Photos</Text>
         {photos.length < MAX_PROFILE_PHOTOS ? (
-          <TouchableOpacity onPress={addPhotos} disabled={uploading}>
+          <TouchableOpacity onPress={addPhotos} disabled={uploading} accessibilityLabel="Add photos">
             {uploading ? (
               <ActivityIndicator size="small" color={COLORS.primary} />
             ) : (
@@ -230,6 +230,7 @@ export default function PhotosScreen() {
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
+                    accessibilityLabel="Set as main photo"
                   >
                     <Ionicons name="star-outline" size={14} color="#FFF" />
                   </TouchableOpacity>

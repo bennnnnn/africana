@@ -182,7 +182,7 @@ const s = {
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
   },
   row: {
     flexDirection: 'row' as const,

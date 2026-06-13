@@ -157,7 +157,7 @@ const s = StyleSheet.create({
     width: THUMB,
     height: THUMB,
     borderRadius: THUMB / 2,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.surface,
     borderWidth: 2.5,
     borderColor: COLORS.primary,
     alignItems: 'center',

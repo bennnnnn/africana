@@ -92,6 +92,7 @@ export default function ResetPasswordScreen() {
         <TouchableOpacity
           onPress={() => router.replace('/(auth)/login')}
           style={{ marginBottom: 32 }}
+          accessibilityLabel="Go back"
         >
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
