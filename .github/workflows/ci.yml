@@ -47,7 +47,10 @@ jobs:
         with:
           version: latest
 
-      - name: Start Supabase and apply migrations
+      - name: Start Supabase
+        run: supabase start
+
+      - name: Apply migrations
         run: supabase db reset
 
       - name: Database tests (pgTAP)
