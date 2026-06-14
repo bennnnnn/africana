@@ -8,7 +8,8 @@ describe('isDuplicateSocialError', () => {
   test('detects duplicate key text in message blob', () => {
     expect(
       isDuplicateSocialError({
-        message: 'duplicate key value violates unique constraint "reports_reporter_reported_unique"',
+        message:
+          'duplicate key value violates unique constraint "reports_reporter_reported_unique"',
       }),
     ).toBe(true);
   });

@@ -95,8 +95,7 @@ export default function ChatScreen() {
     conversationIdCandidate && isUuidString(conversationIdCandidate)
       ? conversationIdCandidate
       : undefined;
-  const invalidConversationRoute =
-    Boolean(conversationIdCandidate) && !conversationId;
+  const invalidConversationRoute = Boolean(conversationIdCandidate) && !conversationId;
   const otherUserIdParam = normalizeRouteParam(otherUserIdRaw);
   /**
    * Expo Router often drops `otherUserId` from params after the first paint (e.g. when the keyboard opens).
@@ -279,8 +278,7 @@ export default function ChatScreen() {
     [user, peer, myMessagesSent],
   );
 
-  const isUserVerified =
-    user?.verified === true || user?.verification_status === 'approved';
+  const isUserVerified = user?.verified === true || user?.verification_status === 'approved';
 
   useEffect(() => {
     loadChatVerificationNudgeSeen().then(setVerificationNudgeSeen);
@@ -362,7 +360,7 @@ export default function ChatScreen() {
     return out;
   }, [reactions, reactionsVersion]);
   /**
-    * If the conversation list says there's a `last_message`, we know messages
+   * If the conversation list says there's a `last_message`, we know messages
    * exist — don't flash "No messages yet" while the cache/network is still
    * loading them in. Keeps the screen calm during the brief seed window.
    * Uses reactive `conversations` from the store (not a non-reactive snapshot)
@@ -927,8 +925,7 @@ export default function ChatScreen() {
                   msgs.map(([messageId]) => softDeleteMessageForSelf(cid, messageId)),
                 );
                 showToast({
-                  message:
-                    msgs.length > 1 ? 'Messages deleted for you' : 'Message deleted for you',
+                  message: msgs.length > 1 ? 'Messages deleted for you' : 'Message deleted for you',
                   icon: 'trash-outline',
                 });
               }
@@ -1082,18 +1079,10 @@ export default function ChatScreen() {
     if (isUserVerified || myMessagesSent < 1 || composerVariant !== 'active') return;
     setVerificationNudgeChatId(conversationId);
     void markChatVerificationNudgeSeen().then(() => setVerificationNudgeSeen(true));
-  }, [
-    verificationNudgeSeen,
-    conversationId,
-    isUserVerified,
-    myMessagesSent,
-    composerVariant,
-  ]);
+  }, [verificationNudgeSeen, conversationId, isUserVerified, myMessagesSent, composerVariant]);
 
   const showVerificationNudge =
-    verificationNudgeChatId === conversationId &&
-    !isUserVerified &&
-    composerVariant === 'active';
+    verificationNudgeChatId === conversationId && !isUserVerified && composerVariant === 'active';
 
   const handleComposerChange = useCallback(
     (v: string) => {
@@ -1160,7 +1149,9 @@ export default function ChatScreen() {
               backgroundColor: COLORS.warning,
             }}
           >
-            <Text style={{ fontSize: 11, fontWeight: FONT.semibold, color: COLORS.white }}>Verify</Text>
+            <Text style={{ fontSize: 11, fontWeight: FONT.semibold, color: COLORS.white }}>
+              Verify
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={dismissVerificationNudge}

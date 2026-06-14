@@ -153,7 +153,11 @@ export default function PhotosScreen() {
         </TouchableOpacity>
         <Text style={{ fontSize: 17, fontWeight: FONT.bold, color: COLORS.text }}>My Photos</Text>
         {photos.length < MAX_PROFILE_PHOTOS ? (
-          <TouchableOpacity onPress={addPhotos} disabled={uploading} accessibilityLabel="Add photos">
+          <TouchableOpacity
+            onPress={addPhotos}
+            disabled={uploading}
+            accessibilityLabel="Add photos"
+          >
             {uploading ? (
               <ActivityIndicator size="small" color={COLORS.primary} />
             ) : (

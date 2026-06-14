@@ -26,6 +26,7 @@ const AnimatedFlashList = Animated.createAnimatedComponent(
 ) as React.ComponentType<AnimatedDiscoverFlashListProps>;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Button } from '@/components/ui/Button';
 import { useAuthStore } from '@/store/auth.store';
 import { useDiscoverStore } from '@/store/discover.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
@@ -37,13 +38,7 @@ import { SkeletonCard } from '@/components/ui/Skeleton';
 import { Image } from 'expo-image';
 import haptics from '@/lib/haptics';
 import { profileImageUrlForList } from '@/lib/storage-image-url';
-import {
-  COLORS,
-  RADIUS,
-  FONT,
-  RELIGION_OPTIONS,
-  SHOW_VERIFIED_ONLY_FILTER,
-} from '@/constants';
+import { COLORS, RADIUS, FONT, RELIGION_OPTIONS, SHOW_VERIFIED_ONLY_FILTER } from '@/constants';
 import { getEffectiveAgePreferenceRange } from '@/lib/utils';
 import { FilterOptions, User } from '@/types';
 
@@ -149,10 +144,7 @@ export default function DiscoverScreen() {
   const activeFilterChips = useMemo(() => {
     const chips: { key: string; label: string; clear?: () => void }[] = [];
     const prefRange = getEffectiveAgePreferenceRange(user?.min_age_pref, user?.max_age_pref);
-    if (
-      !prefRange.isImplicit &&
-      (prefRange.min !== 18 || prefRange.max !== 100)
-    ) {
+    if (!prefRange.isImplicit && (prefRange.min !== 18 || prefRange.max !== 100)) {
       chips.push({
         key: 'pref-age',
         label: `Your age pref ${prefRange.min}–${prefRange.max}`,
@@ -328,7 +320,8 @@ export default function DiscoverScreen() {
         <Ionicons name="cloud-offline-outline" size={44} color={COLORS.textMuted} />
         <Text style={s.emptyTitle}>Could not load Discover</Text>
         <Text style={s.emptyBody}>{fetchError}</Text>
-        <TouchableOpacity
+        <Button
+          title="Try again"
           onPress={() => {
             clearFetchError();
             if (user)
@@ -339,10 +332,9 @@ export default function DiscoverScreen() {
                 agePref,
               });
           }}
-          style={s.primaryCta}
-        >
-          <Text style={s.primaryCtaText}>Try again</Text>
-        </TouchableOpacity>
+          variant="primary"
+          size="md"
+        />
       </View>
     ) : (
       <View style={[s.emptyState, s.emptyStateTight]}>
@@ -377,7 +369,8 @@ export default function DiscoverScreen() {
         {fetchError ? (
           <View style={s.footerErrorCard}>
             <Text style={s.footerErrorText}>{fetchError}</Text>
-            <TouchableOpacity
+            <Button
+              title="Retry"
               onPress={() => {
                 clearFetchError();
                 if (user)
@@ -388,10 +381,10 @@ export default function DiscoverScreen() {
                     agePref,
                   });
               }}
-              style={s.footerRetryBtn}
-            >
-              <Text style={s.footerRetryText}>Retry</Text>
-            </TouchableOpacity>
+              variant="primary"
+              size="sm"
+              style={{ alignSelf: 'center' }}
+            />
           </View>
         ) : null}
         {isLoading && hasMore ? (
@@ -522,9 +515,7 @@ export default function DiscoverScreen() {
                     <Text style={s.chipTxt} numberOfLines={1}>
                       {chip.label}
                     </Text>
-                    {chip.clear ? (
-                      <Ionicons name="close" size={13} color={COLORS.primary} />
-                    ) : null}
+                    {chip.clear ? <Ionicons name="close" size={13} color={COLORS.primary} /> : null}
                   </TouchableOpacity>
                 ))}
               </ScrollView>

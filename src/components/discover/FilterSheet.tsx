@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, TouchableOpacity, ScrollView, Switch, useWindowDimensions } from 'react-native';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  ScrollView,
+  Switch,
+  useWindowDimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FilterOptions, Religion } from '@/types';
 import { FONT, COLORS, RELIGION_OPTIONS, SHOW_VERIFIED_ONLY_FILTER } from '@/constants';
@@ -33,7 +41,7 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
         city: filters.city ?? undefined,
       });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   const update = <K extends keyof FilterOptions>(key: K, value: FilterOptions[K]) =>
@@ -53,19 +61,25 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle="formSheet"
       onRequestClose={onClose}
     >
       <View style={s.header}>
+        {/* Drag handle pill */}
+        <View style={s.dragHandle} />
         <TouchableOpacity
           onPress={() => {
             onReset();
             onClose();
           }}
         >
-          <Text style={{ color: COLORS.primary, fontWeight: FONT.semibold, fontSize: 15 }}>Reset</Text>
+          <Text style={{ color: COLORS.primary, fontWeight: FONT.semibold, fontSize: 15 }}>
+            Reset
+          </Text>
         </TouchableOpacity>
-        <Text style={{ fontSize: 17, fontWeight: FONT.bold, color: COLORS.text }}>Filter Members</Text>
+        <Text style={{ fontSize: 17, fontWeight: FONT.bold, color: COLORS.text }}>
+          Filter Members
+        </Text>
         <TouchableOpacity onPress={onClose}>
           <Ionicons name="close" size={24} color={COLORS.text} />
         </TouchableOpacity>
@@ -211,4 +225,12 @@ const s = {
     paddingVertical: 4,
   },
   clearBtnText: { fontSize: 13, color: COLORS.textSecondary },
+  dragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#C8C8C8',
+    alignSelf: 'center' as const,
+    marginBottom: 12,
+  },
 };

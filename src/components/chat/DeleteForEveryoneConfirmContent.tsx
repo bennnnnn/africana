@@ -24,8 +24,8 @@ export function DeleteForEveryoneConfirmContent({
           marginBottom: 12,
         }}
       >
-        This will delete the selected message for you only. Check the option below to also remove
-        it for the other person.
+        This will delete the selected message for you only. Check the option below to also remove it
+        for the other person.
       </Text>
       <Pressable
         onPress={toggle}

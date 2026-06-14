@@ -130,43 +130,43 @@ function UserCardInner({
           />
         )}
 
-      {/* ── NEW badge — top-left ── */}
-      {isNew && (
-        <View style={s.newBadge} accessibilityLabel="New member">
-          <Text style={s.newBadgeText}>NEW</Text>
-        </View>
-      )}
-
-      {/* ── Online pulse dot — top-right ── */}
-      {isOnline && (
-        <View style={s.onlineDotWrap}>
-          <OnlinePulseRing style={s.onlinePulse} />
-          <View style={s.onlineDot} />
-        </View>
-      )}
-
-      {/* ── Bottom gradient overlay with name + location ── */}
-      <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.18)', 'rgba(0,0,0,0.82)']}
-        locations={[0, 0.4, 1]}
-        style={s.overlay}
-      >
-        <View style={s.nameRow}>
-          <Text style={s.name} numberOfLines={1}>
-            {user.full_name}
-            {user.age ? `, ${user.age}` : ''}
-          </Text>
-          {user.verified && <VerifiedBadge size={13} style={s.verifiedInline} />}
-        </View>
-        {shortLocation ? (
-          <View style={s.locationRow}>
-            <Ionicons name="location-sharp" size={10} color="rgba(255,255,255,0.78)" />
-            <Text style={s.locationText} numberOfLines={1}>
-              {shortLocation}
-            </Text>
+        {/* ── NEW badge — top-left ── */}
+        {isNew && (
+          <View style={s.newBadge} accessibilityLabel="New member">
+            <Text style={s.newBadgeText}>NEW</Text>
           </View>
-        ) : null}
-      </LinearGradient>
+        )}
+
+        {/* ── Online pulse dot — top-right ── */}
+        {isOnline && (
+          <View style={s.onlineDotWrap}>
+            <OnlinePulseRing style={s.onlinePulse} />
+            <View style={s.onlineDot} />
+          </View>
+        )}
+
+        {/* ── Bottom gradient overlay with name + location ── */}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.18)', 'rgba(0,0,0,0.82)']}
+          locations={[0, 0.4, 1]}
+          style={s.overlay}
+        >
+          <View style={s.nameRow}>
+            <Text style={s.name} numberOfLines={1}>
+              {user.full_name}
+              {user.age ? `, ${user.age}` : ''}
+            </Text>
+            {user.verified && <VerifiedBadge size={13} style={s.verifiedInline} />}
+          </View>
+          {shortLocation ? (
+            <View style={s.locationRow}>
+              <Ionicons name="location-sharp" size={10} color="rgba(255,255,255,0.78)" />
+              <Text style={s.locationText} numberOfLines={1}>
+                {shortLocation}
+              </Text>
+            </View>
+          ) : null}
+        </LinearGradient>
       </Pressable>
     </View>
   );

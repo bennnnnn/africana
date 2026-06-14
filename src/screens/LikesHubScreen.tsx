@@ -11,6 +11,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
+import { Button } from '@/components/ui/Button';
 import { COLORS, FONT, RADIUS } from '@/constants';
 import { LIKES_EMPTY_STATES, LIKES_TAB_META } from '@/constants/likes-screen';
 import { likesScreenStyles as s } from '@/components/likes/likes-screen-styles';
@@ -52,8 +53,7 @@ export default function LikesHubScreen() {
   const screenTitle = LIKES_TAB_META[activeTab].label;
   const tabSeenAt = activitySeenAt?.[activeTab];
   const seenLoaded = activitySeenAt != null;
-  const viewersLocked =
-    PAYMENTS_ENABLED && activeTab === 'viewers' && !isProSync();
+  const viewersLocked = PAYMENTS_ENABLED && activeTab === 'viewers' && !isProSync();
 
   const handleListRowPress = (u: User) => {
     if (viewersLocked) {
@@ -78,10 +78,13 @@ export default function LikesHubScreen() {
     }
 
     return (
-      <TouchableOpacity onPress={handleLoadMore} style={s.loadMoreBtn} activeOpacity={0.7}>
-        <Text style={s.loadMoreText}>Load more</Text>
-        <Ionicons name="chevron-down" size={16} color={COLORS.primary} />
-      </TouchableOpacity>
+      <Button
+        title="Load more"
+        onPress={handleLoadMore}
+        variant="ghost"
+        size="sm"
+        style={s.loadMoreBtn}
+      />
     );
   };
 
@@ -91,9 +94,7 @@ export default function LikesHubScreen() {
         <View style={s.errorContainer}>
           <Ionicons name="cloud-offline-outline" size={48} color={COLORS.textMuted} />
           <Text style={s.errorText}>{activeError}</Text>
-          <TouchableOpacity onPress={handleRetry} style={s.retryBtn}>
-            <Text style={s.retryText}>Try again</Text>
-          </TouchableOpacity>
+          <Button title="Try again" onPress={handleRetry} variant="primary" size="sm" />
         </View>
       );
     }

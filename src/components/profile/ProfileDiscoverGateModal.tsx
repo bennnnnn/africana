@@ -23,12 +23,14 @@ export function ProfileDiscoverGateModal({ visible, onContinueSetup }: Props) {
         }}
       >
         <View style={{ backgroundColor: COLORS.surface, borderRadius: 24, padding: 22 }}>
-          <Text style={{ fontSize: 22, fontWeight: FONT.extrabold, color: '#111111', lineHeight: 27 }}>
+          <Text
+            style={{ fontSize: 22, fontWeight: FONT.extrabold, color: '#111111', lineHeight: 27 }}
+          >
             Finish your profile
           </Text>
           <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 22, color: '#555555' }}>
-            Add your basics (name, photo, birthday, gender, and country) before browsing others.
-            Who you see depends on who you&apos;re interested in.
+            Add your basics (name, photo, birthday, gender, and country) before browsing others. Who
+            you see depends on who you&apos;re interested in.
           </Text>
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
             <TouchableOpacity

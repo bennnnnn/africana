@@ -97,10 +97,7 @@ function remainingFromCounts(counts: Counts): { remaining: number; cap: number }
  * Synchronous in-memory peek for today's quota — no network.
  * `null` = Pro (unlimited), `undefined` = not cached yet for today.
  */
-export function peekRemainingMessagesSync():
-  | { remaining: number; cap: number }
-  | null
-  | undefined {
+export function peekRemainingMessagesSync(): { remaining: number; cap: number } | null | undefined {
   if (isProSync()) return null;
   const today = todayUtcKey();
   if (!cached || cached.date !== today) return undefined;

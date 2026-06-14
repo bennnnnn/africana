@@ -197,7 +197,14 @@ export default function VerifyScreen() {
           >
             <Ionicons name="shield-checkmark-outline" size={38} color="#111111" />
           </View>
-          <Text style={{ fontSize: 22, fontWeight: FONT.extrabold, color: '#111111', textAlign: 'center' }}>
+          <Text
+            style={{
+              fontSize: 22,
+              fontWeight: FONT.extrabold,
+              color: '#111111',
+              textAlign: 'center',
+            }}
+          >
             {status === 'approved' ? "You're Verified" : 'Get Verified'}
           </Text>
           <Text
@@ -281,7 +288,14 @@ export default function VerifyScreen() {
                   }}
                   contentFit="cover"
                 />
-                <Text style={{ marginTop: 8, fontSize: 13, color: '#111111', fontWeight: FONT.semibold }}>
+                <Text
+                  style={{
+                    marginTop: 8,
+                    fontSize: 13,
+                    color: '#111111',
+                    fontWeight: FONT.semibold,
+                  }}
+                >
                   Tap to retake
                 </Text>
               </TouchableOpacity>
@@ -328,15 +342,9 @@ export default function VerifyScreen() {
         animationType="slide"
         onRequestClose={() => setPickerSheetVisible(false)}
       >
-        <Pressable
-          style={pickerSheetStyles.backdrop}
-          onPress={() => setPickerSheetVisible(false)}
-        >
+        <Pressable style={pickerSheetStyles.backdrop} onPress={() => setPickerSheetVisible(false)}>
           <View
-            style={[
-              pickerSheetStyles.sheet,
-              { paddingBottom: Math.max(insets.bottom + 12, 20) },
-            ]}
+            style={[pickerSheetStyles.sheet, { paddingBottom: Math.max(insets.bottom + 12, 20) }]}
           >
             <View style={pickerSheetStyles.handle} />
             <TouchableOpacity

@@ -98,10 +98,7 @@ export function DatePicker({
   const maxYear = currentYear - 18;
   const defaultScrollYear = 2000;
   const yearCount = maxYear - minYear + 1;
-  const defaultYearIndex = Math.max(
-    0,
-    Math.min(maxYear - defaultScrollYear, yearCount - 1),
-  );
+  const defaultYearIndex = Math.max(0, Math.min(maxYear - defaultScrollYear, yearCount - 1));
 
   const [day, setDay] = useState(value ? value.getDate() - 1 : 0);
   const [month, setMonth] = useState(value ? value.getMonth() : 0);
@@ -164,7 +161,9 @@ export function DatePicker({
             </TouchableOpacity>
             <Text style={styles.sheetTitle}>Date of Birth</Text>
             <TouchableOpacity onPress={handleDone}>
-              <Text style={{ fontSize: 15, fontWeight: FONT.bold, color: COLORS.primary }}>Done</Text>
+              <Text style={{ fontSize: 15, fontWeight: FONT.bold, color: COLORS.primary }}>
+                Done
+              </Text>
             </TouchableOpacity>
           </View>
 

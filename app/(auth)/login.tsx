@@ -164,7 +164,11 @@ export default function LoginScreen() {
           contentContainerStyle={{ flexGrow: 1, padding: 24, paddingBottom: 36 }}
           keyboardShouldPersistTaps="handled"
         >
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn} accessibilityLabel="Go back">
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={s.backBtn}
+            accessibilityLabel="Go back"
+          >
             <Ionicons name="arrow-back" size={20} color={COLORS.text} />
           </TouchableOpacity>
 

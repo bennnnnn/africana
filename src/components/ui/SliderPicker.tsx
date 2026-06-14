@@ -56,7 +56,9 @@ export function SliderPicker({
             backgroundColor: COLORS.primarySurface,
           }}
         >
-          <Text style={{ fontSize: 15, fontWeight: FONT.extrabold, color: COLORS.primary }}>{display}</Text>
+          <Text style={{ fontSize: 15, fontWeight: FONT.extrabold, color: COLORS.primary }}>
+            {display}
+          </Text>
         </View>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

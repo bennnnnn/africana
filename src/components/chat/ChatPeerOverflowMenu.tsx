@@ -80,12 +80,7 @@ export function ChatPeerOverflowMenu({
               color={hasReported ? COLORS.textSecondary : COLORS.textStrong}
             />
           </View>
-          <Text
-            style={[
-              s.menuLabel,
-              hasReported ? { color: COLORS.textSecondary } : null,
-            ]}
-          >
+          <Text style={[s.menuLabel, hasReported ? { color: COLORS.textSecondary } : null]}>
             {hasReported ? UI_LABELS.alreadyReported : UI_LABELS.report}
           </Text>
         </TouchableOpacity>

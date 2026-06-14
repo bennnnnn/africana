@@ -98,9 +98,7 @@ export function ReportUserModal({
           <Text
             style={{ marginTop: 8, fontSize: FONT.md, lineHeight: 22, color: COLORS.textSecondary }}
           >
-            {alreadyReported
-              ? UI_TOAST.reportExists
-              : "Choose a reason. We'll review it."}
+            {alreadyReported ? UI_TOAST.reportExists : "Choose a reason. We'll review it."}
           </Text>
           {!alreadyReported ? (
             <>
@@ -180,7 +178,9 @@ export function ReportUserModal({
                   backgroundColor: COLORS.white,
                 }}
               >
-                <Text style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.textStrong }}>
+                <Text
+                  style={{ fontSize: FONT.md, fontWeight: FONT.bold, color: COLORS.textStrong }}
+                >
                   {UI_LABELS.cancel}
                 </Text>
               </TouchableOpacity>

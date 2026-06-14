@@ -1867,7 +1867,9 @@ export default function ProfileViewScreen() {
               onPress={() => setProfileHeroMenuVisible(false)}
               style={{ marginTop: 8, paddingVertical: 14, alignItems: 'center' }}
             >
-              <Text style={{ fontSize: 16, fontWeight: FONT.semibold, color: COLORS.textSecondary }}>
+              <Text
+                style={{ fontSize: 16, fontWeight: FONT.semibold, color: COLORS.textSecondary }}
+              >
                 Cancel
               </Text>
             </TouchableOpacity>

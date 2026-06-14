@@ -42,26 +42,15 @@ function formatTriggerLabel(options: SelectOption[], values: string[]): string {
 }
 
 export function SelectPicker(props: SelectPickerProps) {
-  const {
-    label,
-    placeholder = 'Select...',
-    options,
-    clearable = true,
-  } = props;
+  const { label, placeholder = 'Select...', options, clearable = true } = props;
   const [open, setOpen] = useState(false);
 
-  const hasSelection = props.multiple
-    ? props.values.length > 0
-    : !!props.value;
+  const hasSelection = props.multiple ? props.values.length > 0 : !!props.value;
   const triggerLabel = props.multiple
     ? formatTriggerLabel(options, props.values)
     : (() => {
-        const selected = options.find(
-          (o) => o.value === props.value,
-        );
-        return selected
-          ? `${selected.emoji ? selected.emoji + '  ' : ''}${selected.label}`
-          : '';
+        const selected = options.find((o) => o.value === props.value);
+        return selected ? `${selected.emoji ? selected.emoji + '  ' : ''}${selected.label}` : '';
       })();
 
   const toggleMulti = (itemValue: string) => {
@@ -137,7 +126,12 @@ export function SelectPicker(props: SelectPickerProps) {
                 <TouchableOpacity style={s.clearRow} onPress={clearSelection}>
                   <Ionicons name="close-circle-outline" size={20} color={COLORS.error} />
                   <Text
-                    style={{ fontSize: 14, color: COLORS.error, fontWeight: FONT.semibold, marginLeft: 8 }}
+                    style={{
+                      fontSize: 14,
+                      color: COLORS.error,
+                      fontWeight: FONT.semibold,
+                      marginLeft: 8,
+                    }}
                   >
                     {props.multiple ? 'Clear all' : 'Clear selection'}
                   </Text>

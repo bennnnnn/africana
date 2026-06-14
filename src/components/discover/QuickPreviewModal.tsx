@@ -123,12 +123,7 @@ function CardContent({
             {user.age ? `, ${user.age}` : ''}
           </Text>
           <View style={cc.statusInline}>
-            <View
-              style={[
-                cc.onlineDot,
-                isOnline ? cc.onlineDotActive : cc.onlineDotInactive,
-              ]}
-            />
+            <View style={[cc.onlineDot, isOnline ? cc.onlineDotActive : cc.onlineDotInactive]} />
             <Text style={[cc.metaText, isOnline && cc.metaTextOnline]} numberOfLines={1}>
               {activityLabel}
             </Text>

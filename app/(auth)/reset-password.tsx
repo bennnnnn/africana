@@ -112,7 +112,12 @@ export default function ResetPasswordScreen() {
               <Ionicons name="checkmark-circle-outline" size={40} color={COLORS.success} />
             </View>
             <Text
-              style={{ fontSize: 24, fontWeight: FONT.extrabold, color: COLORS.text, textAlign: 'center' }}
+              style={{
+                fontSize: 24,
+                fontWeight: FONT.extrabold,
+                color: COLORS.text,
+                textAlign: 'center',
+              }}
             >
               Password updated!
             </Text>
@@ -141,7 +146,14 @@ export default function ResetPasswordScreen() {
           </View>
         ) : (
           <>
-            <Text style={{ fontSize: 30, fontWeight: FONT.extrabold, color: COLORS.text, marginBottom: 8 }}>
+            <Text
+              style={{
+                fontSize: 30,
+                fontWeight: FONT.extrabold,
+                color: COLORS.text,
+                marginBottom: 8,
+              }}
+            >
               Set new password
             </Text>
             <Text

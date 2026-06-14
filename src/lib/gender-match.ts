@@ -31,9 +31,7 @@ export function normalizeInterestedInFromDb(
 }
 
 /** Initial picker value when editing gender (legacy nonbinary/other → force a new pick). */
-export function profileEditGenderInitial(
-  raw: Gender | string | null | undefined,
-): Gender | null {
+export function profileEditGenderInitial(raw: Gender | string | null | undefined): Gender | null {
   if (raw === 'male' || raw === 'female') return raw;
   return null;
 }

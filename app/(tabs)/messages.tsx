@@ -427,10 +427,7 @@ export default function MessagesScreen() {
       >
         <Pressable style={actionSheetStyles.backdrop} onPress={closeActionSheet}>
           <View
-            style={[
-              actionSheetStyles.sheet,
-              { paddingBottom: Math.max(insets.bottom + 12, 20) },
-            ]}
+            style={[actionSheetStyles.sheet, { paddingBottom: Math.max(insets.bottom + 12, 20) }]}
           >
             <View style={actionSheetStyles.handle} />
             {actionSheetConversation ? (
@@ -450,10 +447,13 @@ export default function MessagesScreen() {
               <>
                 <Text style={actionSheetStyles.confirmMessage}>
                   Delete your chat with{' '}
-                  {actionSheetConversation?.other_user?.full_name ?? 'this user'}? This can&apos;t be
-                  undone.
+                  {actionSheetConversation?.other_user?.full_name ?? 'this user'}? This can&apos;t
+                  be undone.
                 </Text>
-                <TouchableOpacity onPress={() => void handleConfirmDelete()} style={actionSheetStyles.row}>
+                <TouchableOpacity
+                  onPress={() => void handleConfirmDelete()}
+                  style={actionSheetStyles.row}
+                >
                   <Ionicons name="trash-outline" size={22} color={COLORS.error} />
                   <Text style={actionSheetStyles.destructiveLabel}>{UI_LABELS.delete}</Text>
                 </TouchableOpacity>

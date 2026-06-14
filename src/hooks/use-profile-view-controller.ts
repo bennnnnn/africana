@@ -13,7 +13,12 @@ import { usePresenceStore } from '@/store/presence.store';
 import haptics from '@/lib/haptics';
 import { showLikeToggleFailure } from '@/lib/discover-like-result';
 import { buildProfileDisplayModel, type ProfileDisplayModel } from '@/lib/profile-view-display';
-import { addFavourite, blockUser, hasReportedUser, isBlockedRelationship } from '@/lib/social-actions';
+import {
+  addFavourite,
+  blockUser,
+  hasReportedUser,
+  isBlockedRelationship,
+} from '@/lib/social-actions';
 import { recordProfileShareEvent, SHARE_REWARD_TOAST } from '@/lib/share-reward';
 import { getProfileShareUrl } from '@/lib/share-profile-url';
 import { getProfileSeed } from '@/lib/profile-seed-cache';

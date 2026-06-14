@@ -19,6 +19,8 @@ import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { FONT, SHADOWS, COLORS, DEFAULT_AVATAR } from '@/constants';
 import { TIMINGS } from '@/lib/timings';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ScreenTitle } from '@/components/ui/ScreenTitle';
+import { Button } from '@/components/ui/Button';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -267,7 +269,7 @@ export default function ActivityScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.surface }}>
       <View style={s.header}>
-        <Text style={s.title}>Activity</Text>
+        <ScreenTitle>Activity</ScreenTitle>
         <Text style={s.subtitle}>
           {items.length > 0 ? `${items.length} recent actions` : 'Your activity will appear here'}
         </Text>
@@ -281,13 +283,25 @@ export default function ActivityScreen() {
             borderRadius: 12,
             borderWidth: 1,
             borderColor: '#FECACA',
-            flexDirection: 'row',
-            alignItems: 'center',
             gap: 10,
           }}
         >
-          <Ionicons name="alert-circle-outline" size={18} color="#991B1B" />
-          <Text style={{ flex: 1, fontSize: 13, color: '#991B1B' }}>{loadError}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Ionicons name="alert-circle-outline" size={18} color="#991B1B" />
+            <Text style={{ flex: 1, fontSize: 13, color: '#991B1B' }}>{loadError}</Text>
+          </View>
+          <Button
+            title="Retry"
+            onPress={() => {
+              setLoading(true);
+              setLoadError(null);
+              void load().finally(() => setLoading(false));
+            }}
+            variant="outline"
+            size="sm"
+            style={{ alignSelf: 'flex-start' }}
+            textStyle={{ color: '#991B1B' }}
+          />
         </View>
       ) : null}
 
@@ -330,7 +344,6 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  title: { fontSize: 24, fontWeight: FONT.extrabold, color: COLORS.text },
   subtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   card: {
     flexDirection: 'row',

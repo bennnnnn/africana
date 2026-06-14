@@ -105,7 +105,9 @@ export function ChatComposerArea({
             backgroundColor: COLORS.error,
           }}
         >
-          <Text style={{ fontSize: 13, fontWeight: FONT.semibold, color: COLORS.white }}>Go Pro</Text>
+          <Text style={{ fontSize: 13, fontWeight: FONT.semibold, color: COLORS.white }}>
+            Go Pro
+          </Text>
         </TouchableOpacity>
       </View>
     );

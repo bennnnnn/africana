@@ -156,7 +156,11 @@ export default function MyProfileScreen() {
           >
             <Ionicons name="eye-outline" size={20} color={COLORS.textStrong} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/(settings)/main')} style={s.iconBtn} accessibilityLabel="Settings">
+          <TouchableOpacity
+            onPress={() => router.push('/(settings)/main')}
+            style={s.iconBtn}
+            accessibilityLabel="Settings"
+          >
             <Ionicons name="settings-outline" size={20} color={COLORS.textStrong} />
           </TouchableOpacity>
         </View>

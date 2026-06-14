@@ -126,9 +126,7 @@ export function resolveCultureLocationFromProfile(user: {
   }
 
   const originData = resolveCountryFromStored(user.origin_country ?? '');
-  const hasAfricanOrigin = Boolean(
-    originData && AFRICAN_COUNTRY_CODES.has(originData.code),
-  );
+  const hasAfricanOrigin = Boolean(originData && AFRICAN_COUNTRY_CODES.has(originData.code));
   const originMatchesLiving = Boolean(
     originData && livingCountryData && originData.code === livingCountryData.code,
   );

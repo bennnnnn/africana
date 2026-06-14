@@ -370,7 +370,4 @@ export const MAX_PROFILE_PHOTOS = 6;
 export const MIN_AGE = 18;
 export const MAX_AGE = 100;
 
-export {
-  SHOW_VERIFIED_ONLY_FILTER,
-  effectiveVerifiedOnlyFilter,
-} from './discover-filters';
+export { SHOW_VERIFIED_ONLY_FILTER, effectiveVerifiedOnlyFilter } from './discover-filters';

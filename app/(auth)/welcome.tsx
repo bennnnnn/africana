@@ -79,9 +79,7 @@ export default function WelcomeScreen() {
 
   return (
     <View style={s.root}>
-      <View
-        style={[s.circle, { top: -100, right: -70, width: 240, height: 240, opacity: 0.1 }]}
-      />
+      <View style={[s.circle, { top: -100, right: -70, width: 240, height: 240, opacity: 0.1 }]} />
       <View
         style={[
           s.circle,

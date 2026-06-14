@@ -45,7 +45,9 @@ describe('activity labels', () => {
 
     expect(formatLastActiveLabel(new Date(now - 30_000).toISOString())).toBe('Active just now');
     expect(formatLastActiveLabel(new Date(now - 5 * 60_000).toISOString())).toBe('Active 5m ago');
-    expect(formatLastActiveLabel(new Date(now - 2 * 3_600_000).toISOString())).toBe('Active 2h ago');
+    expect(formatLastActiveLabel(new Date(now - 2 * 3_600_000).toISOString())).toBe(
+      'Active 2h ago',
+    );
   });
 
   test('formatLastActiveLabel uses calendar today and yesterday', () => {

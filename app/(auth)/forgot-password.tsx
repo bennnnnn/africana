@@ -66,7 +66,11 @@ export default function ForgotPasswordScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1, padding: 24 }}
       >
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} accessibilityLabel="Go back">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={s.backBtn}
+          accessibilityLabel="Go back"
+        >
           <Ionicons name="arrow-back" size={20} color={COLORS.text} />
         </TouchableOpacity>
 
@@ -86,7 +90,12 @@ export default function ForgotPasswordScreen() {
               <Ionicons name="mail-open-outline" size={38} color={COLORS.success} />
             </View>
             <Text
-              style={{ fontSize: 24, fontWeight: FONT.extrabold, color: COLORS.text, textAlign: 'center' }}
+              style={{
+                fontSize: 24,
+                fontWeight: FONT.extrabold,
+                color: COLORS.text,
+                textAlign: 'center',
+              }}
             >
               Request received
             </Text>
@@ -98,9 +107,9 @@ export default function ForgotPasswordScreen() {
                 lineHeight: 22,
               }}
             >
-              If <Text style={{ fontWeight: FONT.bold, color: COLORS.text }}>{email.trim()}</Text> is
-              linked to an Africana account, you&apos;ll receive a reset link shortly.{'\n\n'}Check
-              your inbox and spam folder.
+              If <Text style={{ fontWeight: FONT.bold, color: COLORS.text }}>{email.trim()}</Text>{' '}
+              is linked to an Africana account, you&apos;ll receive a reset link shortly.{'\n\n'}
+              Check your inbox and spam folder.
             </Text>
             <TouchableOpacity
               onPress={() => router.replace('/(auth)/login')}
@@ -120,7 +129,14 @@ export default function ForgotPasswordScreen() {
         ) : (
           // ── Form state ──
           <>
-            <Text style={{ fontSize: 30, fontWeight: FONT.extrabold, color: COLORS.text, marginBottom: 8 }}>
+            <Text
+              style={{
+                fontSize: 30,
+                fontWeight: FONT.extrabold,
+                color: COLORS.text,
+                marginBottom: 8,
+              }}
+            >
               Forgot password?
             </Text>
             <Text

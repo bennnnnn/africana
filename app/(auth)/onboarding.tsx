@@ -20,11 +20,7 @@ import { LocationPicker, type LocationValue } from '@/components/ui/LocationPick
 import { SelectPicker, type SelectOption } from '@/components/ui/SelectPicker';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { OnboardingPhotoGrid } from '@/components/onboarding/OnboardingPhotoGrid';
-import {
-  ALL_COUNTRIES,
-  AFRICAN_COUNTRY_CODES,
-  resolveCountryFromStored,
-} from '@/lib/country-data';
+import { ALL_COUNTRIES, AFRICAN_COUNTRY_CODES, resolveCountryFromStored } from '@/lib/country-data';
 import { FONT, SHADOWS, COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
 import {
   ONBOARDING_TOTAL_STEPS as TOTAL_STEPS,
@@ -122,6 +118,7 @@ export default function OnboardingScreen() {
     total: number;
   } | null>(null);
   const pickPhotosInFlightRef = useRef(false);
+  const [photoPickingAttempted, setPhotoPickingAttempted] = useState(false);
 
   const firstNameValidation = validateFirstName(fullName);
   const showTermsConsent = !termsAccepted;
@@ -337,6 +334,7 @@ export default function OnboardingScreen() {
 
   const pickPhotos = async () => {
     if (pickPhotosInFlightRef.current) return;
+    setPhotoPickingAttempted(true);
     try {
       const remaining = MAX_PROFILE_PHOTOS - photoUris.length;
       if (remaining <= 0) return;
@@ -523,8 +521,7 @@ export default function OnboardingScreen() {
         setStep(2);
         appDialog({
           title: 'Add a profile photo',
-          message:
-            'A photo is required before you can appear in Discover or browse other members.',
+          message: 'A photo is required before you can appear in Discover or browse other members.',
           icon: 'camera-outline',
         });
         return;
@@ -605,9 +602,7 @@ export default function OnboardingScreen() {
 
   const [now] = useState(Date.now);
   const birthdateAgeYears = useMemo(() => {
-    return birthdate
-      ? (now - birthdate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
-      : null;
+    return birthdate ? (now - birthdate.getTime()) / (365.25 * 24 * 60 * 60 * 1000) : null;
   }, [birthdate]);
 
   const canProceed = () => {
@@ -809,6 +804,19 @@ export default function OnboardingScreen() {
                   </Text>
                 </View>
               )}
+              {photoPickingAttempted &&
+                photoUris.length === 0 &&
+                !photoPickingProgress &&
+                !photoProgress && (
+                  <Button
+                    title="Skip this step for now"
+                    variant="ghost"
+                    size="md"
+                    fullWidth
+                    onPress={() => setStep(3)}
+                    style={{ marginTop: 16 }}
+                  />
+                )}
             </View>
           )}
 
@@ -816,10 +824,10 @@ export default function OnboardingScreen() {
           {step === 3 && (
             <View>
               <DatePicker
-                  label="Date of Birth"
-                  value={birthdate}
-                  onChange={handleBirthdateChange}
-                  placeholder="Tap to select"
+                label="Date of Birth"
+                value={birthdate}
+                onChange={handleBirthdateChange}
+                placeholder="Tap to select"
               />
               {step3Errors.birthdate && (
                 <Text style={s.fieldError}>Please select your date of birth</Text>
@@ -967,7 +975,10 @@ export default function OnboardingScreen() {
                   {cultureEthnicityOptions.suggested.length > 0 ? (
                     <View style={{ marginTop: 16 }}>
                       <Text style={s.label}>
-                        Common in {culturalLocation.subdivision || culturalLocation.city || culturalLocation.country}
+                        Common in{' '}
+                        {culturalLocation.subdivision ||
+                          culturalLocation.city ||
+                          culturalLocation.country}
                       </Text>
                       <View style={s.row}>
                         {cultureEthnicityOptions.suggested.map((opt) => {

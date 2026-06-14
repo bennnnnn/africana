@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SHADOWS, COLORS, FONT } from '@/constants';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
+import { Button } from '@/components/ui/Button';
 import { PAYMENTS_ENABLED, PRO_PLAN } from '@/lib/payments';
 import { presentPaywall } from '@/lib/paywall';
 import { appDialog } from '@/lib/app-dialog';
@@ -127,9 +128,13 @@ export default function UpgradeScreen() {
             </View>
           ))}
 
-          <TouchableOpacity style={s.buyBtn} onPress={handleNotifyMe} activeOpacity={0.85}>
-            <Text style={s.buyBtnText}>Notify me 🔔</Text>
-          </TouchableOpacity>
+          <Button
+            title="Notify me 🔔"
+            onPress={handleNotifyMe}
+            variant="primary"
+            size="lg"
+            fullWidth
+          />
         </View>
 
         <Text style={s.note}>
