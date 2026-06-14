@@ -329,6 +329,41 @@ CREATE INDEX IF NOT EXISTS email_campaign_events_campaign_sent_idx
   ON public.email_campaign_events (campaign_key, sent_at DESC);
 
 -- ===========================================================================
+-- Role grants (table-level; RLS policies control row-level access)
+-- ===========================================================================
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  public.profiles,
+  public.user_settings,
+  public.likes,
+  public.conversations,
+  public.messages,
+  public.message_reactions,
+  public.blocks,
+  public.profile_views,
+  public.favourites,
+  public.reports,
+  public.subscriptions,
+  public.conversation_hidden,
+  public.message_hidden,
+  public.notification_events,
+  public.profile_share_events,
+  public.email_campaign_events
+TO authenticated;
+
+GRANT SELECT ON
+  public.profiles,
+  public.likes,
+  public.conversations,
+  public.messages,
+  public.blocks,
+  public.profile_views,
+  public.favourites,
+  public.reports
+TO anon;
+
+-- ===========================================================================
 -- Realtime publications (ensures tables participate in replication)
 -- ===========================================================================
 DO $$

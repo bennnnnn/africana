@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   TextInput,
   Animated,
+  AppState,
   Platform,
   StyleSheet,
 } from 'react-native';
@@ -307,6 +308,19 @@ export default function ChatScreen() {
   useEffect(() => {
     void refreshMessageQuota();
   }, [refreshMessageQuota, conversationId]);
+
+  // Re-check quota when the app comes back to the foreground — the rolling
+  // 24h window may have cleared while the app was backgrounded.
+  useEffect(() => {
+    const appStateRef = { current: AppState.currentState };
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active' && appStateRef.current !== 'active') {
+        void refreshMessageQuota({ force: true });
+      }
+      appStateRef.current = next;
+    });
+    return () => sub.remove();
+  }, [refreshMessageQuota]);
 
   useEffect(() => {
     return () => setVerificationNudgeChatId(null);
