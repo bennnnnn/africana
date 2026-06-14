@@ -22,7 +22,6 @@ declare
     enforce_profile_show_in_discover,
     enforce_recipient_accepts_messages,
     export_user_data,
-    get_public_user_prefs_batch,
     rate_limit_counts,
     sync_profile_privacy_mirror,
     sync_profile_show_in_discover
