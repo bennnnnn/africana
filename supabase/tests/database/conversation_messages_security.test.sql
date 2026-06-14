@@ -4,7 +4,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(9);
+select plan(8);
 
 -- mark_conversation_read / export_user_data are SECURITY INVOKER (no privilege jump for callers).
 select results_eq(

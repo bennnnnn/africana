@@ -38,11 +38,11 @@ begin
   )
   values
     (alice, 'Alice', 'alice', '1995-01-01', 'female', 'US', '{}', '{}',
-     array['https://example.com/a.jpg'], 'https://example.com/a.jpg', true, 'offline', now(), 'none', false),
+     array['https://example.com/a.jpg'], 'https://example.com/a.jpg', true, 'offline', now(), 'unverified', false),
     (bob, 'Bob', 'bob', '1995-01-01', 'male', 'US', '{}', '{}',
-     array['https://example.com/b.jpg'], 'https://example.com/b.jpg', true, 'offline', now(), 'none', false),
+     array['https://example.com/b.jpg'], 'https://example.com/b.jpg', true, 'offline', now(), 'unverified', false),
     (hidden, 'Hidden', 'hidden', '1995-01-01', 'female', 'US', '{}', '{}',
-     array['https://example.com/h.jpg'], 'https://example.com/h.jpg', false, 'offline', now(), 'none', false)
+     array['https://example.com/h.jpg'], 'https://example.com/h.jpg', false, 'offline', now(), 'unverified', false)
   on conflict (id) do update set
     show_in_discover = excluded.show_in_discover,
     avatar_url = excluded.avatar_url,

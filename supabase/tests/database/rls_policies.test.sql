@@ -4,7 +4,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(12);
+select plan(13);
 
 select ok(
   exists (
@@ -37,9 +37,9 @@ select ok(
   exists (
     select 1 from pg_policies
     where schemaname = 'public' and tablename = 'blocks'
-      and policyname = 'blocks_select_own' and cmd = 'SELECT'
+      and policyname = 'blocks_select_if_party' and cmd = 'SELECT'
   ),
-  'blocks SELECT limited to parties'
+  'blocks SELECT limited to parties (either party)'
 );
 
 select ok(
