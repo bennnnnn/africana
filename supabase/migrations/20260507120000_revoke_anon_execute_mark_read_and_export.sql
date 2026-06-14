@@ -5,8 +5,15 @@
 -- mark_conversation_read; both are intentionally DEFINER-gated with auth.uid() checks
 -- (same pattern as 20260426120000_revoke_anon_execute_security_definer_rpcs.sql).
 
-revoke execute on function public.mark_conversation_read(uuid) from public, anon;
-grant execute on function public.mark_conversation_read(uuid) to authenticated;
+do $$
+begin
+  if exists (select 1 from pg_proc where proname = 'mark_conversation_read' and pronamespace = 'public'::regnamespace) then
+    execute 'REVOKE EXECUTE ON FUNCTION public.mark_conversation_read(uuid) FROM PUBLIC, anon';
+    execute 'GRANT  EXECUTE ON FUNCTION public.mark_conversation_read(uuid) TO authenticated';
+  end if;
 
-revoke execute on function public.export_user_data() from public, anon;
-grant execute on function public.export_user_data() to authenticated;
+  if exists (select 1 from pg_proc where proname = 'export_user_data' and pronamespace = 'public'::regnamespace) then
+    execute 'REVOKE EXECUTE ON FUNCTION public.export_user_data() FROM PUBLIC, anon';
+    execute 'GRANT  EXECUTE ON FUNCTION public.export_user_data() TO authenticated';
+  end if;
+end $$;
