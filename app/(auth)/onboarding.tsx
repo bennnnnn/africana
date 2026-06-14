@@ -25,7 +25,7 @@ import {
   AFRICAN_COUNTRY_CODES,
   resolveCountryFromStored,
 } from '@/lib/country-data';
-import { FONT, COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
+import { FONT, SHADOWS, COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
 import {
   ONBOARDING_TOTAL_STEPS as TOTAL_STEPS,
   ONBOARDING_STEP_METAS as STEPS,

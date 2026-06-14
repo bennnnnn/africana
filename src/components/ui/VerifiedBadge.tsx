@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@/constants';
+import { SHADOWS, COLORS } from '@/constants';
 
 interface VerifiedBadgeProps {
   /** Total outer diameter of the badge in px. Defaults to 14. */

@@ -6,7 +6,7 @@ import {
   StyleSheet,
   type ViewStyle,
 } from 'react-native';
-import { FONT, COLORS } from '@/constants';
+import { FONT, SHADOWS, COLORS } from '@/constants';
 import Svg, { Path } from 'react-native-svg';
 
 type Props = {

@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONT } from '@/constants';
+import { SHADOWS, COLORS, FONT } from '@/constants';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { PAYMENTS_ENABLED, PRO_PLAN } from '@/lib/payments';
 import { presentPaywall } from '@/lib/paywall';

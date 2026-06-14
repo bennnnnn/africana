@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { RangeSlider as TwoThumbSlider } from '@/components/ui/RangeSlider';
-import { FONT, COLORS } from '@/constants';
+import { FONT, SHADOWS, COLORS } from '@/constants';
 
 const { width } = Dimensions.get('window');
 

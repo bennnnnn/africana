@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { View, Text, PanResponder, StyleSheet } from 'react-native';
-import { FONT, COLORS } from '@/constants';
+import { FONT, SHADOWS, COLORS } from '@/constants';
 
 const THUMB = 28;
 const MIN_GAP_VALUE = 1;

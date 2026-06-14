@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { COLORS, FONT } from '@/constants';
+import { SHADOWS, COLORS, FONT } from '@/constants';
 
 const SLIDES = [
   {

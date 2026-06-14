@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { User } from '@/types';
-import { COLORS, RADIUS, FONT } from '@/constants';
+import { SHADOWS, COLORS, RADIUS, FONT } from '@/constants';
 import { HeroPlaceholder } from '@/components/ui/HeroPlaceholder';
 import { VerifiedBadge } from '@/components/ui/VerifiedBadge';
 import { setProfileSeed } from '@/lib/profile-seed-cache';

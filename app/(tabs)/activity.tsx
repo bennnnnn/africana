@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
-import { FONT, COLORS, DEFAULT_AVATAR } from '@/constants';
+import { FONT, SHADOWS, COLORS, DEFAULT_AVATAR } from '@/constants';
 import { TIMINGS } from '@/lib/timings';
 import { EmptyState } from '@/components/ui/EmptyState';
 import dayjs from 'dayjs';

@@ -45,7 +45,7 @@ import { ChatReactionPickerOverlay } from '@/components/chat/ChatReactionPickerO
 import { ChatScreenHeaderChrome } from '@/components/chat/ChatScreenHeaderChrome';
 import { addFavourite, blockUser, hasReportedUser } from '@/lib/social-actions';
 import { User } from '@/types';
-import { FONT, COLORS, DEFAULT_AVATAR, RADIUS } from '@/constants';
+import { FONT, SHADOWS, COLORS, DEFAULT_AVATAR, RADIUS } from '@/constants';
 import { Ionicons } from '@expo/vector-icons';
 import {
   EMPTY_REACTION_LIST,

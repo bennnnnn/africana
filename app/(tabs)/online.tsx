@@ -20,7 +20,7 @@ import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useChatStore } from '@/store/chat.store';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { User } from '@/types';
-import { FONT, COLORS, DEFAULT_AVATAR } from '@/constants';
+import { FONT, SHADOWS, COLORS, DEFAULT_AVATAR } from '@/constants';
 import { PROFILE_CARD_SELECT } from '@/constants/profile-select';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDialog } from '@/components/ui/DialogProvider';

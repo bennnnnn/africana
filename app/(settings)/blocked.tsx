@@ -6,7 +6,7 @@ import { Image } from 'expo-image';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { User } from '@/types';
-import { COLORS, DEFAULT_AVATAR, FONT } from '@/constants';
+import { SHADOWS, COLORS, DEFAULT_AVATAR, FONT } from '@/constants';
 import { PROFILE_LIST_SELECT } from '@/constants/profile-select';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';

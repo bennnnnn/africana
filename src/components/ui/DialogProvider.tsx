@@ -9,7 +9,7 @@ import React, {
 } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONT, RADIUS } from '@/constants';
+import { SHADOWS, COLORS, FONT, RADIUS } from '@/constants';
 import { UI_LABELS } from '@/constants/copy';
 import { registerAppDialog, type DialogConfig, type DialogAction } from '@/lib/app-dialog';
 
