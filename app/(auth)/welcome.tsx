@@ -250,7 +250,7 @@ const s = StyleSheet.create({
   },
   primaryBtnText: {
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: FONT.bold,
     color: COLORS.green,
   },
   signinRow: {
@@ -264,6 +264,6 @@ const s = StyleSheet.create({
   signinLink: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: FONT.bold,
   },
 });

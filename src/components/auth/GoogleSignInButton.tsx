@@ -6,7 +6,7 @@ import {
   StyleSheet,
   type ViewStyle,
 } from 'react-native';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 import Svg, { Path } from 'react-native-svg';
 
 type Props = {
@@ -80,7 +80,7 @@ const s = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: FONT.semibold,
     color: '#3C4043',
   },
 });

@@ -114,7 +114,7 @@ const hubRowStyles = StyleSheet.create({
 const sectionHeaderStyles = StyleSheet.create({
   text: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: FONT.extrabold,
     color: COLORS.earth,
     paddingTop: 4,
     paddingBottom: 8,

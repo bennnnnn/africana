@@ -22,7 +22,7 @@ import { useDialog } from '@/components/ui/DialogProvider';
 import { SettingsHeaderBar } from '@/components/settings/SettingsHeaderBar';
 import { checkImageHasFace } from '@/lib/face-detection';
 import { track, EVENTS } from '@/lib/analytics';
-import { COLORS, RADIUS } from '@/constants';
+import { FONT, COLORS, RADIUS } from '@/constants';
 import { UI_LABELS, UI_TOAST } from '@/constants/copy';
 
 export default function VerifyScreen() {
@@ -132,7 +132,7 @@ export default function VerifyScreen() {
             }}
           >
             <Ionicons name="time-outline" size={22} color="#92400E" />
-            <Text style={{ flex: 1, fontSize: 14, color: '#92400E', fontWeight: '600' }}>
+            <Text style={{ flex: 1, fontSize: 14, color: '#92400E', fontWeight: FONT.semibold }}>
               Verification pending — we{"'"}re reviewing your submission. This usually takes 24–48
               hours.
             </Text>
@@ -153,7 +153,7 @@ export default function VerifyScreen() {
             }}
           >
             <Ionicons name="checkmark-circle" size={22} color="#166534" />
-            <Text style={{ flex: 1, fontSize: 14, color: '#166534', fontWeight: '600' }}>
+            <Text style={{ flex: 1, fontSize: 14, color: '#166534', fontWeight: FONT.semibold }}>
               Your profile is verified! A blue badge appears on your profile for all members to see.
             </Text>
           </View>
@@ -173,7 +173,7 @@ export default function VerifyScreen() {
             }}
           >
             <Ionicons name="close-circle" size={22} color="#991B1B" />
-            <Text style={{ flex: 1, fontSize: 14, color: '#991B1B', fontWeight: '600' }}>
+            <Text style={{ flex: 1, fontSize: 14, color: '#991B1B', fontWeight: FONT.semibold }}>
               Your previous submission was rejected. Please try again with a clear, well-lit photo
               of your face.
             </Text>
@@ -197,7 +197,7 @@ export default function VerifyScreen() {
           >
             <Ionicons name="shield-checkmark-outline" size={38} color="#111111" />
           </View>
-          <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', textAlign: 'center' }}>
+          <Text style={{ fontSize: 22, fontWeight: FONT.extrabold, color: '#111111', textAlign: 'center' }}>
             {status === 'approved' ? "You're Verified" : 'Get Verified'}
           </Text>
           <Text
@@ -250,7 +250,7 @@ export default function VerifyScreen() {
               <Ionicons name={step.icon as any} size={20} color="#111111" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>
+              <Text style={{ fontSize: 15, fontWeight: FONT.bold, color: '#111111' }}>
                 {step.title}
               </Text>
               <Text
@@ -281,7 +281,7 @@ export default function VerifyScreen() {
                   }}
                   contentFit="cover"
                 />
-                <Text style={{ marginTop: 8, fontSize: 13, color: '#111111', fontWeight: '600' }}>
+                <Text style={{ marginTop: 8, fontSize: 13, color: '#111111', fontWeight: FONT.semibold }}>
                   Tap to retake
                 </Text>
               </TouchableOpacity>
@@ -396,7 +396,7 @@ const pickerSheetStyles = StyleSheet.create({
   },
   rowLabel: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: FONT.semibold,
     color: COLORS.textStrong,
   },
   divider: {
@@ -411,7 +411,7 @@ const pickerSheetStyles = StyleSheet.create({
   },
   cancelLabel: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: FONT.semibold,
     color: COLORS.textSecondary,
   },
 });

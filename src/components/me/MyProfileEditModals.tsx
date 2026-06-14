@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import {
   COLORS,
+  FONT,
   PROFILE_GENDER_OPTIONS,
   PROFILE_INTERESTED_IN_OPTIONS,
   LOOKING_FOR_OPTIONS,

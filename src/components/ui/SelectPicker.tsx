@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, FlatList, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 const ACTIVE_COLOR = COLORS.success;
 
@@ -137,7 +137,7 @@ export function SelectPicker(props: SelectPickerProps) {
                 <TouchableOpacity style={s.clearRow} onPress={clearSelection}>
                   <Ionicons name="close-circle-outline" size={20} color={COLORS.error} />
                   <Text
-                    style={{ fontSize: 14, color: COLORS.error, fontWeight: '600', marginLeft: 8 }}
+                    style={{ fontSize: 14, color: COLORS.error, fontWeight: FONT.semibold, marginLeft: 8 }}
                   >
                     {props.multiple ? 'Clear all' : 'Clear selection'}
                   </Text>
@@ -183,7 +183,7 @@ export function SelectPicker(props: SelectPickerProps) {
 
 const s = StyleSheet.create({
   wrapper: { marginBottom: 20 },
-  label: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 8 },
+  label: { fontSize: 14, fontWeight: FONT.bold, color: COLORS.text, marginBottom: 8 },
   trigger: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -200,8 +200,8 @@ const s = StyleSheet.create({
     backgroundColor: `${ACTIVE_COLOR}10`,
   },
   triggerDisabled: { opacity: 0.5 },
-  triggerText: { fontSize: 15, color: COLORS.text, fontWeight: '500', flex: 1 },
-  triggerTextOn: { color: ACTIVE_COLOR, fontWeight: '700' },
+  triggerText: { fontSize: 15, color: COLORS.text, fontWeight: FONT.medium, flex: 1 },
+  triggerTextOn: { color: ACTIVE_COLOR, fontWeight: FONT.bold },
   placeholder: { color: COLORS.textMuted },
   modal: { flex: 1, backgroundColor: COLORS.surface },
   modalHeader: {
@@ -215,9 +215,9 @@ const s = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   modalHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  modalTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
+  modalTitle: { fontSize: 17, fontWeight: FONT.bold, color: COLORS.text },
   doneBtn: { paddingVertical: 4, paddingHorizontal: 2 },
-  doneBtnText: { fontSize: 16, fontWeight: '700', color: ACTIVE_COLOR },
+  doneBtnText: { fontSize: 16, fontWeight: FONT.bold, color: ACTIVE_COLOR },
   clearRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -238,6 +238,6 @@ const s = StyleSheet.create({
   },
   optionOn: { backgroundColor: `${ACTIVE_COLOR}10` },
   emoji: { fontSize: 20, marginRight: 12, width: 28 },
-  optionText: { fontSize: 15, color: COLORS.text, fontWeight: '500' },
-  optionTextOn: { color: ACTIVE_COLOR, fontWeight: '700' },
+  optionText: { fontSize: 15, color: COLORS.text, fontWeight: FONT.medium },
+  optionTextOn: { color: ACTIVE_COLOR, fontWeight: FONT.bold },
 });

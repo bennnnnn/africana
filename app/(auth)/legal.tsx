@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 type Tab = 'privacy' | 'terms';
 
@@ -184,7 +184,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
+  headerTitle: { fontSize: 17, fontWeight: FONT.bold, color: COLORS.text },
   tabs: {
     flexDirection: 'row',
     backgroundColor: COLORS.surface,
@@ -199,10 +199,10 @@ const s = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabBtnOn: { borderBottomColor: COLORS.primary },
-  tabText: { fontSize: 14, fontWeight: '500', color: COLORS.textSecondary },
-  tabTextOn: { color: COLORS.primary, fontWeight: '700' },
+  tabText: { fontSize: 14, fontWeight: FONT.medium, color: COLORS.textSecondary },
+  tabTextOn: { color: COLORS.primary, fontWeight: FONT.bold },
   content: { padding: 20, paddingBottom: 60 },
   lastUpdated: { fontSize: 12, color: COLORS.textMuted, marginBottom: 20 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
+  sectionTitle: { fontSize: 15, fontWeight: FONT.bold, color: COLORS.text, marginBottom: 6 },
   body: { fontSize: 14, color: COLORS.textSecondary, lineHeight: 22 },
 });

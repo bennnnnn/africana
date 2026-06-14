@@ -18,7 +18,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { getEffectivePresence } from '@/lib/utils';
 import { usePresenceStore } from '@/store/presence.store';
 import { profileImageUrlForList } from '@/lib/storage-image-url';
-import { DEFAULT_AVATAR } from '@/constants';
+import { FONT, DEFAULT_AVATAR } from '@/constants';
 import { User } from '@/types';
 import { filterVisibleUserEntities } from '@/lib/social-visibility';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
@@ -113,7 +113,7 @@ const ViewerRowItem = memo(function ViewerRowItem({
       </View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={{ fontSize: 15, fontWeight: '700', color: textColor }}>{v.full_name}</Text>
+          <Text style={{ fontSize: 15, fontWeight: FONT.bold, color: textColor }}>{v.full_name}</Text>
           {(v.verified || v.verification_status === 'approved') && (
             <Ionicons name="checkmark-circle" size={15} color={primaryColor} />
           )}
@@ -231,7 +231,7 @@ export default function ViewersScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>Who Viewed Me</Text>
+        <Text style={{ fontSize: 17, fontWeight: FONT.bold, color: colors.text }}>Who Viewed Me</Text>
         {viewers.length > 0 && (
           <View
             style={{
@@ -242,7 +242,7 @@ export default function ViewersScreen() {
               paddingVertical: 3,
             }}
           >
-            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
+            <Text style={{ fontSize: 13, fontWeight: FONT.bold, color: colors.primary }}>
               {viewers.length}
             </Text>
           </View>
@@ -283,7 +283,7 @@ export default function ViewersScreen() {
             >
               <Ionicons name="eye-off-outline" size={52} color={colors.textMuted} />
               <Text
-                style={{ fontSize: 20, fontWeight: '800', color: colors.text, textAlign: 'center' }}
+                style={{ fontSize: 20, fontWeight: FONT.extrabold, color: colors.text, textAlign: 'center' }}
               >
                 No views yet
               </Text>

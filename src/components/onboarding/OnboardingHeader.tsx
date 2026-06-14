@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 export function OnboardingHeader(props: {
   step: number;
@@ -45,7 +45,7 @@ const s = StyleSheet.create({
   },
   counter: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: FONT.semibold,
     color: COLORS.textSecondary,
   },
 });

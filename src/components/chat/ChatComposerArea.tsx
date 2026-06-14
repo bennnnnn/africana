@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 import { UI_TOAST } from '@/constants/copy';
 import { chatScreenStyles as s } from '@/components/chat/ChatScreenStyles';
 
@@ -105,7 +105,7 @@ export function ChatComposerArea({
             backgroundColor: COLORS.error,
           }}
         >
-          <Text style={{ fontSize: 13, fontWeight: '600', color: COLORS.white }}>Go Pro</Text>
+          <Text style={{ fontSize: 13, fontWeight: FONT.semibold, color: COLORS.white }}>Go Pro</Text>
         </TouchableOpacity>
       </View>
     );

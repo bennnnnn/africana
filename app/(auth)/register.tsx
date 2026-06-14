@@ -22,7 +22,7 @@ import { AuthLegalConsentRow } from '@/components/auth/AuthLegalConsentRow';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 import { EmailAuthTriggerButton } from '@/components/auth/EmailAuthTriggerButton';
 import { AuthOrDivider } from '@/components/auth/AuthOrDivider';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 import {
   getValidationState,
   MIN_PASSWORD_LENGTH,
@@ -323,7 +323,7 @@ export default function RegisterScreen() {
               Already have an account?{' '}
             </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-              <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 14 }}>
+              <Text style={{ color: COLORS.primary, fontWeight: FONT.bold, fontSize: 14 }}>
                 Sign In
               </Text>
             </TouchableOpacity>
@@ -347,7 +347,7 @@ const s = StyleSheet.create({
     borderColor: COLORS.border,
   },
   hero: { marginBottom: 20 },
-  title: { fontSize: 32, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
+  title: { fontSize: 32, fontWeight: FONT.extrabold, color: COLORS.text, marginBottom: 6 },
   subtitle: { fontSize: 15, color: COLORS.textSecondary, lineHeight: 22, marginBottom: 24 },
   appleBtn: {
     flexDirection: 'row',
@@ -358,7 +358,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     height: 56,
   },
-  appleBtnText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  appleBtnText: { fontSize: 16, fontWeight: FONT.semibold, color: '#FFFFFF' },
   emailFields: {
     marginBottom: 4,
   },

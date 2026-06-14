@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 type Props = {
   label: string;
@@ -39,7 +39,7 @@ const s = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: FONT.semibold,
     color: COLORS.text,
   },
 });

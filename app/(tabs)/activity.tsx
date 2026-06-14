@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
-import { COLORS, DEFAULT_AVATAR } from '@/constants';
+import { FONT, COLORS, DEFAULT_AVATAR } from '@/constants';
 import { TIMINGS } from '@/lib/timings';
 import { EmptyState } from '@/components/ui/EmptyState';
 import dayjs from 'dayjs';
@@ -330,7 +330,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  title: { fontSize: 24, fontWeight: '800', color: COLORS.text },
+  title: { fontSize: 24, fontWeight: FONT.extrabold, color: COLORS.text },
   subtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   card: {
     flexDirection: 'row',
@@ -358,8 +358,8 @@ const s = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FFF',
   },
-  name: { fontSize: 15, fontWeight: '700', color: COLORS.text },
-  action: { fontSize: 13, fontWeight: '500', marginTop: 2 },
+  name: { fontSize: 15, fontWeight: FONT.bold, color: COLORS.text },
+  action: { fontSize: 13, fontWeight: FONT.medium, marginTop: 2 },
   preview: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   time: { fontSize: 11, color: COLORS.textMuted },
 });

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, ScrollView, Switch, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FilterOptions, Religion } from '@/types';
-import { COLORS, RELIGION_OPTIONS, SHOW_VERIFIED_ONLY_FILTER } from '@/constants';
+import { FONT, COLORS, RELIGION_OPTIONS, SHOW_VERIFIED_ONLY_FILTER } from '@/constants';
 import { Button } from '@/components/ui/Button';
 import { RangeSlider } from '@/components/ui/RangeSlider';
 import { LocationPicker, LocationValue } from '@/components/ui/LocationPicker';
@@ -63,9 +63,9 @@ export function FilterSheet({ visible, filters, onClose, onApply, onReset }: Fil
             onClose();
           }}
         >
-          <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 15 }}>Reset</Text>
+          <Text style={{ color: COLORS.primary, fontWeight: FONT.semibold, fontSize: 15 }}>Reset</Text>
         </TouchableOpacity>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>Filter Members</Text>
+        <Text style={{ fontSize: 17, fontWeight: FONT.bold, color: COLORS.text }}>Filter Members</Text>
         <TouchableOpacity onPress={onClose}>
           <Ionicons name="close" size={24} color={COLORS.text} />
         </TouchableOpacity>
@@ -193,10 +193,10 @@ const s = {
     borderBottomColor: COLORS.border,
     marginBottom: 20,
   },
-  rowLabel: { fontSize: 15, fontWeight: '600' as const, color: COLORS.text },
+  rowLabel: { fontSize: 15, fontWeight: FONT.semibold, color: COLORS.text },
   sectionLabel: {
     fontSize: 13,
-    fontWeight: '700' as const,
+    fontWeight: FONT.bold,
     color: COLORS.textSecondary,
     marginBottom: 12,
     textTransform: 'uppercase' as const,

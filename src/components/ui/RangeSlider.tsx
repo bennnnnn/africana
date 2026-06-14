@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { View, Text, PanResponder, StyleSheet } from 'react-native';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 const THUMB = 28;
 const MIN_GAP_VALUE = 1;
@@ -169,6 +169,6 @@ const s = StyleSheet.create({
     elevation: 4,
     top: (56 - THUMB) / 2,
   },
-  thumbLabel: { fontSize: 10, fontWeight: '700', color: COLORS.primary },
+  thumbLabel: { fontSize: 10, fontWeight: FONT.bold, color: COLORS.primary },
   rangeLabel: { fontSize: 11, color: COLORS.textMuted },
 });

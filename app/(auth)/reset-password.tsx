@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { createSessionFromUrl } from '@/lib/google-auth';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 import { appDialog } from '@/lib/app-dialog';
 import { MIN_PASSWORD_LENGTH, validatePassword } from '@/lib/validation';
 
@@ -112,7 +112,7 @@ export default function ResetPasswordScreen() {
               <Ionicons name="checkmark-circle-outline" size={40} color={COLORS.success} />
             </View>
             <Text
-              style={{ fontSize: 24, fontWeight: '800', color: COLORS.text, textAlign: 'center' }}
+              style={{ fontSize: 24, fontWeight: FONT.extrabold, color: COLORS.text, textAlign: 'center' }}
             >
               Password updated!
             </Text>
@@ -136,12 +136,12 @@ export default function ResetPasswordScreen() {
                 borderRadius: 14,
               }}
             >
-              <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>Sign In</Text>
+              <Text style={{ color: '#FFF', fontWeight: FONT.bold, fontSize: 15 }}>Sign In</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
-            <Text style={{ fontSize: 30, fontWeight: '800', color: COLORS.text, marginBottom: 8 }}>
+            <Text style={{ fontSize: 30, fontWeight: FONT.extrabold, color: COLORS.text, marginBottom: 8 }}>
               Set new password
             </Text>
             <Text

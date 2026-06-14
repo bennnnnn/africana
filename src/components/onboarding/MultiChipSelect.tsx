@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 const styles = StyleSheet.create({
-  label: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 10 },
+  label: { fontSize: 14, fontWeight: FONT.bold, color: COLORS.text, marginBottom: 10 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   chip: {
     paddingHorizontal: 18,
@@ -14,8 +14,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   chipOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
-  chipTxt: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '500' },
-  chipTxtOn: { color: COLORS.success, fontWeight: '700' },
+  chipTxt: { fontSize: 14, color: COLORS.textSecondary, fontWeight: FONT.medium },
+  chipTxtOn: { color: COLORS.success, fontWeight: FONT.bold },
 });
 
 export function MultiChipSelect({

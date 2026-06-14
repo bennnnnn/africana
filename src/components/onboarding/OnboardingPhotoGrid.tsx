@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
+import { FONT, COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
 
 const { width } = Dimensions.get('window');
 
@@ -67,7 +67,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  mainBadgeTxt: { color: '#FFF', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  mainBadgeTxt: { color: '#FFF', fontSize: 9, fontWeight: FONT.extrabold, letterSpacing: 0.5 },
   removePhotoBtn: { position: 'absolute', top: 4, right: 4 },
   photoAddSlot: {
     width: (width - 48 - 16) / 3,
@@ -84,7 +84,7 @@ const s = StyleSheet.create({
   photoAddTxt: {
     fontSize: 13,
     color: COLORS.textSecondary,
-    fontWeight: '700',
+    fontWeight: FONT.bold,
     textAlign: 'center',
   },
   hint: { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },

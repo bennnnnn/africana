@@ -605,7 +605,7 @@ const actionSheetStyles = StyleSheet.create({
   },
   destructiveLabel: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: FONT.bold,
     color: COLORS.error,
   },
   confirmMessage: {
@@ -623,7 +623,7 @@ const actionSheetStyles = StyleSheet.create({
   },
   cancelLabel: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: FONT.semibold,
     color: COLORS.textSecondary,
   },
 });

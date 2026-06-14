@@ -8,7 +8,7 @@ import {
   StyleSheet,
   Pressable,
 } from 'react-native';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 const ACTIVE_COLOR = COLORS.success;
 
@@ -164,7 +164,7 @@ export function DatePicker({
             </TouchableOpacity>
             <Text style={styles.sheetTitle}>Date of Birth</Text>
             <TouchableOpacity onPress={handleDone}>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.primary }}>Done</Text>
+              <Text style={{ fontSize: 15, fontWeight: FONT.bold, color: COLORS.primary }}>Done</Text>
             </TouchableOpacity>
           </View>
 
@@ -182,7 +182,7 @@ export function DatePicker({
 const styles = StyleSheet.create({
   label: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: FONT.semibold,
     color: COLORS.text,
     marginBottom: 6,
   },
@@ -204,15 +204,15 @@ const styles = StyleSheet.create({
   triggerText: {
     fontSize: 15,
     color: COLORS.text,
-    fontWeight: '500',
+    fontWeight: FONT.medium,
   },
   triggerTextOn: {
     color: ACTIVE_COLOR,
-    fontWeight: '700',
+    fontWeight: FONT.bold,
   },
   placeholder: {
     color: COLORS.textMuted,
-    fontWeight: '400',
+    fontWeight: FONT.regular,
   },
   backdrop: {
     flex: 1,
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: FONT.bold,
     color: COLORS.text,
   },
   wheels: {
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   },
   wheelTextSelected: {
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: FONT.bold,
     color: ACTIVE_COLOR,
   },
 });

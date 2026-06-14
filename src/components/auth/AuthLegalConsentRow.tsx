@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, Text, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 type Props = {
   checked: boolean;
@@ -69,6 +69,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   link: {
-    fontWeight: '700',
+    fontWeight: FONT.bold,
   },
 });

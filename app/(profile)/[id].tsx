@@ -33,7 +33,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, LOOKING_FOR_OPTIONS, RADIUS, SHADOWS } from '@/constants';
+import { FONT, COLORS, LOOKING_FOR_OPTIONS, RADIUS, SHADOWS } from '@/constants';
 import { UI_LABELS } from '@/constants/copy';
 import { Button } from '@/components/ui/Button';
 import { MatchModal } from '@/components/ui/MatchModal';
@@ -640,7 +640,7 @@ export default function ProfileViewScreen() {
           style={{
             marginTop: 16,
             fontSize: 18,
-            fontWeight: '800',
+            fontWeight: FONT.extrabold,
             color: COLORS.textStrong,
             textAlign: 'center',
           }}
@@ -683,7 +683,7 @@ export default function ProfileViewScreen() {
               style={{
                 marginTop: 16,
                 fontSize: 18,
-                fontWeight: '800',
+                fontWeight: FONT.extrabold,
                 color: COLORS.textStrong,
                 textAlign: 'center',
               }}
@@ -708,7 +708,7 @@ export default function ProfileViewScreen() {
           </>
         ) : (
           <>
-            <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.textStrong }}>
+            <Text style={{ fontSize: 16, fontWeight: FONT.semibold, color: COLORS.textStrong }}>
               Profile not found
             </Text>
             <Text
@@ -1741,7 +1741,7 @@ export default function ProfileViewScreen() {
                 }}
               >
                 <Ionicons name={viewerToast.icon} size={14} color={COLORS.white} />
-                <Text style={{ color: COLORS.white, fontSize: 13, fontWeight: '600' }}>
+                <Text style={{ color: COLORS.white, fontSize: 13, fontWeight: FONT.semibold }}>
                   {viewerToast.message}
                 </Text>
               </View>
@@ -1793,7 +1793,7 @@ export default function ProfileViewScreen() {
               }}
             >
               <Ionicons name="share-outline" size={22} color={COLORS.text} />
-              <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.textStrong }}>
+              <Text style={{ fontSize: 16, fontWeight: FONT.semibold, color: COLORS.textStrong }}>
                 Share profile
               </Text>
             </TouchableOpacity>
@@ -1829,7 +1829,7 @@ export default function ProfileViewScreen() {
                   <Text
                     style={{
                       fontSize: 16,
-                      fontWeight: '600',
+                      fontWeight: FONT.semibold,
                       color: hasReported ? COLORS.textSecondary : COLORS.textStrong,
                     }}
                   >
@@ -1857,7 +1857,7 @@ export default function ProfileViewScreen() {
                   }}
                 >
                   <Ionicons name="ban-outline" size={22} color={COLORS.error} />
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: COLORS.error }}>
+                  <Text style={{ fontSize: 16, fontWeight: FONT.bold, color: COLORS.error }}>
                     Block
                   </Text>
                 </TouchableOpacity>
@@ -1867,7 +1867,7 @@ export default function ProfileViewScreen() {
               onPress={() => setProfileHeroMenuVisible(false)}
               style={{ marginTop: 8, paddingVertical: 14, alignItems: 'center' }}
             >
-              <Text style={{ fontSize: 16, fontWeight: '600', color: COLORS.textSecondary }}>
+              <Text style={{ fontSize: 16, fontWeight: FONT.semibold, color: COLORS.textSecondary }}>
                 Cancel
               </Text>
             </TouchableOpacity>

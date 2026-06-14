@@ -381,7 +381,7 @@ export default function MyProfileScreen() {
             ) : (
               <TouchableOpacity onPress={() => openText('bio', '')} style={s.emptyPrompt}>
                 <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
-                <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>
+                <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: FONT.semibold }}>
                   Add a bio — it helps you stand out
                 </Text>
               </TouchableOpacity>
@@ -506,7 +506,7 @@ export default function MyProfileScreen() {
             ) : (
               <TouchableOpacity onPress={() => openMulti('looking_for', [])} style={s.emptyPrompt}>
                 <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
-                <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>
+                <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: FONT.semibold }}>
                   Add what you{"'"}re looking for
                 </Text>
               </TouchableOpacity>
@@ -632,7 +632,7 @@ export default function MyProfileScreen() {
             ) : (
               <TouchableOpacity onPress={() => openMulti('hobbies', [])} style={s.emptyPrompt}>
                 <Ionicons name="add-circle-outline" size={16} color={COLORS.emptyField} />
-                <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: '600' }}>
+                <Text style={{ color: COLORS.emptyField, fontSize: 14, fontWeight: FONT.semibold }}>
                   Add your hobbies & interests
                 </Text>
               </TouchableOpacity>
@@ -701,7 +701,7 @@ export default function MyProfileScreen() {
                         style={{
                           fontSize: 11,
                           color: COLORS.emptyField,
-                          fontWeight: '600',
+                          fontWeight: FONT.semibold,
                           marginTop: 2,
                         }}
                       >

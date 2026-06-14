@@ -25,7 +25,7 @@ import {
   AFRICAN_COUNTRY_CODES,
   resolveCountryFromStored,
 } from '@/lib/country-data';
-import { COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
+import { FONT, COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
 import {
   ONBOARDING_TOTAL_STEPS as TOTAL_STEPS,
   ONBOARDING_STEP_METAS as STEPS,
@@ -1099,7 +1099,7 @@ export default function OnboardingScreen() {
 const s = StyleSheet.create({
   stepTitle: {
     fontSize: 24,
-    fontWeight: '800',
+    fontWeight: FONT.extrabold,
     color: COLORS.text,
     textAlign: 'center',
     marginBottom: 6,
@@ -1116,10 +1116,10 @@ const s = StyleSheet.create({
     marginBottom: 28,
   },
 
-  label: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 10 },
+  label: { fontSize: 14, fontWeight: FONT.bold, color: COLORS.text, marginBottom: 10 },
   fieldError: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: FONT.semibold,
     color: COLORS.error,
     marginTop: 4,
     marginBottom: 8,
@@ -1152,8 +1152,8 @@ const s = StyleSheet.create({
     elevation: 5,
   },
   chipOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
-  chipTxt: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '500' },
-  chipTxtOn: { color: COLORS.success, fontWeight: '700' },
+  chipTxt: { fontSize: 14, color: COLORS.textSecondary, fontWeight: FONT.medium },
+  chipTxtOn: { color: COLORS.success, fontWeight: FONT.bold },
 
   card: {
     flexDirection: 'row',
@@ -1166,7 +1166,7 @@ const s = StyleSheet.create({
     gap: 14,
   },
   cardOn: { borderColor: COLORS.success, backgroundColor: COLORS.successSurface },
-  cardLabel: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  cardLabel: { fontSize: 16, fontWeight: FONT.bold, color: COLORS.text },
   checkCircle: {
     width: 26,
     height: 26,
@@ -1183,7 +1183,7 @@ const s = StyleSheet.create({
   celebContainer: { flex: 1, padding: 28, justifyContent: 'center', alignItems: 'center' },
   celebTitle: {
     fontSize: 32,
-    fontWeight: '800',
+    fontWeight: FONT.extrabold,
     color: COLORS.text,
     marginBottom: 12,
     textAlign: 'center',

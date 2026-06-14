@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Modal } from 'react-native';
 import { router } from 'expo-router';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 type Props = {
   visible: boolean;
@@ -23,7 +23,7 @@ export function ProfileDiscoverGateModal({ visible, onContinueSetup }: Props) {
         }}
       >
         <View style={{ backgroundColor: COLORS.surface, borderRadius: 24, padding: 22 }}>
-          <Text style={{ fontSize: 22, fontWeight: '800', color: '#111111', lineHeight: 27 }}>
+          <Text style={{ fontSize: 22, fontWeight: FONT.extrabold, color: '#111111', lineHeight: 27 }}>
             Finish your profile
           </Text>
           <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 22, color: '#555555' }}>
@@ -45,7 +45,7 @@ export function ProfileDiscoverGateModal({ visible, onContinueSetup }: Props) {
                 backgroundColor: COLORS.surface,
               }}
             >
-              <Text style={{ fontSize: 15, fontWeight: '700', color: '#111111' }}>Go back</Text>
+              <Text style={{ fontSize: 15, fontWeight: FONT.bold, color: '#111111' }}>Go back</Text>
             </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.85}
@@ -59,7 +59,7 @@ export function ProfileDiscoverGateModal({ visible, onContinueSetup }: Props) {
                 backgroundColor: COLORS.emptyField,
               }}
             >
-              <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>
+              <Text style={{ fontSize: 15, fontWeight: FONT.bold, color: '#FFFFFF' }}>
                 Continue setup
               </Text>
             </TouchableOpacity>

@@ -45,7 +45,7 @@ import { ChatReactionPickerOverlay } from '@/components/chat/ChatReactionPickerO
 import { ChatScreenHeaderChrome } from '@/components/chat/ChatScreenHeaderChrome';
 import { addFavourite, blockUser, hasReportedUser } from '@/lib/social-actions';
 import { User } from '@/types';
-import { COLORS, DEFAULT_AVATAR, RADIUS } from '@/constants';
+import { FONT, COLORS, DEFAULT_AVATAR, RADIUS } from '@/constants';
 import { Ionicons } from '@expo/vector-icons';
 import {
   EMPTY_REACTION_LIST,
@@ -1160,7 +1160,7 @@ export default function ChatScreen() {
               backgroundColor: COLORS.warning,
             }}
           >
-            <Text style={{ fontSize: 11, fontWeight: '600', color: COLORS.white }}>Verify</Text>
+            <Text style={{ fontSize: 11, fontWeight: FONT.semibold, color: COLORS.white }}>Verify</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={dismissVerificationNudge}

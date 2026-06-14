@@ -18,8 +18,8 @@ const msgS = StyleSheet.create({
     marginTop: 4,
     marginLeft: 8,
   },
-  bubbleMetaText: { fontSize: 10, fontWeight: '500', letterSpacing: 0.2 },
-  bubbleMetaCheck: { fontSize: 10, fontWeight: '700' },
+  bubbleMetaText: { fontSize: 10, fontWeight: FONT.medium, letterSpacing: 0.2 },
+  bubbleMetaCheck: { fontSize: 10, fontWeight: FONT.bold },
   tailOwn: {
     position: 'absolute',
     right: -4,

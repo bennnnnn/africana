@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COUNTRY_GROUPS, ALL_COUNTRIES, CountryData } from '@/lib/country-data';
 import { loadAfricaCountryCities, AfricaCountryCityMap } from '@/lib/africa-city-data';
 import { normalizeLocationString } from '@/lib/location-string-normalize';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 const ACTIVE_COLOR = COLORS.success;
 
@@ -429,7 +429,7 @@ function RowItem({
 const s = StyleSheet.create({
   inputLabel: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: FONT.bold,
     color: COLORS.textSecondary,
     marginBottom: 6,
     textTransform: 'uppercase',
@@ -462,7 +462,7 @@ const s = StyleSheet.create({
     backgroundColor: `${ACTIVE_COLOR}10`,
   },
   dropdownText: { flex: 1, fontSize: 15, color: COLORS.textSecondary },
-  dropdownTextOn: { color: COLORS.text, fontWeight: '700' },
+  dropdownTextOn: { color: COLORS.text, fontWeight: FONT.bold },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -472,7 +472,7 @@ const s = StyleSheet.create({
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.surface,
   },
-  modalTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
+  modalTitle: { fontSize: 17, fontWeight: FONT.bold, color: COLORS.text },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -494,7 +494,7 @@ const s = StyleSheet.create({
   },
   sectionHeaderText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: FONT.bold,
     color: COLORS.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -510,5 +510,5 @@ const s = StyleSheet.create({
   },
   rowOn: { backgroundColor: `${ACTIVE_COLOR}10` },
   rowText: { fontSize: 15, color: COLORS.text, flex: 1 },
-  rowTextOn: { color: ACTIVE_COLOR, fontWeight: '700' },
+  rowTextOn: { color: ACTIVE_COLOR, fontWeight: FONT.bold },
 });

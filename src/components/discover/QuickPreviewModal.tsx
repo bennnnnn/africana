@@ -194,7 +194,7 @@ const cc = StyleSheet.create({
   },
   name: {
     fontSize: 26,
-    fontWeight: '800',
+    fontWeight: FONT.extrabold,
     color: COLORS.white,
     flexShrink: 1,
     textShadowColor: 'rgba(0,0,0,0.4)',
@@ -208,7 +208,7 @@ const cc = StyleSheet.create({
   },
   locationText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: FONT.medium,
     color: 'rgba(255,255,255,0.82)',
     flexShrink: 1,
   },
@@ -225,7 +225,7 @@ const cc = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: FONT.medium,
     color: 'rgba(255,255,255,0.85)',
     flexShrink: 1,
   },

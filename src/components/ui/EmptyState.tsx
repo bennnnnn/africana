@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 interface EmptyStateProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -29,7 +29,7 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
       <Text
         style={{
           fontSize: 18,
-          fontWeight: '700',
+          fontWeight: FONT.bold,
           color: COLORS.text,
           textAlign: 'center',
           marginBottom: 8,

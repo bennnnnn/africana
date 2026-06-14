@@ -16,7 +16,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/store/auth.store';
 import { uploadToAvatarsBucket, publicAvatarsUrlToStoragePath } from '@/lib/storage-image-upload';
 import { supabase } from '@/lib/supabase';
-import { COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
+import { FONT, COLORS, MAX_PROFILE_PHOTOS } from '@/constants';
 import { appDialog } from '@/lib/app-dialog';
 import { UI_LABELS } from '@/constants/copy';
 import { validateFacesInPhotos, faceRejectionMessage } from '@/lib/face-detection';
@@ -151,7 +151,7 @@ export default function PhotosScreen() {
         <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: COLORS.text }}>My Photos</Text>
+        <Text style={{ fontSize: 17, fontWeight: FONT.bold, color: COLORS.text }}>My Photos</Text>
         {photos.length < MAX_PROFILE_PHOTOS ? (
           <TouchableOpacity onPress={addPhotos} disabled={uploading} accessibilityLabel="Add photos">
             {uploading ? (
@@ -213,7 +213,7 @@ export default function PhotosScreen() {
                       paddingVertical: 2,
                     }}
                   >
-                    <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>MAIN</Text>
+                    <Text style={{ color: '#FFF', fontSize: 10, fontWeight: FONT.bold }}>MAIN</Text>
                   </View>
                 )}
               </Pressable>

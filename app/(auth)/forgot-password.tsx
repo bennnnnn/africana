@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 import { appDialog } from '@/lib/app-dialog';
 
 const s = StyleSheet.create({
@@ -86,7 +86,7 @@ export default function ForgotPasswordScreen() {
               <Ionicons name="mail-open-outline" size={38} color={COLORS.success} />
             </View>
             <Text
-              style={{ fontSize: 24, fontWeight: '800', color: COLORS.text, textAlign: 'center' }}
+              style={{ fontSize: 24, fontWeight: FONT.extrabold, color: COLORS.text, textAlign: 'center' }}
             >
               Request received
             </Text>
@@ -98,7 +98,7 @@ export default function ForgotPasswordScreen() {
                 lineHeight: 22,
               }}
             >
-              If <Text style={{ fontWeight: '700', color: COLORS.text }}>{email.trim()}</Text> is
+              If <Text style={{ fontWeight: FONT.bold, color: COLORS.text }}>{email.trim()}</Text> is
               linked to an Africana account, you&apos;ll receive a reset link shortly.{'\n\n'}Check
               your inbox and spam folder.
             </Text>
@@ -112,7 +112,7 @@ export default function ForgotPasswordScreen() {
                 borderRadius: 14,
               }}
             >
-              <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>
+              <Text style={{ color: '#FFF', fontWeight: FONT.bold, fontSize: 15 }}>
                 Back to Sign In
               </Text>
             </TouchableOpacity>
@@ -120,7 +120,7 @@ export default function ForgotPasswordScreen() {
         ) : (
           // ── Form state ──
           <>
-            <Text style={{ fontSize: 30, fontWeight: '800', color: COLORS.text, marginBottom: 8 }}>
+            <Text style={{ fontSize: 30, fontWeight: FONT.extrabold, color: COLORS.text, marginBottom: 8 }}>
               Forgot password?
             </Text>
             <Text

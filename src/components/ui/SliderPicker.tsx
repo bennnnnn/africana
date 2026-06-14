@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { RangeSlider as TwoThumbSlider } from '@/components/ui/RangeSlider';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 const { width } = Dimensions.get('window');
 
@@ -47,7 +47,7 @@ export function SliderPicker({
           marginBottom: 8,
         }}
       >
-        <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.text }}>{label}</Text>
+        <Text style={{ fontSize: 14, fontWeight: FONT.bold, color: COLORS.text }}>{label}</Text>
         <View
           style={{
             paddingHorizontal: 14,
@@ -56,7 +56,7 @@ export function SliderPicker({
             backgroundColor: COLORS.primarySurface,
           }}
         >
-          <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.primary }}>{display}</Text>
+          <Text style={{ fontSize: 15, fontWeight: FONT.extrabold, color: COLORS.primary }}>{display}</Text>
         </View>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -168,7 +168,7 @@ export function RangeSlider({
           marginBottom: 14,
         }}
       >
-        <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.text }}>{label}</Text>
+        <Text style={{ fontSize: 14, fontWeight: FONT.bold, color: COLORS.text }}>{label}</Text>
         <View
           style={{
             paddingHorizontal: 14,
@@ -177,7 +177,7 @@ export function RangeSlider({
             backgroundColor: COLORS.primarySurface,
           }}
         >
-          <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.primary }}>
+          <Text style={{ fontSize: 15, fontWeight: FONT.extrabold, color: COLORS.primary }}>
             {minValue} – {maxValue} {unit}
           </Text>
         </View>

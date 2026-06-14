@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/Button';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 import { EmailAuthTriggerButton } from '@/components/auth/EmailAuthTriggerButton';
 import { AuthOrDivider } from '@/components/auth/AuthOrDivider';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 import { getValidationState, validateEmail } from '@/lib/validation';
 import { redirectAfterAuth } from '@/lib/profile-completion';
 import { appDialog } from '@/lib/app-dialog';
@@ -255,7 +255,7 @@ export default function LoginScreen() {
             style={{ alignSelf: 'flex-end', marginTop: showEmailForm ? -8 : 8, marginBottom: 16 }}
             onPress={handleForgotPassword}
           >
-            <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 14 }}>
+            <Text style={{ color: COLORS.primary, fontWeight: FONT.semibold, fontSize: 14 }}>
               Forgot password?
             </Text>
           </TouchableOpacity>
@@ -279,7 +279,7 @@ export default function LoginScreen() {
               Don&apos;t have an account?{' '}
             </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-              <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 14 }}>
+              <Text style={{ color: COLORS.primary, fontWeight: FONT.bold, fontSize: 14 }}>
                 Sign Up
               </Text>
             </TouchableOpacity>
@@ -303,7 +303,7 @@ const s = StyleSheet.create({
     borderColor: COLORS.border,
   },
   hero: { marginBottom: 24 },
-  title: { fontSize: 32, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
+  title: { fontSize: 32, fontWeight: FONT.extrabold, color: COLORS.text, marginBottom: 6 },
   subtitle: { fontSize: 15, color: COLORS.textSecondary, lineHeight: 22 },
   appleBtn: {
     flexDirection: 'row',
@@ -314,7 +314,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     height: 56,
   },
-  appleBtnText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  appleBtnText: { fontSize: 16, fontWeight: FONT.semibold, color: '#FFFFFF' },
   emailFields: {
     marginBottom: 4,
   },

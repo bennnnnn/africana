@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 
 export function AuthOrDivider() {
   return (
@@ -27,6 +27,6 @@ const s = StyleSheet.create({
   text: {
     fontSize: 13,
     color: COLORS.textMuted,
-    fontWeight: '500',
+    fontWeight: FONT.medium,
   },
 });

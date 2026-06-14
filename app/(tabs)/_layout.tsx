@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
-import { COLORS } from '@/constants';
+import { FONT, COLORS } from '@/constants';
 import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useActivityStore, selectLikesTabBadge } from '@/store/activity.store';
 import { isProfileCompleteForDiscover, postAuthHref } from '@/lib/profile-completion';
@@ -59,7 +59,7 @@ function TabIcon({
             paddingHorizontal: 3,
           }}
         >
-          <Text style={{ color: '#FFF', fontSize: 9, fontWeight: '700' }}>
+          <Text style={{ color: '#FFF', fontSize: 9, fontWeight: FONT.bold }}>
             {badge > 99 ? '99+' : badge}
           </Text>
         </View>
@@ -334,7 +334,7 @@ export default function TabLayout() {
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '600',
+          fontWeight: FONT.semibold,
           marginTop: 2,
         },
       }}

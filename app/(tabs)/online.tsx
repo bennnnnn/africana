@@ -20,7 +20,7 @@ import { useProfileBrowseStore } from '@/store/profile-browse.store';
 import { useChatStore } from '@/store/chat.store';
 import { setProfileSeed } from '@/lib/profile-seed-cache';
 import { User } from '@/types';
-import { COLORS, DEFAULT_AVATAR } from '@/constants';
+import { FONT, COLORS, DEFAULT_AVATAR } from '@/constants';
 import { PROFILE_CARD_SELECT } from '@/constants/profile-select';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDialog } from '@/components/ui/DialogProvider';
@@ -94,14 +94,14 @@ const OnlineRow = memo(function OnlineRow({
       </View>
 
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 16, fontWeight: '700', color: COLORS.text }}>
+        <Text style={{ fontSize: 16, fontWeight: FONT.bold, color: COLORS.text }}>
           {item.full_name}, {age}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
           <Ionicons name="location-outline" size={12} color={COLORS.textSecondary} />
           <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>{location}</Text>
         </View>
-        <Text style={{ fontSize: 11, color: COLORS.online, marginTop: 3, fontWeight: '600' }}>
+        <Text style={{ fontSize: 11, color: COLORS.online, marginTop: 3, fontWeight: FONT.semibold }}>
           Online now
         </Text>
       </View>
@@ -276,7 +276,7 @@ export default function OnlineScreen() {
           backgroundColor: COLORS.surface,
         }}
       >
-        <Text style={{ fontSize: 24, fontWeight: '800', color: COLORS.text }}>Online Now</Text>
+        <Text style={{ fontSize: 24, fontWeight: FONT.extrabold, color: COLORS.text }}>Online Now</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.online }} />
           <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>
