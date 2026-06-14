@@ -182,7 +182,7 @@ Total steps: `6` (plus celebration screen as step 7). — `src/constants/onboard
 
 ### 2.2 Validation Rules
 
-- **Step 1:** `firstNameValidation.valid && termsAccepted` — `onboarding.tsx:610`
+- **Step 1:** `NameValidation.valid && termsAccepted` — `onboarding.tsx:610`
 - **Step 2:** `photoUris.length > 0 && !photoPickingProgress && !photoProgress` — `onboarding.tsx:611`
 - **Step 3:** `birthdate && gender && interestedIn` AND `years >= 18 && years <= 120` — `onboarding.tsx:612-615`
 - **Step 4:** `lookingFor.length > 0` — `onboarding.tsx:617`
@@ -223,11 +223,10 @@ Total steps: `6` (plus celebration screen as step 7). — `src/constants/onboard
 3. termsAccepted
 4. birthdate, gender, interestedIn all set
 5. age >= 18
-6. age <= 120
+6. age <= 100
 7. location.country present
 8. lookingFor.length > 0
 9. At least 1 photo uploaded (HTTP URL)
-
 — `onboarding.tsx:422-529`
 
 ---
@@ -241,8 +240,7 @@ Total steps: `6` (plus celebration screen as step 7). — `src/constants/onboard
 |---|---|
 | `male` | Male |
 | `female` | Female |
-| `nonbinary` | Non-binary |
-| `other` | Other |
+ 
 
 — `src/constants/index.ts:221-226`
 
@@ -254,11 +252,11 @@ Filtered from `GENDER_OPTIONS`: `['male', 'female']` — `src/constants/index.ts
 |---|---|
 | `women` | Women |
 | `men` | Men |
-| `everyone` | Everyone |
+ 
 
 — `src/constants/index.ts:233-237`
 
-#### PROFILE_INTERESTED_IN_OPTIONS (No "Everyone")
+#### PROFILE_INTERESTED_IN_OPTIONS  
 Filtered from `INTERESTED_IN_OPTIONS`: `['women', 'men']` — `src/constants/index.ts:240-242`
 
 #### LOOKING_FOR_OPTIONS
@@ -280,7 +278,6 @@ Filtered from `INTERESTED_IN_OPTIONS`: `['women', 'men']` — `src/constants/ind
 | `pentecostal` | Pentecostal | ✝️ |
 | `orthodox_christian` | Orthodox Christian | ☦️ |
 | `islam` | Islam | ☪️ |
-| `traditional_african` | Traditional African | 🌿 |
 | `judaism` | Judaism | ✡️ |
 | `buddhism` | Buddhism | ☸️ |
 | `hinduism` | Hinduism | 🕉️ |
@@ -365,13 +362,13 @@ Full color palette, typography scale, spacing/radius, and shadow presets documen
 | Rule | Pattern / Logic | Value | Source |
 |---|---|---|---|
 | Email regex | RFC 5322 simplified | `/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/` | `validation.ts:7-8` |
-| First name regex | Unicode letters + hyphens/apostrophes | `/^[\p{L}]+(?:[-'][\p{L}]+)*$/u` | `validation.ts:10` |
+| name regex | Unicode letters + hyphens/apostrophes | `/^[\p{L}]+(?:[-'][\p{L}]+)*$/u` | `validation.ts:10` |
 | `MIN_PASSWORD_LENGTH` | `6` | `validation.ts:20` |
 | Password | Must be >= 6 chars | `validation.ts:24-26` |
-| First name required | Error: "First name is required." | `validation.ts:32` |
-| First name no spaces | Error: "Use first name only." | `validation.ts:33` |
-| First name letters only | Error: "Use letters only." | `validation.ts:34` |
-| First name min length | >= 2 chars, else "Name is too short." | `validation.ts:35` |
+| name required | Error: " Name is required." | `validation.ts:32` |
+| Name no spaces | Error: "Use  name only." | `validation.ts:33` |
+|  name letters only | Error: "Use letters only." | `validation.ts:34` |
+| name min length | >= 2 chars, else "Name is too short." | `validation.ts:35` |
 | Email required | Error: "Email is required." | `validation.ts:14` |
 | Email invalid format | Error: "Enter a valid email." | `validation.ts:15` |
 | Password required | Error: "Password is required." | `validation.ts:23` |
