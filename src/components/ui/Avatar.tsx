@@ -62,12 +62,12 @@ export const Avatar = React.memo(function Avatar({
             position: 'absolute',
             bottom: 1,
             right: 1,
-            width: size * 0.27,
-            height: size * 0.27,
-            borderRadius: (size * 0.27) / 2,
+            width: 11,
+            height: 11,
+            borderRadius: 6,
             backgroundColor: statusColor,
             borderWidth: 2,
-            borderColor: COLORS.surface,
+            borderColor: COLORS.white,
           }}
         />
       )}

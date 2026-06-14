@@ -69,7 +69,7 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
         draggingRef.current = null;
       },
     }),
-  ).current;
+  );
 
   const highPan = useRef(
     PanResponder.create({
@@ -96,7 +96,7 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
         draggingRef.current = null;
       },
     }),
-  ).current;
+  );
 
   const lowVal = toVal(positions.low);
   const highVal = toVal(positions.high);
@@ -118,11 +118,11 @@ export function RangeSlider({ min, max, low, high, trackWidth, onChange }: Props
           ]}
         />
         {/* Low thumb */}
-        <View {...lowPan.panHandlers} style={[s.thumb, { left: positions.low - THUMB / 2 }]}>
+        <View {...lowPan.current!.panHandlers} style={[s.thumb, { left: positions.low - THUMB / 2 }]}>
           <Text style={s.thumbLabel}>{lowVal}</Text>
         </View>
         {/* High thumb */}
-        <View {...highPan.panHandlers} style={[s.thumb, { left: positions.high - THUMB / 2 }]}>
+        <View {...highPan.current!.panHandlers} style={[s.thumb, { left: positions.high - THUMB / 2 }]}>
           <Text style={s.thumbLabel}>{highVal}</Text>
         </View>
       </View>

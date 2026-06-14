@@ -32,21 +32,21 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
   const { showToast } = useDialog();
   const getOrCreateConversation = useChatStore((s) => s.getOrCreateConversation);
 
-  const scaleAnim = useRef(new Animated.Value(0)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-  const heartAnim = useRef(new Animated.Value(1)).current;
+  const scaleAnim = useRef(new Animated.Value(0));
+  const opacityAnim = useRef(new Animated.Value(0));
+  const heartAnim = useRef(new Animated.Value(1));
   const heartbeatLoop = useRef<Animated.CompositeAnimation | null>(null);
 
   const startHeartbeat = () => {
     heartbeatLoop.current = Animated.loop(
       Animated.sequence([
-        Animated.spring(heartAnim, {
+        Animated.spring(heartAnim.current, {
           toValue: 1.3,
           useNativeDriver: true,
           speed: 30,
           bounciness: 10,
         }),
-        Animated.spring(heartAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 4 }),
+        Animated.spring(heartAnim.current, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 4 }),
       ]),
       { iterations: 6 },
     );
@@ -55,19 +55,19 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
 
   useEffect(() => {
     if (visible && matchedUser) {
-      scaleAnim.setValue(0);
-      opacityAnim.setValue(0);
-      heartAnim.setValue(1);
+      scaleAnim.current.setValue(0);
+      opacityAnim.current.setValue(0);
+      heartAnim.current.setValue(1);
       Animated.parallel([
-        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 55, friction: 7 }),
-        Animated.timing(opacityAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+        Animated.spring(scaleAnim.current, { toValue: 1, useNativeDriver: true, tension: 55, friction: 7 }),
+        Animated.timing(opacityAnim.current, { toValue: 1, duration: 280, useNativeDriver: true }),
       ]).start(startHeartbeat);
     } else if (!visible) {
       heartbeatLoop.current?.stop();
       heartbeatLoop.current = null;
-      scaleAnim.setValue(0);
-      opacityAnim.setValue(0);
-      heartAnim.setValue(1);
+      scaleAnim.current.setValue(0);
+      opacityAnim.current.setValue(0);
+      heartAnim.current.setValue(1);
     }
   }, [visible, matchedUser?.id]);
 
@@ -100,8 +100,8 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <Animated.View style={[s.overlay, { opacity: opacityAnim }]}>
-        <Animated.View style={[s.card, { transform: [{ scale: scaleAnim }] }]}>
+      <Animated.View style={[s.overlay, { opacity: opacityAnim.current }]}>
+        <Animated.View style={[s.card, { transform: [{ scale: scaleAnim.current }] }]}>
           {/* Warm gradient halo behind the avatars */}
           <LinearGradient
             colors={[COLORS.primarySurface, COLORS.white]}
@@ -125,7 +125,7 @@ export function MatchModal({ visible, matchedUser, onClose }: MatchModalProps) {
             <View style={[s.avatarRing, { zIndex: 2, marginRight: -22 }]}>
               <Image source={{ uri: myAvatar }} style={s.avatar} contentFit="cover" />
             </View>
-            <Animated.View style={[s.heartCenter, { transform: [{ scale: heartAnim }] }]}>
+            <Animated.View style={[s.heartCenter, { transform: [{ scale: heartAnim.current }] }]}>
               <Ionicons name="heart" size={22} color={COLORS.white} />
             </Animated.View>
             <View style={[s.avatarRing, { zIndex: 2, marginLeft: -22 }]}>

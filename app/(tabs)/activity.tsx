@@ -279,16 +279,16 @@ export default function ActivityScreen() {
           style={{
             margin: 12,
             padding: 14,
-            backgroundColor: '#FEF2F2',
+            backgroundColor: COLORS.errorSurface,
             borderRadius: 12,
             borderWidth: 1,
-            borderColor: '#FECACA',
+            borderColor: COLORS.errorBorder,
             gap: 10,
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Ionicons name="alert-circle-outline" size={18} color="#991B1B" />
-            <Text style={{ flex: 1, fontSize: 13, color: '#991B1B' }}>{loadError}</Text>
+            <Ionicons name="alert-circle-outline" size={18} color={COLORS.error} />
+            <Text style={{ flex: 1, fontSize: 13, color: COLORS.error }}>{loadError}</Text>
           </View>
           <Button
             title="Retry"
@@ -300,7 +300,7 @@ export default function ActivityScreen() {
             variant="outline"
             size="sm"
             style={{ alignSelf: 'flex-start' }}
-            textStyle={{ color: '#991B1B' }}
+            textStyle={{ color: COLORS.error }}
           />
         </View>
       ) : null}

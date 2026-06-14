@@ -38,26 +38,26 @@ function isCancelLike(action: DialogAction): boolean {
 export function DialogProvider({ children }: { children: React.ReactNode }) {
   const [dialog, setDialog] = useState<DialogConfig | null>(null);
   const [toast, setToast] = useState<ToastConfig | null>(null);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.94)).current;
-  const toastAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0));
+  const scaleAnim = useRef(new Animated.Value(0.94));
+  const toastAnim = useRef(new Animated.Value(0));
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dismissDialog = useCallback(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 0.94, duration: 160, useNativeDriver: true }),
+      Animated.timing(fadeAnim.current, { toValue: 0, duration: 160, useNativeDriver: true }),
+      Animated.timing(scaleAnim.current, { toValue: 0.94, duration: 160, useNativeDriver: true }),
     ]).start(() => setDialog(null));
   }, [fadeAnim, scaleAnim]);
 
   const showDialog = useCallback(
     (config: DialogConfig) => {
-      fadeAnim.setValue(0);
-      scaleAnim.setValue(0.94);
+      fadeAnim.current.setValue(0);
+      scaleAnim.current.setValue(0.94);
       setDialog({ actions: [{ label: UI_LABELS.ok, style: 'primary' }], ...config });
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-        Animated.spring(scaleAnim, {
+        Animated.timing(fadeAnim.current, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.spring(scaleAnim.current, {
           toValue: 1,
           useNativeDriver: true,
           tension: 120,
@@ -78,16 +78,16 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
   const showToast = useCallback(
     (config: ToastConfig) => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
-      toastAnim.setValue(0);
+      toastAnim.current.setValue(0);
       setToast(config);
-      Animated.spring(toastAnim, {
+      Animated.spring(toastAnim.current, {
         toValue: 1,
         useNativeDriver: true,
         tension: 100,
         friction: 10,
       }).start();
       toastTimer.current = setTimeout(() => {
-        Animated.timing(toastAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start(() =>
+        Animated.timing(toastAnim.current, { toValue: 0, duration: 180, useNativeDriver: true }).start(() =>
           setToast(null),
         );
       }, config.durationMs ?? 2000);
@@ -120,7 +120,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
         >
           <View style={styles.modalRoot} pointerEvents="box-none">
             <Animated.View
-              style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: fadeAnim }]}
+              style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: fadeAnim.current }]}
             >
               <Pressable
                 style={StyleSheet.absoluteFill}
@@ -130,7 +130,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
 
             <Animated.View
               pointerEvents="box-none"
-              style={[styles.cardWrap, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
+              style={[styles.cardWrap, { opacity: fadeAnim.current, transform: [{ scale: scaleAnim.current }] }]}
             >
               <View style={styles.card}>
                 {iconName ? (
@@ -185,9 +185,9 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
             style={[
               styles.toast,
               {
-                opacity: toastAnim,
+                opacity: toastAnim.current,
                 transform: [
-                  { scale: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) },
+                  { scale: toastAnim.current.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) },
                 ],
               },
             ]}

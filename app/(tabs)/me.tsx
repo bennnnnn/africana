@@ -809,7 +809,7 @@ const s = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: RADIUS.xl,
   },
-  onlineDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.white },
+  onlineDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.white },
   onlineText: { fontSize: 12, color: COLORS.white, fontWeight: FONT.semibold },
   cameraBtn: {
     position: 'absolute',

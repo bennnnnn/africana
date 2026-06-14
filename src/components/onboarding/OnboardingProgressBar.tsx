@@ -4,10 +4,10 @@ import { COLORS } from '@/constants';
 
 export function OnboardingProgressBar(props: { step: number; denominator: number }) {
   const { step, denominator } = props;
-  const progressAnim = useRef(new Animated.Value((1 / Math.max(1, denominator)) * 100)).current;
+  const progressAnim = useRef(new Animated.Value((1 / Math.max(1, denominator)) * 100));
 
   useEffect(() => {
-    Animated.timing(progressAnim, {
+    Animated.timing(progressAnim.current, {
       toValue: (Math.min(step, denominator) / Math.max(1, denominator)) * 100,
       duration: 350,
       useNativeDriver: false,
@@ -20,7 +20,7 @@ export function OnboardingProgressBar(props: { step: number; denominator: number
         style={[
           s.fill,
           {
-            width: progressAnim.interpolate({
+            width: progressAnim.current.interpolate({
               inputRange: [0, 100],
               outputRange: ['0%', '100%'],
             }),

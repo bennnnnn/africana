@@ -10,11 +10,29 @@ import { useShallow } from 'zustand/react/shallow';
 // instead of guessing them from JS-side keyboard events. Bundled in Expo
 // Go SDK 54+, so no dev build required.
 import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { Text, TextInput } from 'react-native';
 import { useAuthStore } from '@/store/auth.store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { DialogProvider } from '@/components/ui/DialogProvider';
 import { useFonts, DMSerifDisplay_400Regular } from '@expo-google-fonts/dm-serif-display';
 import { useRootLayoutBootstrap } from '@/hooks/use-root-layout-bootstrap';
+
+// Disable font scaling on all Text and TextInput elements globally to prevent
+// system-level accessibility font size overrides from breaking the app layout.
+// We cast through any because React 19 removed defaultProps from host component types,
+// but the runtime setter still works in RN 0.85.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(Text as any).defaultProps = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ...((Text as any).defaultProps as Record<string, unknown>),
+  allowFontScaling: false,
+};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(TextInput as any).defaultProps = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ...((TextInput as any).defaultProps as Record<string, unknown>),
+  allowFontScaling: false,
+};
 
 export default function RootLayout() {
   const { setSession, hydrateUserFromServer, setInitialized } = useAuthStore(

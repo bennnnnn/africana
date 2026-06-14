@@ -14,13 +14,13 @@ interface SkeletonProps {
  * card softly pulsing — no white-on-white shimmer that fights the warm surface.
  */
 export function Skeleton({ width = '100%', height = 16, borderRadius = 8, style }: SkeletonProps) {
-  const opacity = useRef(new Animated.Value(0.55)).current;
+  const opacity = useRef(new Animated.Value(0.55));
 
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.55, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity.current, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity.current, { toValue: 0.55, duration: 800, useNativeDriver: true }),
       ]),
     );
     loop.start();
@@ -29,7 +29,7 @@ export function Skeleton({ width = '100%', height = 16, borderRadius = 8, style 
 
   return (
     <Animated.View
-      style={[{ width, height, borderRadius, backgroundColor: COLORS.savanna, opacity }, style]}
+      style={[{ width, height, borderRadius, backgroundColor: COLORS.savanna, opacity: opacity.current }, style]}
     />
   );
 }
