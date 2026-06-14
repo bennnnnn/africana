@@ -67,7 +67,7 @@ function Wheel({ items, selectedIndex, onSelect }: WheelProps) {
         contentContainerStyle={{ paddingVertical: ITEM_HEIGHT * 2 }}
       >
         {items.map((item, i) => (
-          <View key={i} style={styles.wheelItem}>
+          <View key={item} style={styles.wheelItem}>
             <Text style={[styles.wheelText, i === selectedIndex && styles.wheelTextSelected]}>
               {item}
             </Text>

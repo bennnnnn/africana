@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,7 @@ export default function RegisterScreen() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showEmailForm, setShowEmailForm] = useState(false);
   const socialBusy = googleLoading || appleLoading;
+  const submitGuardRef = useRef(false);
   const trimmedEmail = email.trim().toLowerCase();
   const emailValidation = validateEmail(email);
   const passwordValidation = validatePassword(password);
@@ -98,6 +99,11 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
+    // Debounce: prevent double-tap within 1 second
+    if (submitGuardRef.current) return;
+    submitGuardRef.current = true;
+    setTimeout(() => { submitGuardRef.current = false; }, 1000);
+
     setAttemptedSubmit(true);
     setTouched({ email: true, password: true });
 

@@ -17,6 +17,25 @@ const appVersion =
     ?.version ??
   '1.0.0';
 
+// ─── Forced update architecture ──────────────────────────────────────────────
+// Future: Check a remote endpoint (e.g., Supabase edge function or a config
+// table in the database) that returns the minimum supported app version. If
+// appVersion < minVersion, show a blocking screen that forces the user to
+// update via the App Store / Play Store before continuing.
+//
+// The version constant comes from:
+//   - app.json → expo.version  ("1.0.0")
+//   - package.json → version   ("1.0.0")
+//   - Constants.expoConfig?.version (runtime, preferred)
+//
+// Implementation sketch:
+//   1. On app launch (or in this screen), fetch { minVersion } from a
+//      remote config source.
+//   2. Compare using semver (appVersion vs minVersion).
+//   3. If appVersion < minVersion, show <ForceUpdateScreen /> with a link
+//      to the store and prevent any further navigation until updated.
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function AccountSettingsScreen() {
   const signOut = useAuthStore((s) => s.signOut);
   const { showDialog, showToast } = useDialog();

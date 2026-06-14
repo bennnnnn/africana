@@ -118,6 +118,7 @@ export function ProfilePhotoGalleryPage({
           }}
         >
           {photos.map((_, i) => (
+            // eslint-disable-next-line react/no-array-index-key
             <View
               key={i}
               style={{

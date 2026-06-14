@@ -107,6 +107,7 @@ function CardContent({
       {photos.length > 1 && (
         <View style={cc.dotsRow}>
           {photos.slice(0, 5).map((_, i) => (
+            // eslint-disable-next-line react/no-array-index-key
             <View key={i} style={[cc.dot, i === 0 && cc.dotActive]} />
           ))}
         </View>

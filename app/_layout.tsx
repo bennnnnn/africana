@@ -14,8 +14,25 @@ import { Text, TextInput } from 'react-native';
 import { useAuthStore } from '@/store/auth.store';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { DialogProvider } from '@/components/ui/DialogProvider';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { NetworkBanner } from '@/components/ui/NetworkBanner';
 import { useFonts, DMSerifDisplay_400Regular } from '@expo-google-fonts/dm-serif-display';
 import { useRootLayoutBootstrap } from '@/hooks/use-root-layout-bootstrap';
+import { logError } from '@/lib/logger';
+
+// ─── Global crash reporting ───────────────────────────────────────────────────
+// Catch uncaught errors and log them via the central logger.
+// React error boundaries handle render-time errors; this catches everything else
+// (timeout callbacks, event handlers outside the component tree, etc.).
+if (typeof ErrorUtils !== 'undefined') {
+  const originalHandler = ErrorUtils.getGlobalHandler?.() ?? undefined;
+  ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+    logError('Uncaught error', { message: error.message, name: error.name, fatal: isFatal });
+    if (originalHandler) {
+      originalHandler(error, isFatal);
+    }
+  });
+}
 
 // Disable font scaling on all Text and TextInput elements globally to prevent
 // system-level accessibility font size overrides from breaking the app layout.
@@ -58,8 +75,10 @@ export default function RootLayout() {
         <SafeAreaProvider>
           <ThemeProvider>
             <DialogProvider>
-              <StatusBar style="auto" />
-              <Stack screenOptions={{ headerShown: false }}>
+              <NetworkBanner />
+              <ErrorBoundary>
+                <StatusBar style="auto" />
+                <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="(auth)" />
                 <Stack.Screen name="(tabs)" />
@@ -72,7 +91,8 @@ export default function RootLayout() {
                 <Stack.Screen name="(chat)" />
                 <Stack.Screen name="(settings)" />
               </Stack>
-            </DialogProvider>
+            </ErrorBoundary>
+          </DialogProvider>
           </ThemeProvider>
         </SafeAreaProvider>
       </KeyboardProvider>
