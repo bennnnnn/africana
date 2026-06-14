@@ -8,47 +8,35 @@
 -- Lint 0029 (authenticated + SECURITY DEFINER) may still warn for these RPCs; that is normal until
 -- you refactor to SECURITY INVOKER or move calls behind Edge Functions.
 
-REVOKE EXECUTE ON FUNCTION public.activity_unseen_counts() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.activity_unseen_counts() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.auto_shadowban_reported_profile() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.auto_shadowban_reported_profile() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.delete_user() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.delete_user() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.enforce_favourites_respect_blocks() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.enforce_favourites_respect_blocks() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.enforce_like_rate_limit() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.enforce_like_rate_limit() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.enforce_likes_respect_blocks() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.enforce_likes_respect_blocks() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.enforce_message_rate_limit() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.enforce_message_rate_limit() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.enforce_profile_privacy_mirror() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.enforce_profile_privacy_mirror() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.enforce_profile_show_in_discover() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.enforce_profile_show_in_discover() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.enforce_recipient_accepts_messages() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.enforce_recipient_accepts_messages() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.export_user_data() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.export_user_data() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.get_public_user_prefs_batch(uuid[]) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.get_public_user_prefs_batch(uuid[]) TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.rate_limit_counts() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.rate_limit_counts() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.sync_profile_privacy_mirror() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.sync_profile_privacy_mirror() TO authenticated;
-
-REVOKE EXECUTE ON FUNCTION public.sync_profile_show_in_discover() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.sync_profile_show_in_discover() TO authenticated;
+do $$
+declare
+  fn_names text[] := '{
+    activity_unseen_counts,
+    auto_shadowban_reported_profile,
+    delete_user,
+    enforce_favourites_respect_blocks,
+    enforce_like_rate_limit,
+    enforce_likes_respect_blocks,
+    enforce_message_rate_limit,
+    enforce_profile_privacy_mirror,
+    enforce_profile_show_in_discover,
+    enforce_recipient_accepts_messages,
+    export_user_data,
+    get_public_user_prefs_batch,
+    rate_limit_counts,
+    sync_profile_privacy_mirror,
+    sync_profile_show_in_discover
+  }';
+  fn text;
+begin
+  foreach fn in array fn_names loop
+    if exists (
+      select 1 from pg_proc
+      where proname = fn
+        and pronamespace = 'public'::regnamespace
+    ) then
+      execute format('REVOKE EXECUTE ON FUNCTION public.%I() FROM PUBLIC, anon', fn);
+      execute format('GRANT  EXECUTE ON FUNCTION public.%I() TO authenticated', fn);
+    end if;
+  end loop;
+end $$;
