@@ -5,7 +5,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 create extension if not exists pgcrypto with schema extensions;
 
-select plan(8);
+select plan(6);
 
 -- Fixed test user ids
 do $setup$
@@ -130,6 +130,7 @@ select throws_ok(
     );
   $$,
   '23514',
+  'Messaging is blocked between participants.',
   'message insert blocked when symmetric block exists'
 );
 
