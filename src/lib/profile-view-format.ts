@@ -1,6 +1,6 @@
 import { formatLastActiveLabel } from '@/lib/utils';
 
-/** Relative activity label for profile activity row (offline users only). */
+/* Dead export — no imports found.
 export function formatShortLastSeenLabel(
   lastSeen: string | null | undefined,
   useLastActiveLabel: boolean,
@@ -8,3 +8,4 @@ export function formatShortLastSeenLabel(
   if (!useLastActiveLabel) return null;
   return formatLastActiveLabel(lastSeen);
 }
+*/

@@ -25,6 +25,7 @@ export function isMockEntityId(id: string | null | undefined): boolean {
  * Calculate age from an ISO birthdate string.
  * Returns undefined if birthdate is falsy.
  */
+/* Dead export — no imports found.
 export function calculateAge(birthdate: string | null | undefined): number | undefined {
   if (!birthdate) return undefined;
   const today = new Date();
@@ -35,6 +36,7 @@ export function calculateAge(birthdate: string | null | undefined): number | und
     (today < new Date(today.getFullYear(), bday.getMonth(), bday.getDate()) ? 1 : 0);
   return age;
 }
+*/
 
 function localDayStartMs(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -148,12 +150,14 @@ export function getEffectiveAgePreferenceRange(
   };
 }
 
+/* Dead export — no imports found.
 export function isRecentlyCreated(createdAt: string | null | undefined, withinDays = 14): boolean {
   if (!createdAt) return false;
   const created = new Date(createdAt).getTime();
   if (Number.isNaN(created)) return false;
   return Date.now() - created <= withinDays * 24 * 60 * 60 * 1000;
 }
+*/
 
 /** True when `activityAt` is newer than the tab's *_seen_at marker (server uses -infinity when null). */
 export function isLikesActivityNew(

@@ -29,12 +29,13 @@ export const SPRING: SpringConfig = {
   useNativeDriver: true,
 };
 
-/** Slightly softer spring — header overscroll, photo viewer settle. */
+/* Dead export — no imports found.
 export const SETTLE: SpringConfig = {
   tension: 140,
   friction: 14,
   useNativeDriver: true,
 };
+*/
 
 /** Quick fade-in / fade-out used for toasts, overlays, small dismissals. */
 export const SNAP_IN: TimingConfig = {

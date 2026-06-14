@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// TODO(launch): split into smaller modules — this file exceeds 1906 lines
 import { useShallow } from 'zustand/react/shallow';
 import {
   View,

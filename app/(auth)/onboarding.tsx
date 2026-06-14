@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+// TODO(launch): split into smaller modules — this file exceeds 1204 lines
 import {
   View,
   Text,

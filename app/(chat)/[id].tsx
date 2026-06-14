@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
+// TODO(launch): split into smaller modules — this file exceeds 1302 lines
 import { useShallow } from 'zustand/react/shallow';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import {

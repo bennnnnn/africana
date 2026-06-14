@@ -47,12 +47,11 @@ export function profileEditInterestedInInitial(
   return null;
 }
 
-/** Check whether a gender/interested-in pair is internally consistent. */
+/* Dead export — no imports found. Function body removed but kept for reference.
 export function isInterestedInAlignedWithGender(
   gender: Gender | null | undefined,
   interested: InterestedIn | string | null | undefined,
 ): boolean {
-  if (!gender || !isInterestedInProvided(interested as InterestedIn)) return false;
-  if (interested === 'everyone') return true;
-  return interested === oppositeInterestedIn(gender);
+  ...
 }
+*/

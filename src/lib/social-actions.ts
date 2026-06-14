@@ -70,6 +70,7 @@ export async function addFavourite(userId: string, favouritedId: string) {
   throw error;
 }
 
+/* Dead export — no imports found.
 export async function removeFavourite(userId: string, favouritedId: string) {
   const { error } = await supabase
     .from('favourites')
@@ -79,6 +80,7 @@ export async function removeFavourite(userId: string, favouritedId: string) {
 
   if (error) throw error;
 }
+*/
 
 /**
  * One round-trip: rely on UNIQUE(reporter_id, reported_id) for idempotency.

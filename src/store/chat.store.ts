@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+// TODO(launch): split into smaller modules — this file exceeds 916 lines
 import type { ChatStoreState } from '@/store/chat-store.types';
 import { Message, User, type Conversation } from '@/types';
 import {

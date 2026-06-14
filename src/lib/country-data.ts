@@ -1384,7 +1384,8 @@ export const AFRICAN_COUNTRY_CODES = new Set(
 
 // Look up a country by code
 export const getCountry = (code: string) => ALL_COUNTRIES.find((c) => c.code === code);
-export const getCountryByName = (name: string) => ALL_COUNTRIES.find((c) => c.name === name);
+// Dead export — no imports found.
+// export const getCountryByName = (name: string) => ALL_COUNTRIES.find((c) => c.name === name);
 
 /**
  * Resolve a profile `country` / `origin_country` value whether the row stores

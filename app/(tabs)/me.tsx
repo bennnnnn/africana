@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+// TODO(launch): split into smaller modules — this file exceeds 940 lines
 import {
   View,
   Text,
