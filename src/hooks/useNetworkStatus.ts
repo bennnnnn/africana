@@ -1,31 +1,35 @@
 import { useState, useEffect, useCallback } from 'react';
-import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
+import { AppState } from 'react-native';
+import * as Network from 'expo-network';
 
 /**
  * Returns the current online status and a function to manually re-check.
+ * Uses expo-network (bundled in Expo Go) instead of @react-native-community/netinfo
+ * which requires a native build to link its native module.
  */
 export function useNetworkStatus() {
   const [isOnline, setIsOnline] = useState(true);
 
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
-      setIsOnline(state.isConnected ?? true);
-    });
-
-    // Initial check
-    NetInfo.fetch().then((state) => {
-      setIsOnline(state.isConnected ?? true);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
   const checkConnection = useCallback(async (): Promise<boolean> => {
-    const state = await NetInfo.fetch();
-    const connected = state.isConnected ?? true;
-    setIsOnline(connected);
-    return connected;
+    try {
+      const state = await Network.getNetworkStateAsync();
+      const connected = state.isConnected ?? true;
+      setIsOnline(connected);
+      return connected;
+    } catch {
+      return true;
+    }
   }, []);
+
+  useEffect(() => {
+    void checkConnection();
+
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void checkConnection();
+    });
+
+    return () => sub.remove();
+  }, [checkConnection]);
 
   return { isOnline, checkConnection };
 }
