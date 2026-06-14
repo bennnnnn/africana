@@ -27,6 +27,7 @@ declare
     sync_profile_show_in_discover
   }';
   fn text;
+  fn_sig text;
 begin
   foreach fn in array fn_names loop
     if exists (
@@ -34,8 +35,30 @@ begin
       where proname = fn
         and pronamespace = 'public'::regnamespace
     ) then
-      execute format('REVOKE EXECUTE ON FUNCTION public.%I() FROM PUBLIC, anon', fn);
-      execute format('GRANT  EXECUTE ON FUNCTION public.%I() TO authenticated', fn);
+      fn_sig := fn || '(' || (
+        select coalesce(string_agg(
+          case p.typname
+            when 'int4' then 'integer'
+            when 'int8' then 'bigint'
+            when 'float8' then 'double precision'
+            when 'varchar' then 'text'
+            when 'bpchar' then 'char'
+            when 'numeric' then 'numeric'
+            when 'bool' then 'boolean'
+            when 'timestamptz' then 'timestamp with time zone'
+            when 'uuid' then 'uuid'
+            else p.typname
+          end || '',
+          ', '
+        ) within group (order by a.ordinal_number), '')
+        from pg_proc pr
+        join unnest(coalesce(pr.proargtypes, '{}'::oid[])) with ordinality a(oid, ordinal_number) on true
+        join pg_type p on p.oid = a.oid
+        where pr.proname = fn
+          and pr.pronamespace = 'public'::regnamespace
+      ) || ')';
+      execute format('REVOKE EXECUTE ON FUNCTION public.%s FROM PUBLIC, anon', fn_sig);
+      execute format('GRANT  EXECUTE ON FUNCTION public.%s TO authenticated', fn_sig);
     end if;
   end loop;
 end $$;
