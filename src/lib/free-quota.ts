@@ -31,7 +31,7 @@ function todayUtcKey(): string {
 }
 
 function failClosedCounts(): Counts {
-  return { messages: FREE_DAILY_MESSAGES, likes: FREE_DAILY_LIKES };
+  return { messages: 0, likes: 0 };
 }
 
 async function fetchFromServer(): Promise<Counts> {
